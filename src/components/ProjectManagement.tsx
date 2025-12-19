@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, FileText, Users, Clock, Trash2, Lock, LockOpen } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { useLanguage } from "@/contexts/LanguageContext";
 import {
   Dialog,
   DialogTrigger,
@@ -23,6 +24,7 @@ interface ProjectManagementProps {
 }
 
 const ProjectManagement = ({ currentUser }: ProjectManagementProps) => {
+  const { t } = useLanguage();
   const [newProject, setNewProject] = useState({
     name: "",
     description: "",
@@ -218,8 +220,8 @@ const ProjectManagement = ({ currentUser }: ProjectManagementProps) => {
       });
     } else {
       toast({
-        title: "Project Verwijderd",
-        description: `${projectToDelete.name} is succesvol verwijderd. Alle gerelateerde timesheet entries zijn ook verwijderd.`,
+        title: t('project.deleted'),
+        description: t('project.deletedText', { name: projectToDelete.name }),
       });
       // Refresh projects list
       const { data: updatedProjects } = await supabase
@@ -255,19 +257,19 @@ const ProjectManagement = ({ currentUser }: ProjectManagementProps) => {
         <CardHeader className="bg-gradient-to-r from-blue-50 to-blue-100 rounded-t-lg">
           <CardTitle className="flex items-center text-blue-900">
             <Plus className="h-6 w-6 mr-3" />
-            Add New Project
+            {t('project.addNew')}
           </CardTitle>
           <CardDescription className="text-blue-700">
-            Create a new project for time tracking
+            {t('project.create')}
           </CardDescription>
         </CardHeader>
         <CardContent className="p-6">
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="space-y-2">
-              <Label htmlFor="projectName" className="text-gray-700 font-medium">Project Name</Label>
+              <Label htmlFor="projectName" className="text-gray-700 font-medium">{t('project.name')}</Label>
               <Input
                 id="projectName"
-                placeholder="Enter project name"
+                placeholder={t('project.namePlaceholder')}
                 value={newProject.name}
                 onChange={(e) => setNewProject({ ...newProject, name: e.target.value })}
                 required
@@ -275,10 +277,10 @@ const ProjectManagement = ({ currentUser }: ProjectManagementProps) => {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="client" className="text-gray-700 font-medium">Client</Label>
+              <Label htmlFor="client" className="text-gray-700 font-medium">{t('project.client')}</Label>
               <Input
                 id="client"
-                placeholder="Client name"
+                placeholder={t('project.clientPlaceholder')}
                 value={newProject.client}
                 onChange={(e) => setNewProject({ ...newProject, client: e.target.value })}
                 required
@@ -286,10 +288,10 @@ const ProjectManagement = ({ currentUser }: ProjectManagementProps) => {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="description" className="text-gray-700 font-medium">Description</Label>
+              <Label htmlFor="description" className="text-gray-700 font-medium">{t('project.description')}</Label>
               <Textarea
                 id="description"
-                placeholder="Project description..."
+                placeholder={t('project.descriptionPlaceholder')}
                 value={newProject.description}
                 onChange={(e) => setNewProject({ ...newProject, description: e.target.value })}
                 className="border-blue-200 focus:border-blue-500 focus:ring-blue-500"
@@ -297,7 +299,7 @@ const ProjectManagement = ({ currentUser }: ProjectManagementProps) => {
             </div>
             <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white shadow-lg">
               <Plus className="h-5 w-5 mr-2" />
-              Create Project
+              {t('project.createButton')}
             </Button>
           </form>
         </CardContent>
@@ -309,10 +311,10 @@ const ProjectManagement = ({ currentUser }: ProjectManagementProps) => {
           <CardHeader className="bg-gradient-to-r from-blue-50 to-blue-100 rounded-t-lg">
             <CardTitle className="flex items-center text-blue-900">
               <FileText className="h-6 w-6 mr-3" />
-              Active Projects
+              {t('project.active')}
             </CardTitle>
             <CardDescription className="text-blue-700">
-              Manage and track your projects
+              {t('project.manage')}
             </CardDescription>
           </CardHeader>
           <CardContent className="p-6">
@@ -333,28 +335,28 @@ const ProjectManagement = ({ currentUser }: ProjectManagementProps) => {
                     <div className="flex items-center space-x-6">
                       <div className="flex items-center">
                         <Clock className="h-5 w-5 mr-2 text-blue-600" />
-                        <span className="font-medium">{projectHours[project.id] || 0}h logged</span>
+                        <span className="font-medium">{t('project.hoursLogged', { hours: String(projectHours[project.id] || 0) })}</span>
                       </div>
                       <div className="flex items-center">
                         <Users className="h-5 w-5 mr-2 text-blue-600" />
-                        <span className="font-medium">members</span>
+                        <span className="font-medium">{t('project.members')}</span>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
                       <Dialog open={modalOpen && modalProject?.id === project.id} onOpenChange={setModalOpen}>
                         <DialogTrigger asChild>
                           <Button variant="outline" size="sm" className="border-blue-200 text-blue-700 hover:bg-blue-50" onClick={() => handleViewDetails(project)}>
-                            View Details
+                            {t('project.viewDetails')}
                           </Button>
                         </DialogTrigger>
                         <DialogContent>
                           <DialogHeader>
-                            <DialogTitle>Project Details: {project.name}</DialogTitle>
-                            <DialogDescription>All time entries for this project</DialogDescription>
+                            <DialogTitle>{t('project.details', { name: project.name })}</DialogTitle>
+                            <DialogDescription>{t('project.allEntries')}</DialogDescription>
                           </DialogHeader>
                           <div className="space-y-4 mt-4">
                             {modalEntries.length === 0 ? (
-                              <div className="text-gray-500">No time entries yet.</div>
+                              <div className="text-gray-500">{t('project.noEntries')}</div>
                             ) : (
                               modalEntries.map((entry, idx) => (
                                 <div key={idx} className="border-l-4 border-blue-400 pl-4 py-2">
@@ -392,12 +394,12 @@ const ProjectManagement = ({ currentUser }: ProjectManagementProps) => {
                             {project.status === "closed" ? (
                               <>
                                 <LockOpen className="h-4 w-4 mr-1" />
-                                Heropen
+                                {t('project.reopen')}
                               </>
                             ) : (
                               <>
                                 <Lock className="h-4 w-4 mr-1" />
-                                Sluiten
+                                {t('project.close')}
                               </>
                             )}
                           </Button>
@@ -407,8 +409,8 @@ const ProjectManagement = ({ currentUser }: ProjectManagementProps) => {
                             className="border-red-200 text-red-700 hover:bg-red-50" 
                             onClick={() => openDeleteConfirm(project)}
                           >
-                            <Trash2 className="h-4 w-4 mr-1" />
-                            Verwijder
+                          <Trash2 className="h-4 w-4 mr-1" />
+                          {t('project.delete')}
                           </Button>
                         </>
                       )}
@@ -422,19 +424,18 @@ const ProjectManagement = ({ currentUser }: ProjectManagementProps) => {
             <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
               <DialogContent>
                 <DialogHeader>
-                  <DialogTitle>Project Verwijderen</DialogTitle>
+                  <DialogTitle>{t('project.deleteConfirm')}</DialogTitle>
                   <DialogDescription>
-                    Weet je zeker dat je "{projectToDelete?.name}" wilt verwijderen? 
-                    Alle gerelateerde timesheet entries worden ook verwijderd. Deze actie kan niet ongedaan worden gemaakt.
+                    {t('project.deleteConfirmText', { name: projectToDelete?.name || '' })}
                   </DialogDescription>
                 </DialogHeader>
                 <div className="flex justify-end gap-2 mt-4">
                   <Button variant="outline" onClick={() => setDeleteConfirmOpen(false)}>
-                    Annuleren
+                    {t('project.cancel')}
                   </Button>
                   <Button variant="destructive" onClick={handleDeleteProject}>
                     <Trash2 className="h-4 w-4 mr-2" />
-                    Verwijderen
+                    {t('common.delete')}
                   </Button>
                 </div>
               </DialogContent>

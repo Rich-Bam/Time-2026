@@ -15,12 +15,15 @@ import ChangePasswordForm from "@/components/ChangePasswordForm";
 import WeeklyCalendarEntry from "@/components/WeeklyCalendarEntry";
 import ScreenshotButton from "@/components/ScreenshotButton";
 import BugReports from "@/components/BugReports";
+import LanguageSelector from "@/components/LanguageSelector";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 const Index = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
   const SUPER_ADMIN_EMAIL = "r.blance@bampro.nl";
@@ -692,7 +695,8 @@ const Index = () => {
               </nav>
             </div>
             <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-6 justify-center md:justify-end">
-              <span className="text-gray-700 font-medium text-center sm:text-left">Welcome, {currentUser?.name || "User"}</span>
+              <LanguageSelector />
+              <span className="text-gray-700 font-medium text-center sm:text-left">{t('nav.welcome')}, {currentUser?.name || "User"}</span>
               {currentUser?.isAdmin && (
                 <ScreenshotButton currentUser={currentUser} />
               )}
@@ -711,7 +715,7 @@ const Index = () => {
                 }}
                 className="border-orange-200 text-orange-700 hover:bg-orange-50"
               >
-                Logout
+                {t('nav.logout')}
               </Button>
             </div>
           </div>
