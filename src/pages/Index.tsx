@@ -193,12 +193,6 @@ const Index = () => {
                   </button>
                 )}
                 <button
-                  className={`text-base sm:text-lg font-medium px-3 py-1 rounded transition-colors ${activeTab === 'overview' ? 'bg-orange-600 text-white' : 'text-orange-700 hover:bg-orange-50'}`}
-                  onClick={() => setActiveTab('overview')}
-                >
-                  Overview
-                </button>
-                <button
                   className={`text-base sm:text-lg font-medium px-3 py-1 rounded transition-colors ${activeTab === 'export' ? 'bg-orange-600 text-white' : 'text-orange-700 hover:bg-orange-50'}`}
                   onClick={() => setActiveTab('export')}
                 >
@@ -212,6 +206,12 @@ const Index = () => {
                     Admin
                   </button>
                 )}
+                <button
+                  className={`text-base sm:text-lg font-medium px-3 py-1 rounded transition-colors ${activeTab === 'overview' ? 'bg-orange-600 text-white' : 'text-orange-700 hover:bg-orange-50'}`}
+                  onClick={() => setActiveTab('overview')}
+                >
+                  Overview
+                </button>
               </nav>
             </div>
             <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-6 justify-center md:justify-end">
