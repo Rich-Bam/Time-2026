@@ -16,15 +16,20 @@ const TimeOverview = ({ currentUser }: TimeOverviewProps) => {
 
   useEffect(() => {
     const fetchData = async () => {
+      if (!currentUser) return;
       setLoading(true);
-      const { data: timesheetData } = await supabase.from("timesheet").select("*, projects(name)");
+      // Only fetch data for the current user
+      const { data: timesheetData } = await supabase
+        .from("timesheet")
+        .select("*, projects(name)")
+        .eq("user_id", currentUser.id);
       const { data: projectData } = await supabase.from("projects").select("*");
       setTimesheet(timesheetData || []);
       setProjects(projectData || []);
       setLoading(false);
     };
     fetchData();
-  }, []);
+  }, [currentUser]);
 
   // Helper: get start/end of this week and month
   const today = new Date();
@@ -145,7 +150,7 @@ const TimeOverview = ({ currentUser }: TimeOverviewProps) => {
         <Card>
           <CardHeader>
             <CardTitle>Weekly Overview</CardTitle>
-            <CardDescription>Hours logged each day this week</CardDescription>
+            <CardDescription>Your hours logged each day this week</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
@@ -166,7 +171,7 @@ const TimeOverview = ({ currentUser }: TimeOverviewProps) => {
         <Card>
           <CardHeader>
             <CardTitle>Project Time Distribution</CardTitle>
-            <CardDescription>Hours spent on each project this week</CardDescription>
+            <CardDescription>Your hours spent on each project this week</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">

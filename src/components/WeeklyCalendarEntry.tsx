@@ -191,6 +191,19 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
         entries: day.entries.map((entry, j) => {
           if (j !== entryIdx) return entry;
           let updated = { ...entry, [field]: value };
+          
+          // Warn when lunch checkbox is toggled and hours would become 0
+          if (field === "lunch" && value === true && updated.hours) {
+            const hoursAfterLunch = Math.max(0, Number(updated.hours) - 0.5);
+            if (hoursAfterLunch === 0) {
+              toast({
+                title: "Warning: Lunch Deduction",
+                description: "Lunch will reduce hours to 0. Consider using work type 35 (Break) instead for flexible break times.",
+                variant: "default",
+              });
+            }
+          }
+          
           // Auto-calculate hours if startTime and endTime are set and field is startTime or endTime
           if ((field === "startTime" || field === "endTime") && updated.startTime && updated.endTime) {
             const start = new Date(`2000-01-01T${updated.startTime}`);
@@ -217,9 +230,25 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
   const daysOffLeft = (totalDaysOff - dbDaysOff).toFixed(1);
 
   const handleSubmitAll = async () => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
     const entriesToSave = [];
     for (let dayIdx = 0; dayIdx < days.length; dayIdx++) {
       const day = days[dayIdx];
+      
+      // Prevent future dates
+      const entryDate = new Date(day.date);
+      entryDate.setHours(0, 0, 0, 0);
+      if (entryDate > today) {
+        toast({
+          title: "Future Date Not Allowed",
+          description: `You cannot log hours for ${day.date.toLocaleDateString()} (future date). Please select today or a past date.`,
+          variant: "destructive",
+        });
+        return;
+      }
+      
       const isWeekend = day.date.getDay() === 0 || day.date.getDay() === 6; // Sunday=0, Saturday=6
       for (let entryIdx = 0; entryIdx < day.entries.length; entryIdx++) {
         const entry = day.entries[entryIdx];
@@ -237,6 +266,27 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
         if (isWeekend && (!entry.project && !isDayOff) && !entry.workType && !entry.hours) {
           continue;
         }
+        
+        // Validate hours match start/end time if both are provided
+        if (entry.startTime && entry.endTime && entry.hours) {
+          const start = new Date(`2000-01-01T${entry.startTime}`);
+          const end = new Date(`2000-01-01T${entry.endTime}`);
+          const calculatedHours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+          const enteredHours = Number(entry.hours);
+          const lunchDeduction = entry.lunch && !isDayOff ? 0.5 : 0;
+          const expectedHours = Math.max(0, calculatedHours - lunchDeduction);
+          
+          // Allow small difference (0.25 hours = 15 minutes tolerance)
+          if (Math.abs(enteredHours - expectedHours) > 0.25) {
+            toast({
+              title: "Hours Mismatch",
+              description: `For ${day.date.toLocaleDateString()}: The entered hours (${enteredHours}h) don't match the time range (${entry.startTime} - ${entry.endTime}). Expected approximately ${expectedHours.toFixed(2)}h.`,
+              variant: "destructive",
+            });
+            return;
+          }
+        }
+        
         let hoursToSave = Number(entry.hours);
         if (entry.lunch && !isDayOff) {
           hoursToSave = Math.max(0, hoursToSave - 0.5);
@@ -274,6 +324,21 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
   const handleSubmitDay = async (dayIdx: number) => {
     const day = days[dayIdx];
     const isWeekend = day.date.getDay() === 0 || day.date.getDay() === 6;
+    
+    // Prevent future dates
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const entryDate = new Date(day.date);
+    entryDate.setHours(0, 0, 0, 0);
+    if (entryDate > today) {
+      toast({
+        title: "Future Date Not Allowed",
+        description: "You cannot log hours for future dates. Please select today or a past date.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     const entriesToSave = [];
     const dateStr = day.date.toISOString().split('T')[0];
     const allEntries = [
@@ -306,6 +371,27 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
       if (isWeekend && (!entry.project && !isDayOff) && !entry.workType && !entry.hours) {
         continue;
       }
+      
+      // Validate hours match start/end time if both are provided
+      if (entry.startTime && entry.endTime && entry.hours) {
+        const start = new Date(`2000-01-01T${entry.startTime}`);
+        const end = new Date(`2000-01-01T${entry.endTime}`);
+        const calculatedHours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+        const enteredHours = Number(entry.hours);
+        const lunchDeduction = entry.lunch && !isDayOff ? 0.5 : 0;
+        const expectedHours = Math.max(0, calculatedHours - lunchDeduction);
+        
+        // Allow small difference (0.25 hours = 15 minutes tolerance)
+        if (Math.abs(enteredHours - expectedHours) > 0.25) {
+          toast({
+            title: "Hours Mismatch",
+            description: `The entered hours (${enteredHours}h) don't match the time range (${entry.startTime} - ${entry.endTime}). Expected approximately ${expectedHours.toFixed(2)}h.`,
+            variant: "destructive",
+          });
+          return;
+        }
+      }
+      
       let hoursToSave = Number(entry.hours);
       if (entry.lunch && !isDayOff) {
         hoursToSave = Math.max(0, hoursToSave - 0.5);
