@@ -2,6 +2,8 @@
 
 Deze gids legt uit hoe je deze web app kunt publiceren als Android app in Google Play Store.
 
+> **Zie ook**: [IOS_APP_SETUP.md](./IOS_APP_SETUP.md) voor iOS App Store publicatie
+
 ## Optie 1: Trusted Web Activity (TWA) - Aanbevolen ✅
 
 Dit is de **beste optie** omdat:
