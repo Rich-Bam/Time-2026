@@ -6,7 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Trash2 } from 'lucide-react';
+import { Trash2, Download } from 'lucide-react';
+import * as XLSX from "xlsx";
 
 const workTypes = [
   { value: 10, label: "Work" },
@@ -410,6 +411,78 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
     return hasSubmitted || hasNew;
   });
 
+  // Export week entries to Excel
+  const handleExportWeek = async () => {
+    if (!currentUser) {
+      toast({
+        title: "Error",
+        description: "User not found",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const fromDate = weekDates[0].toISOString().split('T')[0];
+    const toDate = weekDates[6].toISOString().split('T')[0];
+
+    const { data, error } = await supabase
+      .from("timesheet")
+      .select("*, projects(name)")
+      .eq("user_id", currentUser.id)
+      .gte("date", fromDate)
+      .lte("date", toDate)
+      .order("date", { ascending: true });
+
+    if (error) {
+      toast({
+        title: "Export Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!data || data.length === 0) {
+      toast({
+        title: "No Data",
+        description: "No entries found for this week.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Get work type label for each entry
+    const getWorkTypeLabel = (desc: string) => {
+      const workType = workTypes.find(wt => String(wt.value) === String(desc));
+      return workType ? `${workType.value} - ${workType.label}` : desc;
+    };
+
+    // Format data for Excel
+    const excelData = data.map((entry) => ({
+      Date: entry.date,
+      Project: entry.projects?.name || entry.project || "-",
+      "Work Type": getWorkTypeLabel(entry.description || ""),
+      Hours: entry.hours,
+      "Start Time": entry.startTime || "-",
+      "End Time": entry.endTime || "-",
+      Description: entry.notes || "",
+    }));
+
+    // Create workbook and worksheet
+    const ws = XLSX.utils.json_to_sheet(excelData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Week Entries");
+
+    // Generate filename with week number and date range
+    const filename = `Week_${weekNumber}_${fromDate}_to_${toDate}.xlsx`;
+    XLSX.writeFile(wb, filename);
+
+    toast({
+      title: "Export Successful",
+      description: `Week ${weekNumber} entries exported to ${filename}`,
+    });
+  };
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -421,6 +494,10 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
           <div className="flex items-center gap-4 mt-2">
             <Button variant="outline" onClick={() => changeWeek(-1)}>&lt; Prev</Button>
             <Button variant="outline" onClick={() => changeWeek(1)}>Next &gt;</Button>
+            <Button variant="outline" onClick={handleExportWeek} className="ml-2">
+              <Download className="h-4 w-4 mr-2" />
+              Export Week to Excel
+            </Button>
           </div>
         </div>
         <Card className="bg-blue-50 border-blue-200 min-w-[260px]">
