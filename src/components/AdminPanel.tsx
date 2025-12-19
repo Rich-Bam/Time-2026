@@ -148,8 +148,38 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
     }
   };
 
-  // Delete user
   const SUPER_ADMIN_EMAIL = "r.blance@bampro.nl";
+  // Toggle admin flag for an existing user
+  const handleToggleAdmin = async (userId: string, userEmail: string, makeAdmin: boolean) => {
+    if (userEmail === SUPER_ADMIN_EMAIL && !makeAdmin) {
+      toast({
+        title: "Action not allowed",
+        description: "You cannot remove admin rights from the super admin.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (userId === currentUser.id && !makeAdmin) {
+      toast({
+        title: "Action not allowed",
+        description: "You cannot remove your own admin rights.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const { error } = await supabase.from("users").update({ isAdmin: makeAdmin }).eq("id", userId);
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      toast({
+        title: "Admin status updated",
+        description: `${userEmail} is now ${makeAdmin ? "an admin" : "a regular user"}.`,
+      });
+      fetchUsers();
+    }
+  };
+
+  // Delete user
   const handleDeleteUser = async (userId: string, userEmail: string) => {
     if (userEmail === SUPER_ADMIN_EMAIL) {
       toast({ title: "Action not allowed", description: "You cannot delete the super admin.", variant: "destructive" });
@@ -276,7 +306,17 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                   <tr key={user.id} className="border-t">
                     <td className="p-2">{user.email}{user.email === SUPER_ADMIN_EMAIL && <span className="ml-2 px-2 py-1 text-xs bg-orange-200 text-orange-800 rounded">Super Admin</span>}</td>
                     <td className="p-2">{user.name}</td>
-                    <td className="p-2">{user.isAdmin ? "Yes" : "No"}</td>
+                    <td className="p-2">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={!!user.isAdmin}
+                          disabled={user.email === SUPER_ADMIN_EMAIL}
+                          onChange={(e) => handleToggleAdmin(user.id, user.email, e.target.checked)}
+                        />
+                        <span>{user.isAdmin ? "Yes" : "No"}</span>
+                      </div>
+                    </td>
                     <td className="p-2">{user.must_change_password ? "Yes" : "No"}</td>
                     <td className="p-2">{(totalDaysOff - ((daysOffMap[user.id] || 0) / 8)).toFixed(2)} / {totalDaysOff}</td>
                     <td className="p-2">
