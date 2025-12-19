@@ -32,6 +32,8 @@ const Index = () => {
   const [reminderWeek, setReminderWeek] = useState("");
   const [exportPeriod, setExportPeriod] = useState<"day" | "week" | "month" | "year">("week");
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [users, setUsers] = useState<any[]>([]);
+  const [selectedUserId, setSelectedUserId] = useState<string>("");
   const { toast } = useToast();
 
   // Check for saved session on page load (14 days persistence)
@@ -197,12 +199,55 @@ const Index = () => {
     });
   };
 
-  // Export by date range (admin only)
+  // Export by date range (admin only) - can optionally filter by user
   const handleExportRange = async () => {
     if (!dateRange.from || !dateRange.to) {
       toast({
-        title: "Missing Dates",
-        description: "Please select a date range.",
+        title: "Ontbrekende Datums",
+        description: "Selecteer een datumbereik.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setExporting(true);
+    let query = supabase
+      .from("timesheet")
+      .select("*, projects(name)")
+      .gte("date", dateRange.from)
+      .lte("date", dateRange.to);
+    
+    // If a user is selected, filter by user
+    if (selectedUserId) {
+      query = query.eq("user_id", selectedUserId);
+    }
+    
+    const { data, error } = await query;
+    if (error) {
+      toast({
+        title: "Export Mislukt",
+        description: error.message,
+        variant: "destructive",
+      });
+      setExporting(false);
+      return;
+    }
+    const rows = (data || []).map((row) => ({ ...row, project: row.projects?.name || "" }));
+    const selectedUser = users.find(u => u.id === selectedUserId);
+    const userLabel = selectedUser ? `_${selectedUser.name || selectedUser.email}` : "";
+    downloadExcel(rows, `timesheet${userLabel}_${dateRange.from}_to_${dateRange.to}.xlsx`);
+    setExporting(false);
+    toast({
+      title: "Export Succesvol",
+      description: `Data geëxporteerd van ${dateRange.from} tot ${dateRange.to}${selectedUser ? ` voor ${selectedUser.name || selectedUser.email}` : ""}.`,
+    });
+  };
+
+  // Export by user (admin only) - all data for selected user
+  const handleExportUser = async () => {
+    if (!selectedUserId) {
+      toast({
+        title: "Geen Gebruiker Geselecteerd",
+        description: "Selecteer een gebruiker om te exporteren.",
         variant: "destructive",
       });
       return;
@@ -211,11 +256,10 @@ const Index = () => {
     const { data, error } = await supabase
       .from("timesheet")
       .select("*, projects(name)")
-      .gte("date", dateRange.from)
-      .lte("date", dateRange.to);
+      .eq("user_id", selectedUserId);
     if (error) {
       toast({
-        title: "Export Failed",
+        title: "Export Mislukt",
         description: error.message,
         variant: "destructive",
       });
@@ -223,13 +267,32 @@ const Index = () => {
       return;
     }
     const rows = (data || []).map((row) => ({ ...row, project: row.projects?.name || "" }));
-    downloadExcel(rows, `timesheet_${dateRange.from}_to_${dateRange.to}.xlsx`);
+    const selectedUser = users.find(u => u.id === selectedUserId);
+    const userName = selectedUser?.name || selectedUser?.email || "user";
+    downloadExcel(rows, `timesheet_${userName.replace(/[^a-zA-Z0-9]/g, '_')}.xlsx`);
     setExporting(false);
     toast({
-      title: "Export Successful",
-      description: `Data exported from ${dateRange.from} to ${dateRange.to}.`,
+      title: "Export Succesvol",
+      description: `Alle data geëxporteerd voor ${userName}.`,
     });
   };
+
+  // Fetch users for admin export dropdown
+  useEffect(() => {
+    if (currentUser?.isAdmin) {
+      const fetchUsers = async () => {
+        const { data, error } = await supabase
+          .from("users")
+          .select("id, email, name")
+          .eq("approved", true)
+          .order("name");
+        if (!error && data) {
+          setUsers(data || []);
+        }
+      };
+      fetchUsers();
+    }
+  }, [currentUser]);
 
   // Export for normal users (day/week/month/year)
   const handleExportPeriod = async () => {
@@ -583,17 +646,73 @@ const Index = () => {
             <CardContent className="space-y-6 p-8">
               {currentUser?.isAdmin ? (
                 // Admin export options
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <Button className="h-24 flex flex-col items-center justify-center bg-orange-600 hover:bg-orange-700 text-white shadow-lg rounded-lg transition-all" onClick={handleExportAll} disabled={exporting}>
-                    <FileText className="h-8 w-8 mb-3" />
-                    <span className="text-lg font-medium">Export All Data</span>
-                  </Button>
-                  <div className="flex flex-col items-center justify-center gap-2">
-                    <input type="date" value={dateRange.from} onChange={e => setDateRange({ ...dateRange, from: e.target.value })} className="mb-2 border rounded px-2 py-1" />
-                    <input type="date" value={dateRange.to} onChange={e => setDateRange({ ...dateRange, to: e.target.value })} className="mb-2 border rounded px-2 py-1" />
-                    <Button variant="outline" className="h-16 flex flex-col items-center justify-center border-orange-200 text-orange-700 hover:bg-orange-50 shadow-lg rounded-lg transition-all" onClick={handleExportRange} disabled={exporting}>
-                      <Calendar className="h-8 w-8 mb-3" />
-                      <span className="text-lg font-medium">Export Date Range</span>
+                <div className="space-y-6">
+                  {/* User Selection Dropdown */}
+                  <div className="bg-orange-50 p-4 rounded-lg border border-orange-200">
+                    <label className="block text-sm font-medium text-orange-900 mb-2">
+                      Selecteer Gebruiker (optioneel)
+                    </label>
+                    <Select value={selectedUserId} onValueChange={setSelectedUserId}>
+                      <SelectTrigger className="w-full bg-white">
+                        <SelectValue placeholder="Alle gebruikers" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">Alle gebruikers</SelectItem>
+                        {users.map((user) => (
+                          <SelectItem key={user.id} value={user.id}>
+                            {user.name || user.email}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-orange-700 mt-2">
+                      Laat leeg om alle gebruikers te exporteren, of selecteer een specifieke gebruiker.
+                    </p>
+                  </div>
+
+                  {/* Export Buttons */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <Button 
+                      className="h-24 flex flex-col items-center justify-center bg-orange-600 hover:bg-orange-700 text-white shadow-lg rounded-lg transition-all" 
+                      onClick={handleExportAll} 
+                      disabled={exporting}
+                    >
+                      <FileText className="h-8 w-8 mb-3" />
+                      <span className="text-lg font-medium">Export All Data</span>
+                    </Button>
+                    
+                    <div className="flex flex-col items-center justify-center gap-2">
+                      <input 
+                        type="date" 
+                        value={dateRange.from} 
+                        onChange={e => setDateRange({ ...dateRange, from: e.target.value })} 
+                        className="mb-2 border rounded px-2 py-1 w-full" 
+                      />
+                      <input 
+                        type="date" 
+                        value={dateRange.to} 
+                        onChange={e => setDateRange({ ...dateRange, to: e.target.value })} 
+                        className="mb-2 border rounded px-2 py-1 w-full" 
+                      />
+                      <Button 
+                        variant="outline" 
+                        className="h-16 w-full flex flex-col items-center justify-center border-orange-200 text-orange-700 hover:bg-orange-50 shadow-lg rounded-lg transition-all" 
+                        onClick={handleExportRange} 
+                        disabled={exporting}
+                      >
+                        <Calendar className="h-8 w-8 mb-3" />
+                        <span className="text-lg font-medium">Export Datumbereik</span>
+                      </Button>
+                    </div>
+
+                    <Button 
+                      variant="outline" 
+                      className="h-24 flex flex-col items-center justify-center border-orange-200 text-orange-700 hover:bg-orange-50 shadow-lg rounded-lg transition-all" 
+                      onClick={handleExportUser} 
+                      disabled={exporting || !selectedUserId}
+                    >
+                      <Users className="h-8 w-8 mb-3" />
+                      <span className="text-lg font-medium">Export Per Gebruiker</span>
                     </Button>
                   </div>
                 </div>
@@ -640,7 +759,9 @@ const Index = () => {
                 </div>
               )}
               <div className="text-sm text-orange-800 bg-orange-50 p-6 rounded-lg border border-orange-200">
-                <strong className="text-orange-900">Note:</strong> {currentUser?.isAdmin ? "Admins kunnen alle data exporteren of een specifiek datumbereik selecteren." : "Selecteer een periode en datum om je uren te exporteren naar Excel."}
+                <strong className="text-orange-900">Let op:</strong> {currentUser?.isAdmin 
+                  ? "Admins kunnen alle data exporteren, een datumbereik selecteren, of per gebruiker exporteren. Selecteer een gebruiker om alleen die gebruiker te exporteren, of laat leeg voor alle gebruikers." 
+                  : "Selecteer een periode en datum om je uren te exporteren naar Excel."}
               </div>
             </CardContent>
           </Card>
