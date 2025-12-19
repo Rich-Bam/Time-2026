@@ -660,7 +660,7 @@ const Index = () => {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">Alle gebruikers</SelectItem>
-                        {users.map((user) => (
+                        {users && users.length > 0 && users.map((user) => (
                           <SelectItem key={user.id} value={user.id}>
                             {user.name || user.email}
                           </SelectItem>
