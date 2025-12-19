@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Camera, Image as ImageIcon, Trash2 } from "lucide-react";
+import { Camera, Image as ImageIcon, Trash2, RefreshCw } from "lucide-react";
 
 interface BugReportsProps {
   currentUser: any;
@@ -15,23 +15,54 @@ const BugReports = ({ currentUser }: BugReportsProps) => {
 
   const SUPER_ADMIN_EMAIL = "r.blance@bampro.nl";
   const isSuperAdmin = currentUser?.email === SUPER_ADMIN_EMAIL;
+  
+  // Debug logging
+  React.useEffect(() => {
+    console.log("BugReports: currentUser:", currentUser);
+    console.log("BugReports: isSuperAdmin:", isSuperAdmin);
+    console.log("BugReports: currentUser?.email:", currentUser?.email);
+    console.log("BugReports: SUPER_ADMIN_EMAIL:", SUPER_ADMIN_EMAIL);
+  }, [currentUser, isSuperAdmin]);
 
   // Fetch screenshots
   const fetchScreenshots = async () => {
-    if (!isSuperAdmin) return;
+    if (!isSuperAdmin) {
+      console.log("BugReports: Not super admin, skipping fetch");
+      return;
+    }
+    console.log("BugReports: Fetching screenshots...");
+    console.log("BugReports: Current user email:", currentUser?.email);
     setLoadingScreenshots(true);
-    const { data, error } = await supabase
+    
+    // Try to fetch screenshots
+    const { data, error, count } = await supabase
       .from("screenshots")
-      .select("*")
+      .select("*", { count: 'exact' })
       .order("created_at", { ascending: false })
       .limit(100); // Show last 100 screenshots
+      
+    console.log("BugReports: Query result:", { data, error, count });
+    
     if (error) {
       console.error("Error fetching screenshots:", error);
+      console.error("Error details:", JSON.stringify(error, null, 2));
       if (!error.message.includes("does not exist")) {
-        toast({ title: "Error", description: error.message, variant: "destructive" });
+        toast({ 
+          title: "Error bij Ophalen Screenshots", 
+          description: error.message || "Kon screenshots niet ophalen. Check browser console (F12) voor details.",
+          variant: "destructive" 
+        });
       }
     } else {
+      console.log("BugReports: Fetched screenshots:", data?.length || 0, "screenshots");
+      console.log("BugReports: Screenshot data:", data);
       setScreenshots(data || []);
+      if (data && data.length > 0) {
+        toast({
+          title: "Screenshots Geladen",
+          description: `${data.length} bug report(s) gevonden.`,
+        });
+      }
     }
     setLoadingScreenshots(false);
   };
@@ -56,14 +87,26 @@ const BugReports = ({ currentUser }: BugReportsProps) => {
 
   return (
     <div className="p-4 sm:p-8 bg-white rounded shadow w-full max-w-full">
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold flex items-center gap-2">
-          <Camera className="h-6 w-6 text-orange-600" />
-          Bug Reports
-        </h2>
-        <p className="text-gray-600 mt-2">
-          Screenshots die door admins zijn gemaakt om bugs te rapporteren.
-        </p>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold flex items-center gap-2">
+            <Camera className="h-6 w-6 text-orange-600" />
+            Bug Reports
+          </h2>
+          <p className="text-gray-600 mt-2">
+            Screenshots die door admins zijn gemaakt om bugs te rapporteren.
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={fetchScreenshots}
+          disabled={loadingScreenshots}
+          className="flex items-center gap-2"
+        >
+          <RefreshCw className={`h-4 w-4 ${loadingScreenshots ? 'animate-spin' : ''}`} />
+          {loadingScreenshots ? "Laden..." : "Verversen"}
+        </Button>
       </div>
 
       {loadingScreenshots ? (

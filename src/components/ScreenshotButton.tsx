@@ -88,7 +88,7 @@ const ScreenshotButton = ({ currentUser }: ScreenshotButtonProps) => {
             .getPublicUrl(filename);
 
           // Save metadata to database
-          const { error: dbError } = await supabase.from("screenshots").insert({
+          const screenshotData = {
             user_id: currentUser.id,
             user_email: currentUser.email,
             user_name: currentUser.name,
@@ -97,9 +97,13 @@ const ScreenshotButton = ({ currentUser }: ScreenshotButtonProps) => {
             url: urlData.publicUrl,
             description: description.trim() || null,
             created_at: new Date().toISOString(),
-          });
+          };
+          console.log("ScreenshotButton: Saving to database:", screenshotData);
+          
+          const { data: insertedData, error: dbError } = await supabase.from("screenshots").insert(screenshotData).select();
 
           if (dbError) {
+            console.error("ScreenshotButton: Database error:", dbError);
             // If table doesn't exist, show helpful message
             if (dbError.message.includes("relation") && dbError.message.includes("does not exist")) {
               toast({
@@ -114,6 +118,7 @@ const ScreenshotButton = ({ currentUser }: ScreenshotButtonProps) => {
             return;
           }
 
+          console.log("ScreenshotButton: Successfully saved screenshot:", insertedData);
           toast({
             title: "Screenshot Opgeslagen",
             description: "De screenshot is succesvol opgeslagen en is zichtbaar voor de super admin.",
