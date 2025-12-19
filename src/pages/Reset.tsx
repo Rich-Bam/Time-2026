@@ -1,88 +1,206 @@
 import { useState, useEffect } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 const Reset = () => {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const { toast } = useToast();
   const [accessToken, setAccessToken] = useState<string | null>(null);
+  const [refreshToken, setRefreshToken] = useState<string | null>(null);
   const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
+  const [isInvite, setIsInvite] = useState(false);
 
-  // Try to get access_token from query or hash
+  // Try to get access_token and refresh_token from query or hash
   useEffect(() => {
     let token = searchParams.get("access_token");
+    let refresh = searchParams.get("refresh_token");
+    const type = searchParams.get("type");
+    
+    // Check if this is an invite (type=invite) or password reset
+    if (type === "invite" || type === "signup") {
+      setIsInvite(true);
+    }
+    
     if (!token && window.location.hash) {
       const hashParams = new URLSearchParams(window.location.hash.substring(1));
       token = hashParams.get("access_token");
+      refresh = hashParams.get("refresh_token");
+      const hashType = hashParams.get("type");
+      if (hashType === "invite" || hashType === "signup") {
+        setIsInvite(true);
+      }
     }
     setAccessToken(token);
+    setRefreshToken(refresh);
   }, [searchParams]);
 
-  const handleReset = async (e: React.FormEvent) => {
+  const handleSetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setMessage("");
+    
+    if (!newPassword || newPassword.length < 6) {
+      setMessage("Wachtwoord moet minimaal 6 tekens lang zijn.");
+      setLoading(false);
+      return;
+    }
+    
+    if (newPassword !== confirmPassword) {
+      setMessage("Wachtwoorden komen niet overeen.");
+      setLoading(false);
+      return;
+    }
+    
     if (!accessToken) {
-      setMessage("Missing or invalid access token.");
+      setMessage("Ontbrekende of ongeldige toegangstoken.");
       setLoading(false);
       return;
     }
-    // Set the session with the access token so updateUser works
-    const { error: sessionError } = await supabase.auth.setSession({
-      access_token: accessToken,
-      refresh_token: accessToken, // Not used, but required by type
-    });
-    if (sessionError) {
-      setMessage("Session error: " + sessionError.message);
+    
+    try {
+      // Set the session with the access token so updateUser works
+      const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
+        access_token: accessToken,
+        refresh_token: refreshToken || accessToken, // Use refresh token if available
+      });
+      
+      if (sessionError) {
+        setMessage("Sessie fout: " + sessionError.message);
+        setLoading(false);
+        return;
+      }
+      
+      // Update password in Supabase Auth
+      const { error: authError } = await supabase.auth.updateUser({ password: newPassword });
+      if (authError) {
+        setMessage("Fout bij het instellen van wachtwoord: " + authError.message);
+        setLoading(false);
+        return;
+      }
+      
+      // Also update password in custom users table if user exists
+      if (sessionData?.user?.email) {
+        const { error: dbError } = await supabase
+          .from("users")
+          .update({ 
+            password: newPassword,
+            must_change_password: false 
+          })
+          .eq("email", sessionData.user.email);
+        
+        if (dbError) {
+          console.warn("Could not update password in users table:", dbError);
+          // Don't fail if this errors - auth password is already set
+        }
+      }
+      
+      // Success!
+      if (isInvite) {
+        toast({
+          title: "Account geactiveerd!",
+          description: "Je wachtwoord is ingesteld. Je kunt nu inloggen.",
+        });
+        // Redirect to login after 2 seconds
+        setTimeout(() => {
+          navigate("/");
+        }, 2000);
+      } else {
+        toast({
+          title: "Wachtwoord ingesteld!",
+          description: "Je kunt nu inloggen met je nieuwe wachtwoord.",
+        });
+        setTimeout(() => {
+          navigate("/");
+        }, 2000);
+      }
+      
+      setMessage("Wachtwoord succesvol ingesteld! Je wordt doorgestuurd naar de login pagina...");
+    } catch (error: any) {
+      setMessage("Fout: " + (error.message || "Onbekende fout"));
+    } finally {
       setLoading(false);
-      return;
     }
-    const { error } = await supabase.auth.updateUser({ password: newPassword });
-    if (error) {
-      setMessage(error.message);
-    } else {
-      setMessage("Password has been reset! You can now log in with your new password.");
-    }
-    setLoading(false);
   };
 
   return (
-    <div className="max-w-md mx-auto mt-16">
-      <Card>
+    <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-orange-100 flex items-center justify-center p-4">
+      <Card className="w-full max-w-md shadow-lg">
         <CardHeader className="text-center">
-          <CardTitle>Set a New Password</CardTitle>
-          <CardDescription>Enter your new password below.</CardDescription>
+          <div className="mb-4">
+            <img 
+              src="/bampro-marine-logo.jpg" 
+              alt="BAMPRO MARINE" 
+              className="h-16 mx-auto object-contain"
+            />
+          </div>
+          <CardTitle className="text-2xl text-orange-600">
+            {isInvite ? "Welkom bij BAMPRO MARINE!" : "Wachtwoord instellen"}
+          </CardTitle>
+          <CardDescription>
+            {isInvite 
+              ? "Stel je wachtwoord in om je account te activeren"
+              : "Voer je nieuwe wachtwoord in"}
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {accessToken ? (
-            <form onSubmit={handleReset} className="space-y-4">
+            <form onSubmit={handleSetPassword} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="new-password">New Password</Label>
+                <Label htmlFor="new-password">Wachtwoord</Label>
                 <Input
                   id="new-password"
                   type="password"
-                  placeholder="Enter new password"
+                  placeholder="Kies een wachtwoord (minimaal 6 tekens)"
                   value={newPassword}
                   onChange={e => setNewPassword(e.target.value)}
                   required
+                  minLength={6}
                 />
               </div>
-              <Button type="submit" className="w-full" disabled={loading || !newPassword}>
-                {loading ? "Resetting..." : "Reset Password"}
+              <div className="space-y-2">
+                <Label htmlFor="confirm-password">Bevestig wachtwoord</Label>
+                <Input
+                  id="confirm-password"
+                  type="password"
+                  placeholder="Bevestig je wachtwoord"
+                  value={confirmPassword}
+                  onChange={e => setConfirmPassword(e.target.value)}
+                  required
+                  minLength={6}
+                />
+              </div>
+              <Button 
+                type="submit" 
+                className="w-full bg-orange-600 hover:bg-orange-700" 
+                disabled={loading || !newPassword || !confirmPassword}
+              >
+                {loading ? "Bezig..." : isInvite ? "Account activeren" : "Wachtwoord instellen"}
               </Button>
               {message && (
-                <div className="text-sm text-center mt-2" style={{ color: message.includes('reset') ? 'green' : 'red' }}>
+                <div 
+                  className={`text-sm text-center mt-2 p-3 rounded ${
+                    message.includes('succesvol') || message.includes('doorgestuurd')
+                      ? 'bg-green-50 text-green-700 border border-green-200'
+                      : 'bg-red-50 text-red-700 border border-red-200'
+                  }`}
+                >
                   {message}
                 </div>
               )}
             </form>
           ) : (
-            <div className="text-center text-red-500">Missing or invalid reset token.</div>
+            <div className="text-center text-red-500 p-4 bg-red-50 rounded border border-red-200">
+              Ontbrekende of ongeldige activatielink. Controleer of je de volledige link uit de email hebt gebruikt.
+            </div>
           )}
         </CardContent>
       </Card>
