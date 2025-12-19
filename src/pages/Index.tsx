@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Clock, Users, FileText, Calendar, BarChart3, Download, AlertTriangle } from "lucide-react";
@@ -18,6 +19,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { useToast } from "@/hooks/use-toast";
 
 const Index = () => {
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
   const SUPER_ADMIN_EMAIL = "r.blance@bampro.nl";
@@ -30,6 +33,28 @@ const Index = () => {
   const [exportPeriod, setExportPeriod] = useState<"day" | "week" | "month" | "year">("week");
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const { toast } = useToast();
+
+  // Check if user came from invite email and redirect to invite-confirm page
+  useEffect(() => {
+    let token = searchParams.get("access_token");
+    const type = searchParams.get("type");
+    
+    if (!token && window.location.hash) {
+      const hashParams = new URLSearchParams(window.location.hash.substring(1));
+      token = hashParams.get("access_token");
+      const hashType = hashParams.get("type");
+      if (hashType === "invite" || hashType === "signup") {
+        // Redirect to invite-confirm page with tokens
+        navigate(`/invite-confirm${window.location.hash}`, { replace: true });
+        return;
+      }
+    }
+    
+    // If we have an access_token and it's an invite, redirect to invite-confirm
+    if (token && (type === "invite" || type === "signup")) {
+      navigate(`/invite-confirm${window.location.search}${window.location.hash}`, { replace: true });
+    }
+  }, [searchParams, navigate]);
 
   // Helper to get ISO week number
   function getISOWeekNumber(date) {
