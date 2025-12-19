@@ -567,6 +567,9 @@ const Index = () => {
         {activeTab === 'admin' && currentUser?.isAdmin && (
           <AdminPanel currentUser={currentUser} />
         )}
+        {activeTab === 'bugreports' && currentUser?.email === SUPER_ADMIN_EMAIL && (
+          <BugReports currentUser={currentUser} />
+        )}
       </div>
     </div>
   );
