@@ -306,6 +306,35 @@ const ProjectManagement = ({ currentUser }: ProjectManagementProps) => {
                             View Details
                           </Button>
                         </DialogTrigger>
+                        <DialogContent>
+                          <DialogHeader>
+                            <DialogTitle>Project Details: {project.name}</DialogTitle>
+                            <DialogDescription>All time entries for this project</DialogDescription>
+                          </DialogHeader>
+                          <div className="space-y-4 mt-4">
+                            {modalEntries.length === 0 ? (
+                              <div className="text-gray-500">No time entries yet.</div>
+                            ) : (
+                              modalEntries.map((entry, idx) => (
+                                <div key={idx} className="border-l-4 border-blue-400 pl-4 py-2">
+                                  <div className="flex justify-between items-start">
+                                    <div>
+                                      <div className="font-medium text-gray-900">{entry.user_id || "Unknown User"}</div>
+                                      <div className="text-sm text-gray-600">{entry.description}</div>
+                                    </div>
+                                    <div className="text-right">
+                                      <div className="font-medium text-blue-600">{entry.hours}h</div>
+                                      <div className="text-xs text-gray-500">{entry.date}</div>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                          <DialogClose asChild>
+                            <Button variant="outline" className="mt-4">Close</Button>
+                          </DialogClose>
+                        </DialogContent>
                       </Dialog>
                       {currentUser?.isAdmin && (
                         <Button 
@@ -319,36 +348,6 @@ const ProjectManagement = ({ currentUser }: ProjectManagementProps) => {
                         </Button>
                       )}
                     </div>
-                      <DialogContent>
-                        <DialogHeader>
-                          <DialogTitle>Project Details: {project.name}</DialogTitle>
-                          <DialogDescription>All time entries for this project</DialogDescription>
-                        </DialogHeader>
-                        <div className="space-y-4 mt-4">
-                          {modalEntries.length === 0 ? (
-                            <div className="text-gray-500">No time entries yet.</div>
-                          ) : (
-                            modalEntries.map((entry, idx) => (
-                              <div key={idx} className="border-l-4 border-blue-400 pl-4 py-2">
-                                <div className="flex justify-between items-start">
-                                  <div>
-                                    <div className="font-medium text-gray-900">{entry.user_id || "Unknown User"}</div>
-                                    <div className="text-sm text-gray-600">{entry.description}</div>
-                                  </div>
-                                  <div className="text-right">
-                                    <div className="font-medium text-blue-600">{entry.hours}h</div>
-                                    <div className="text-xs text-gray-500">{entry.date}</div>
-                                  </div>
-                                </div>
-                              </div>
-                            ))
-                          )}
-                        </div>
-                        <DialogClose asChild>
-                          <Button variant="outline" className="mt-4">Close</Button>
-                        </DialogClose>
-                      </DialogContent>
-                    </Dialog>
                   </div>
                 </div>
               ))}
