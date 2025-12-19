@@ -263,22 +263,29 @@ const AuthSection = ({ onLogin, setCurrentUser }: AuthSectionProps) => {
         <CardHeader className="text-center">
           <CardTitle className="flex items-center justify-center gap-2">
             <User className="w-5 h-5 text-orange-500" />
-            Create User
+            Account Aanmaken
           </CardTitle>
-          <CardDescription>Quickly add a user to verify Supabase is connected.</CardDescription>
+          <CardDescription>
+            Alleen @bampro.nl email adressen kunnen een account aanmaken. Voor andere email adressen, vraag een admin om je uit te nodigen.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleRegister} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="register-email">Email</Label>
+              <Label htmlFor="register-email">Email (@bampro.nl vereist)</Label>
               <Input
                 id="register-email"
                 type="email"
-                placeholder="newuser@example.com"
+                placeholder="naam@bampro.nl"
                 value={registerData.email}
                 onChange={(e) => setRegisterData({ ...registerData, email: e.target.value })}
                 required
               />
+              {registerData.email && !registerData.email.toLowerCase().endsWith('@bampro.nl') && (
+                <p className="text-xs text-red-500">
+                  Alleen @bampro.nl email adressen kunnen een account aanmaken. Vraag een admin om je uit te nodigen voor andere email adressen.
+                </p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="register-name">Name</Label>
