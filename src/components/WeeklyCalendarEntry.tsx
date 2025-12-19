@@ -588,35 +588,56 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
         // Check if this is a custom project (not in the projects list)
         const isCustomProject = !projects.some(p => p.name === projectToSave);
         if (isCustomProject) {
-          // Save custom project to database for this user only
-          const { data: existingProject } = await supabase
-            .from("projects")
-            .select("id")
-            .eq("name", projectToSave)
-            .eq("user_id", currentUser.id)
-            .single();
-          
-          if (!existingProject) {
-            // Create new custom project for this user
-            await supabase
+          try {
+            // Try to check if project exists with user_id
+            const { data: existingProject, error: checkError } = await supabase
               .from("projects")
-              .insert([{
-                name: projectToSave,
-                user_id: currentUser.id,
-                description: null
-              }]);
+              .select("id")
+              .eq("name", projectToSave);
             
-            // Refresh projects list to include the new custom project
-            const { data: updatedProjects } = await supabase
-              .from("projects")
-              .select("id, name, user_id")
-              .or(`user_id.is.null,user_id.eq.${currentUser.id}`);
-            if (updatedProjects) {
-              const filteredProjects = updatedProjects.filter(
-                p => !p.user_id || p.user_id === currentUser.id
-              );
-              setProjects(filteredProjects);
+            let projectExists = false;
+            if (checkError && checkError.message.includes("does not exist")) {
+              // user_id column doesn't exist, just check by name
+              projectExists = existingProject && existingProject.length > 0;
+            } else {
+              // Try to filter by user_id
+              const { data: userProject } = await supabase
+                .from("projects")
+                .select("id")
+                .eq("name", projectToSave)
+                .eq("user_id", currentUser.id)
+                .single();
+              projectExists = !!userProject;
             }
+            
+            if (!projectExists) {
+              // Try to insert with user_id
+              const { error: insertError } = await supabase
+                .from("projects")
+                .insert([{
+                  name: projectToSave,
+                  user_id: currentUser.id,
+                  description: null
+                }]);
+              
+              // If user_id column doesn't exist, insert without it
+              if (insertError && insertError.message.includes("does not exist")) {
+                await supabase
+                  .from("projects")
+                  .insert([{
+                    name: projectToSave,
+                    description: null
+                  }]);
+              }
+              
+              // Refresh projects list
+              const { data: updatedProjects } = await supabase
+                .from("projects")
+                .select("id, name");
+              setProjects(updatedProjects || []);
+            }
+          } catch (err) {
+            console.warn("Could not save custom project:", err);
           }
         }
       }
