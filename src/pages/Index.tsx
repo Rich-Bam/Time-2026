@@ -210,7 +210,9 @@ const Index = () => {
       return;
     }
     setExporting(true);
-    let query = supabase
+    
+    // Build query with optional user filter
+    let queryBuilder = supabase
       .from("timesheet")
       .select("*, projects(name)")
       .gte("date", dateRange.from)
@@ -218,10 +220,10 @@ const Index = () => {
     
     // If a user is selected, filter by user
     if (selectedUserId) {
-      query = query.eq("user_id", selectedUserId);
+      queryBuilder = queryBuilder.eq("user_id", selectedUserId);
     }
     
-    const { data, error } = await query;
+    const { data, error } = await queryBuilder;
     if (error) {
       toast({
         title: "Export Mislukt",
@@ -279,7 +281,7 @@ const Index = () => {
 
   // Fetch users for admin export dropdown
   useEffect(() => {
-    if (currentUser?.isAdmin) {
+    if (currentUser?.isAdmin && activeTab === 'export') {
       const fetchUsers = async () => {
         const { data, error } = await supabase
           .from("users")
@@ -292,7 +294,7 @@ const Index = () => {
       };
       fetchUsers();
     }
-  }, [currentUser]);
+  }, [currentUser, activeTab]);
 
   // Export for normal users (day/week/month/year)
   const handleExportPeriod = async () => {
