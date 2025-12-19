@@ -117,13 +117,13 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
     const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
     
     console.log("🧪 Testing Edge Function...");
-    console.log("  URL:", supabaseUrl);
-    console.log("  Key:", anonKey ? "✅ Set" : "❌ Missing");
+    console.log("  Supabase URL:", supabaseUrl || "❌ MISSING!");
+    console.log("  Anon Key:", anonKey ? "✅ Set (length: " + anonKey.length + ")" : "❌ MISSING!");
     
     if (!supabaseUrl || !anonKey) {
       toast({
         title: "❌ Configuratie Fout",
-        description: `Environment variabelen ontbreken! Check .env.local of Netlify settings.`,
+        description: `Environment variabelen ontbreken! URL: ${supabaseUrl ? "✅" : "❌"}, Key: ${anonKey ? "✅" : "❌"}. Check Netlify environment variables.`,
         variant: "destructive",
       });
       return;
@@ -132,11 +132,17 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
     const testEmail = `test-${Date.now()}@example.com`;
     const functionUrl = `${supabaseUrl}/functions/v1/invite-user`;
     
+    console.log("🧪 Function URL:", functionUrl);
+    console.log("🧪 Test email:", testEmail);
+    
     try {
       toast({
         title: "🧪 Testing...",
         description: `Testing Edge Function: ${functionUrl}`,
       });
+      
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
       
       const response = await fetch(functionUrl, {
         method: "POST",
@@ -149,9 +155,22 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
           name: "Test User",
           isAdmin: false,
         }),
+        signal: controller.signal,
       });
       
-      const result = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+      clearTimeout(timeoutId);
+      
+      console.log("🧪 Response status:", response.status);
+      console.log("🧪 Response headers:", Object.fromEntries(response.headers.entries()));
+      
+      let result: any;
+      try {
+        const text = await response.text();
+        console.log("🧪 Response text:", text);
+        result = JSON.parse(text);
+      } catch (e) {
+        result = { error: `Could not parse response (Status: ${response.status})` };
+      }
       
       console.log("🧪 Test Result:", { status: response.status, result });
       
@@ -160,19 +179,46 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
           title: "✅ Edge Function werkt!",
           description: `Test email verstuurd naar ${testEmail}. Check Supabase Auth → Users.`,
         });
+      } else if (response.status === 404) {
+        toast({
+          title: "❌ Edge Function niet gevonden (404)",
+          description: "De 'invite-user' function bestaat NIET in Supabase. Ga naar Supabase Dashboard → Edge Functions → Create 'invite-user' function.",
+          variant: "destructive",
+        });
+      } else if (response.status === 401 || response.status === 403) {
+        toast({
+          title: "❌ Toegang geweigerd (401/403)",
+          description: "Check of VITE_SUPABASE_ANON_KEY correct is in Netlify environment variables.",
+          variant: "destructive",
+        });
       } else {
         toast({
           title: `❌ Edge Function Error (${response.status})`,
-          description: result.error || JSON.stringify(result),
+          description: result.error || result.message || JSON.stringify(result),
           variant: "destructive",
         });
       }
     } catch (err: any) {
       console.error("🧪 Test Error:", err);
+      console.error("🧪 Error details:", {
+        name: err.name,
+        message: err.message,
+        stack: err.stack,
+      });
+      
+      let errorMessage = err.message || "Unknown error";
+      
+      if (err.name === "AbortError") {
+        errorMessage = "Timeout: Edge Function reageert niet binnen 10 seconden. Check of de function gedeployed is.";
+      } else if (err.message.includes("Failed to fetch")) {
+        errorMessage = "Kon Edge Function niet bereiken. Mogelijke oorzaken:\n1. Edge Function bestaat niet (404)\n2. CORS probleem\n3. Netwerk probleem\n\nCheck Supabase Dashboard → Edge Functions → Functions";
+      }
+      
       toast({
         title: "❌ Network Error",
-        description: err.message,
+        description: errorMessage + "\n\nDruk F12 → Console voor meer details.",
         variant: "destructive",
+        duration: 10000, // Show for 10 seconds
       });
     }
   };
