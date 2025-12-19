@@ -60,17 +60,32 @@ const AuthSection = ({ onLogin, setCurrentUser }: AuthSectionProps) => {
     // Check password (plaintext for now)
     if (user.password !== loginData.password) {
       toast({
-        title: "Login Failed",
-        description: "Incorrect password",
+        title: "Login Mislukt",
+        description: "Onjuist wachtwoord",
         variant: "destructive",
       });
       return;
     }
+    
+    // Save session to localStorage (14 days persistence)
+    const sessionData = {
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        isAdmin: user.isAdmin,
+        approved: user.approved,
+        must_change_password: user.must_change_password,
+      },
+      loginTime: new Date().toISOString(),
+    };
+    localStorage.setItem('bampro_user_session', JSON.stringify(sessionData));
+    
     setCurrentUser(user);
     onLogin(true);
     toast({
-      title: "Login Successful",
-      description: `Welcome, ${user.name || user.email}!`,
+      title: "Login Succesvol",
+      description: `Welkom, ${user.name || user.email}! Je blijft ingelogd voor 14 dagen.`,
     });
   };
 

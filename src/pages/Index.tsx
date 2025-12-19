@@ -34,6 +34,47 @@ const Index = () => {
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const { toast } = useToast();
 
+  // Check for saved session on page load (14 days persistence)
+  useEffect(() => {
+    const savedSession = localStorage.getItem('bampro_user_session');
+    if (savedSession) {
+      try {
+        const sessionData = JSON.parse(savedSession);
+        const sessionDate = new Date(sessionData.loginTime);
+        const daysSinceLogin = (Date.now() - sessionDate.getTime()) / (1000 * 60 * 60 * 24);
+        
+        // Check if session is still valid (within 14 days)
+        if (daysSinceLogin < 14) {
+          // Verify user still exists and is approved
+          const verifyUser = async () => {
+            const { data: user, error } = await supabase
+              .from("users")
+              .select("*")
+              .eq("email", sessionData.user.email)
+              .single();
+            
+            if (!error && user && user.approved !== false) {
+              setCurrentUser(user);
+              setIsLoggedIn(true);
+              console.log("✅ Auto-login: Session restored from localStorage");
+            } else {
+              // User no longer exists or not approved, clear session
+              localStorage.removeItem('bampro_user_session');
+            }
+          };
+          verifyUser();
+        } else {
+          // Session expired (older than 14 days)
+          localStorage.removeItem('bampro_user_session');
+          console.log("⏰ Session expired (older than 14 days)");
+        }
+      } catch (error) {
+        console.error("Error parsing saved session:", error);
+        localStorage.removeItem('bampro_user_session');
+      }
+    }
+  }, []);
+
   // Check if user came from invite email and redirect to invite-confirm page
   useEffect(() => {
     let token = searchParams.get("access_token");
@@ -485,7 +526,16 @@ const Index = () => {
               <Button 
                 variant="outline" 
                 size="sm"
-                onClick={() => setIsLoggedIn(false)}
+                onClick={() => {
+                  // Clear session from localStorage
+                  localStorage.removeItem('bampro_user_session');
+                  setIsLoggedIn(false);
+                  setCurrentUser(null);
+                  toast({
+                    title: "Uitgelogd",
+                    description: "Je bent succesvol uitgelogd.",
+                  });
+                }}
                 className="border-orange-200 text-orange-700 hover:bg-orange-50"
               >
                 Logout
