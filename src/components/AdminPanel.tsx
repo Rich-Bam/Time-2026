@@ -118,8 +118,9 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
       toast({ title: "Missing info", description: "Email and password required", variant: "destructive" });
       return;
     }
+    
+    // First try Edge Function for email invite
     try {
-      // Try to send an invite via Edge Function (if deployed)
       const functionUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/invite-user`;
       const response = await fetch(functionUrl, {
         method: "POST",
@@ -134,44 +135,52 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
         }),
       });
 
-      if (!response.ok) {
-        const body = await response.json().catch(() => ({}));
-        const message = body?.error || `Invite failed with status ${response.status}`;
-        throw new Error(message);
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success) {
+          toast({
+            title: "Uitnodiging verstuurd",
+            description: `Een uitnodigingsemail is verstuurd naar ${form.email}. De gebruiker kan zich aanmelden via de link in de email.`,
+          });
+          setForm({ email: "", name: "", password: "", isAdmin: false, must_change_password: true });
+          fetchUsers();
+          return;
+        }
       }
-
+      
+      // If Edge Function fails, try direct user creation with password
+      const errorBody = await response.json().catch(() => ({}));
+      console.log("Edge Function failed, falling back to direct creation:", errorBody);
+    } catch (err: any) {
+      console.log("Edge Function error, falling back:", err);
+    }
+    
+    // Fallback: create user directly (no email sent)
+    const { error: insertError } = await supabase.from("users").insert([
+      {
+        email: form.email,
+        name: form.name || form.email,
+        password: form.password,
+        isAdmin: form.isAdmin,
+        must_change_password: form.must_change_password,
+        approved: true, // Admins can create users directly, so they're auto-approved
+      },
+    ]);
+    
+    if (insertError) {
       toast({
-        title: "Invite sent",
-        description: `An invitation email was sent to ${form.email}.`,
+        title: "Fout bij aanmaken gebruiker",
+        description: insertError.message,
+        variant: "destructive",
+      });
+    } else {
+      toast({
+        title: "Gebruiker aangemaakt",
+        description: `${form.email} is aangemaakt. Let op: er is geen email verstuurd. De gebruiker kan direct inloggen met het wachtwoord.`,
+        variant: "default",
       });
       setForm({ email: "", name: "", password: "", isAdmin: false, must_change_password: true });
       fetchUsers();
-    } catch (err: any) {
-      // Fallback: if function not deployed or fails, create user directly with approved = true
-      const { error: insertError } = await supabase.from("users").insert([
-        {
-          email: form.email,
-          name: form.name || form.email,
-          password: form.password,
-          isAdmin: form.isAdmin,
-          must_change_password: form.must_change_password,
-          approved: true, // Admins can create users directly, so they're auto-approved
-        },
-      ]);
-      if (insertError) {
-        toast({
-          title: "Error creating user",
-          description: insertError.message,
-          variant: "destructive",
-        });
-      } else {
-        toast({
-          title: "User created",
-          description: `${form.email} has been created and can log in immediately.`,
-        });
-        setForm({ email: "", name: "", password: "", isAdmin: false, must_change_password: true });
-        fetchUsers();
-      }
     }
   };
 
