@@ -219,7 +219,7 @@ const Index = () => {
       .lte("date", dateRange.to);
     
     // If a user is selected, filter by user
-    if (selectedUserId) {
+    if (selectedUserId && selectedUserId !== "all") {
       queryBuilder = queryBuilder.eq("user_id", selectedUserId);
     }
     
@@ -246,7 +246,7 @@ const Index = () => {
 
   // Export by user (admin only) - all data for selected user
   const handleExportUser = async () => {
-    if (!selectedUserId) {
+    if (!selectedUserId || selectedUserId === "all") {
       toast({
         title: "Geen Gebruiker Geselecteerd",
         description: "Selecteer een gebruiker om te exporteren.",
@@ -654,12 +654,12 @@ const Index = () => {
                     <label className="block text-sm font-medium text-orange-900 mb-2">
                       Selecteer Gebruiker (optioneel)
                     </label>
-                    <Select value={selectedUserId} onValueChange={setSelectedUserId}>
+                    <Select value={selectedUserId || undefined} onValueChange={(value) => setSelectedUserId(value || "")}>
                       <SelectTrigger className="w-full bg-white">
                         <SelectValue placeholder="Alle gebruikers" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">Alle gebruikers</SelectItem>
+                        <SelectItem value="all">Alle gebruikers</SelectItem>
                         {users.map((user) => (
                           <SelectItem key={user.id} value={user.id}>
                             {user.name || user.email}
@@ -711,7 +711,7 @@ const Index = () => {
                       variant="outline" 
                       className="h-24 flex flex-col items-center justify-center border-orange-200 text-orange-700 hover:bg-orange-50 shadow-lg rounded-lg transition-all" 
                       onClick={handleExportUser} 
-                      disabled={exporting || !selectedUserId}
+                      disabled={exporting || !selectedUserId || selectedUserId === "all"}
                     >
                       <Users className="h-8 w-8 mb-3" />
                       <span className="text-lg font-medium">Export Per Gebruiker</span>
