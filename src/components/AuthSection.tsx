@@ -79,12 +79,23 @@ const AuthSection = ({ onLogin, setCurrentUser }: AuthSectionProps) => {
     e.preventDefault();
     if (!registerData.email || !registerData.password || !registerData.name) {
       toast({
-        title: "Missing information",
-        description: "Email, name and password are required to create a user.",
+        title: "Ontbrekende informatie",
+        description: "Email, naam en wachtwoord zijn verplicht om een gebruiker aan te maken.",
         variant: "destructive",
       });
       return;
     }
+    
+    // Validate password length
+    if (registerData.password.length < 6) {
+      toast({
+        title: "Wachtwoord te kort",
+        description: "Wachtwoord moet minimaal 6 tekens lang zijn.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     setRegisterLoading(true);
     const { error } = await supabase.from("users").insert([
       {
@@ -100,15 +111,15 @@ const AuthSection = ({ onLogin, setCurrentUser }: AuthSectionProps) => {
     setRegisterLoading(false);
     if (error) {
       toast({
-        title: "Failed to create user",
+        title: "Fout bij aanmaken gebruiker",
         description: error.message,
         variant: "destructive",
       });
       return;
     }
     toast({
-      title: "Account Created",
-      description: "Your account has been created and is pending admin approval. You will be able to log in once an administrator approves your account.",
+      title: "Account aangemaakt",
+      description: "Je account is aangemaakt en wacht op goedkeuring van een administrator. Je kunt inloggen zodra een administrator je account heeft goedgekeurd.",
     });
     // Clear form
     setRegisterData({ email: "", name: "", password: "" });
@@ -255,18 +266,26 @@ const AuthSection = ({ onLogin, setCurrentUser }: AuthSectionProps) => {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="register-password">Password</Label>
+              <Label htmlFor="register-password">Wachtwoord</Label>
               <Input
                 id="register-password"
                 type="password"
-                placeholder="Choose a password"
+                placeholder="Kies een wachtwoord (minimaal 6 tekens)"
                 value={registerData.password}
                 onChange={(e) => setRegisterData({ ...registerData, password: e.target.value })}
                 required
+                minLength={6}
               />
+              {registerData.password && registerData.password.length > 0 && registerData.password.length < 6 && (
+                <p className="text-sm text-red-500">Wachtwoord moet minimaal 6 tekens lang zijn.</p>
+              )}
             </div>
-            <Button type="submit" className="w-full" disabled={registerLoading}>
-              {registerLoading ? "Creating..." : "Create User"}
+            <Button 
+              type="submit" 
+              className="w-full" 
+              disabled={registerLoading || (registerData.password && registerData.password.length < 6)}
+            >
+              {registerLoading ? "Aanmaken..." : "Gebruiker Aanmaken"}
             </Button>
           </form>
         </CardContent>
