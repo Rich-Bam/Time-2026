@@ -111,6 +111,72 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
     fetchAllEntries();
   }, [users]);
 
+  // Test Edge Function directly
+  const testEdgeFunction = async () => {
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+    
+    console.log("🧪 Testing Edge Function...");
+    console.log("  URL:", supabaseUrl);
+    console.log("  Key:", anonKey ? "✅ Set" : "❌ Missing");
+    
+    if (!supabaseUrl || !anonKey) {
+      toast({
+        title: "❌ Configuratie Fout",
+        description: `Environment variabelen ontbreken! Check .env.local of Netlify settings.`,
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    const testEmail = `test-${Date.now()}@example.com`;
+    const functionUrl = `${supabaseUrl}/functions/v1/invite-user`;
+    
+    try {
+      toast({
+        title: "🧪 Testing...",
+        description: `Testing Edge Function: ${functionUrl}`,
+      });
+      
+      const response = await fetch(functionUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${anonKey}`,
+        },
+        body: JSON.stringify({
+          email: testEmail,
+          name: "Test User",
+          isAdmin: false,
+        }),
+      });
+      
+      const result = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+      
+      console.log("🧪 Test Result:", { status: response.status, result });
+      
+      if (response.ok && result.success) {
+        toast({
+          title: "✅ Edge Function werkt!",
+          description: `Test email verstuurd naar ${testEmail}. Check Supabase Auth → Users.`,
+        });
+      } else {
+        toast({
+          title: `❌ Edge Function Error (${response.status})`,
+          description: result.error || JSON.stringify(result),
+          variant: "destructive",
+        });
+      }
+    } catch (err: any) {
+      console.error("🧪 Test Error:", err);
+      toast({
+        title: "❌ Network Error",
+        description: err.message,
+        variant: "destructive",
+      });
+    }
+  };
+
   // Add user (with optional invite via Supabase Edge Function)
   const handleAddUser = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -119,9 +185,33 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
       return;
     }
     
+    // Debug: Check environment variables
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+    
+    console.log("🔍 DEBUG INFO:");
+    console.log("  Supabase URL:", supabaseUrl || "❌ MISSING!");
+    console.log("  Anon Key:", anonKey ? "✅ Set" : "❌ MISSING!");
+    
+    if (!supabaseUrl || !anonKey) {
+      toast({
+        title: "❌ Configuratie Fout",
+        description: `Environment variabelen ontbreken! URL: ${supabaseUrl ? "✅" : "❌"}, Key: ${anonKey ? "✅" : "❌"}. Check .env.local of Netlify settings.`,
+        variant: "destructive",
+      });
+      // Continue with fallback anyway
+    }
+    
     // First try Edge Function for email invite
     try {
-      const functionUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/invite-user`;
+      if (!supabaseUrl) {
+        throw new Error("VITE_SUPABASE_URL is not set");
+      }
+      
+      const functionUrl = `${supabaseUrl}/functions/v1/invite-user`;
+      console.log("🔵 Calling Edge Function:", functionUrl);
+      console.log("🔵 Supabase URL:", supabaseUrl);
+      
       const response = await fetch(functionUrl, {
         method: "POST",
         headers: {
@@ -134,13 +224,17 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
           isAdmin: form.isAdmin,
         }),
       });
+      
+      console.log("🔵 Edge Function response status:", response.status);
+      console.log("🔵 Response headers:", Object.fromEntries(response.headers.entries()));
 
       if (response.ok) {
         const result = await response.json();
+        console.log("✅ Edge Function success:", result);
         if (result.success) {
           toast({
             title: "Uitnodiging verstuurd",
-            description: `Een uitnodigingsemail is verstuurd naar ${form.email}. De gebruiker kan zich aanmelden via de link in de email.`,
+            description: `Een uitnodigingsemail is verstuurd naar ${form.email}. Check je inbox (en spam folder) voor de uitnodigingslink.`,
           });
           setForm({ email: "", name: "", password: "", isAdmin: false, must_change_password: true });
           fetchUsers();
@@ -148,11 +242,62 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
         }
       }
       
-      // If Edge Function fails, try direct user creation with password
-      const errorBody = await response.json().catch(() => ({}));
-      console.log("Edge Function failed, falling back to direct creation:", errorBody);
+      // If Edge Function fails, show error and try direct user creation
+      let errorBody: any = {};
+      try {
+        errorBody = await response.json();
+      } catch (e) {
+        const text = await response.text();
+        errorBody = { error: text || `HTTP ${response.status}` };
+      }
+      
+      console.error("❌ Edge Function failed:", {
+        status: response.status,
+        statusText: response.statusText,
+        error: errorBody,
+        url: functionUrl,
+        supabaseUrl: import.meta.env.VITE_SUPABASE_URL
+      });
+      
+      // Show specific error to user
+      if (response.status === 404) {
+        toast({
+          title: "⚠️ Edge Function niet gevonden (404)",
+          description: "De 'invite-user' function is NIET gedeployed in Supabase. Open Supabase Dashboard → Edge Functions → Functions → Create 'invite-user' function. Gebruiker wordt nu aangemaakt zonder email.",
+          variant: "destructive",
+        });
+      } else if (response.status === 401 || response.status === 403) {
+        toast({
+          title: "⚠️ Toegang geweigerd (401/403)",
+          description: "Check of VITE_SUPABASE_ANON_KEY correct is in .env.local. Gebruiker wordt nu aangemaakt zonder email.",
+          variant: "destructive",
+        });
+      } else if (errorBody?.error) {
+        let errorMessage = errorBody.error;
+        if (errorMessage.includes("already registered") || errorMessage.includes("already exists")) {
+          errorMessage = "Dit email adres is al geregistreerd in Supabase Auth.";
+        } else if (errorMessage.includes("email service") || errorMessage.includes("email")) {
+          errorMessage = "Supabase email service probleem. Check Authentication → Email Templates.";
+        }
+        toast({
+          title: "⚠️ Email kon niet worden verstuurd",
+          description: `${errorMessage} (Status: ${response.status}). Druk F12 → Console voor details. Gebruiker wordt nu aangemaakt zonder email.`,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "⚠️ Edge Function Error",
+          description: `Status ${response.status}: ${response.statusText}. Druk F12 → Console voor details. Gebruiker wordt nu aangemaakt zonder email.`,
+          variant: "destructive",
+        });
+      }
     } catch (err: any) {
-      console.log("Edge Function error, falling back:", err);
+      console.error("❌ Edge Function network error, falling back:", err);
+      toast({
+        title: "⚠️ Netwerkfout",
+        description: `Kon Edge Function niet bereiken: ${err.message}. Check of de function gedeployed is. Gebruiker wordt nu aangemaakt zonder email.`,
+        variant: "destructive",
+      });
     }
     
     // Fallback: create user directly (no email sent)
@@ -389,6 +534,20 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
   return (
     <div className="p-4 sm:p-8 bg-white rounded shadow w-full max-w-full">
       <h2 className="text-2xl font-bold mb-4">Admin Panel</h2>
+      
+      {/* Debug: Test Edge Function */}
+      <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-semibold text-yellow-800">🔍 Edge Function Test</p>
+            <p className="text-xs text-yellow-700">Test of de invite-user function werkt zonder een user aan te maken</p>
+          </div>
+          <Button onClick={testEdgeFunction} variant="outline" size="sm">
+            Test Edge Function
+          </Button>
+        </div>
+      </div>
+      
       <div className="mb-8">
         <h3 className="text-lg font-semibold mb-2">Add User</h3>
         <form onSubmit={handleAddUser} className="flex flex-col sm:flex-row flex-wrap gap-2 sm:gap-4 items-end w-full">

@@ -1,17 +1,13 @@
 // Supabase Edge Function: invite-user
-// Sends an invite email via Resend and creates a user in the public.users table
+// Sends an invite email via Supabase's built-in email service and creates a user
 //
 // To deploy:
-// 1) Install Supabase CLI
-// 2) Set env vars: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, RESEND_API_KEY
-// 3) Run: supabase functions deploy invite-user --project-ref bgddtkiekjcdhcmrnxsi
-// 4) In the frontend, call: POST {SUPABASE_URL}/functions/v1/invite-user
+// 1) Install Supabase CLI (optional - can also deploy via Dashboard)
+// 2) No additional secrets needed! Uses Supabase's built-in email service
+// 3) Deploy via Dashboard or CLI: supabase functions deploy invite-user --project-ref bgddtkiekjcdhcmrnxsi
 //
-// Environment variables needed:
-// - SUPABASE_URL: Your Supabase project URL
-// - SUPABASE_SERVICE_ROLE_KEY: Your service_role key
-// - RESEND_API_KEY: Your Resend API key (get from https://resend.com/api-keys)
-// - RESEND_FROM_EMAIL: Email address to send from (e.g., "noreply@bampro.nl")
+// Note: Supabase automatically provides SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY
+// No Resend or external email service needed!
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.50.0";
 
@@ -19,7 +15,6 @@ type InvitePayload = {
   email: string;
   name: string;
   isAdmin?: boolean;
-  password?: string; // Optional temporary password
 };
 
 const corsHeaders = {
@@ -33,7 +28,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { email, name, isAdmin = false, password } = (await req.json()) as InvitePayload;
+    const { email, name, isAdmin = false } = (await req.json()) as InvitePayload;
 
     if (!email || !name) {
       return new Response(JSON.stringify({ error: "Email and name are required" }), {
@@ -42,10 +37,9 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Supabase automatically provides these - no need to set as secrets!
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    const resendApiKey = Deno.env.get("RESEND_API_KEY");
-    const fromEmail = Deno.env.get("RESEND_FROM_EMAIL") || "noreply@bampro.nl";
 
     if (!supabaseUrl || !serviceRoleKey) {
       return new Response(JSON.stringify({ error: "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY" }), {
@@ -54,122 +48,73 @@ Deno.serve(async (req) => {
       });
     }
 
-    if (!resendApiKey) {
-      return new Response(JSON.stringify({ error: "Missing RESEND_API_KEY. Please configure Resend in Edge Function secrets." }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 500,
-      });
-    }
-
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-    // Generate a temporary password if not provided
-    const tempPassword = password || Math.random().toString(36).slice(-12) + Math.random().toString(36).slice(-12) + "A1!";
+    // Get the app URL from environment or use default
+    const appUrl = Deno.env.get("APP_URL") || "https://bampro-uren.nl";
+    
+    // Use Supabase Auth's built-in invite function - this sends email automatically!
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.admin.inviteUserByEmail(email, {
+      data: { 
+        name, 
+        isAdmin: isAdmin ? "true" : "false" // Store as string in user metadata
+      },
+      redirectTo: `${appUrl}`, // Redirect URL after accepting invite (homepage)
+    });
 
-    // Create user in public.users table first
-    const { data: newUser, error: dbError } = await supabase
-      .from("users")
-      .insert({
-        email,
-        name,
-        password: tempPassword,
-        isAdmin,
-        must_change_password: true,
-        approved: true, // Admins creating users are auto-approved
-      })
-      .select()
-      .single();
-
-    if (dbError) {
-      return new Response(JSON.stringify({ error: `Failed to create user: ${dbError.message}` }), {
+    if (authError || !user) {
+      return new Response(JSON.stringify({ 
+        error: authError?.message || "Failed to invite user",
+        details: "Check if email is already registered or if Supabase email service is configured"
+      }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 400,
       });
     }
 
-    // Create login URL (you'll need to adjust this to your actual domain)
-    const loginUrl = Deno.env.get("APP_URL") || "https://bampro-uren.nl";
+    // Create matching row in public.users table
+    // Generate a temporary password (user will set their own via email link)
+    const tempPassword = Math.random().toString(36).slice(-12) + Math.random().toString(36).slice(-12) + "A1!";
     
-    // Send invite email via Resend
-    const emailHtml = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta charset="utf-8">
-          <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .header { background-color: #f97316; color: white; padding: 20px; text-align: center; }
-            .content { background-color: #f9fafb; padding: 30px; border-radius: 5px; margin-top: 20px; }
-            .button { display: inline-block; padding: 12px 24px; background-color: #f97316; color: white; text-decoration: none; border-radius: 5px; margin-top: 20px; }
-            .credentials { background-color: #fff; padding: 15px; border-left: 4px solid #f97316; margin: 20px 0; }
-            .footer { text-align: center; margin-top: 30px; color: #666; font-size: 12px; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <div class="header">
-              <h1>Welkom bij BAMPRO MARINE</h1>
-            </div>
-            <div class="content">
-              <p>Hallo ${name},</p>
-              <p>Je bent uitgenodigd om gebruik te maken van het BAMPRO MARINE timesheet systeem.</p>
-              
-              <div class="credentials">
-                <p><strong>Je inloggegevens:</strong></p>
-                <p>Email: <strong>${email}</strong></p>
-                <p>Tijdelijk wachtwoord: <strong>${tempPassword}</strong></p>
-              </div>
-              
-              <p>Je wordt gevraagd om je wachtwoord te wijzigen bij de eerste login.</p>
-              
-              <p style="text-align: center;">
-                <a href="${loginUrl}" class="button">Inloggen</a>
-              </p>
-              
-              <p>Als je vragen hebt, neem dan contact op met je beheerder.</p>
-            </div>
-            <div class="footer">
-              <p>BAMPRO MARINE - Timesheet Systeem</p>
-            </div>
-          </div>
-        </body>
-      </html>
-    `;
-
-    const emailResponse = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${resendApiKey}`,
-      },
-      body: JSON.stringify({
-        from: fromEmail,
-        to: email,
-        subject: "Uitnodiging voor BAMPRO MARINE Timesheet",
-        html: emailHtml,
-      }),
+    const { error: dbError } = await supabase.from("users").insert({
+      id: user.id, // Use same ID as auth user
+      email,
+      name,
+      password: tempPassword, // Temporary - user will change via email link
+      isAdmin,
+      must_change_password: true,
+      approved: true, // Admins creating users are auto-approved
     });
 
-    if (!emailResponse.ok) {
-      const errorData = await emailResponse.json().catch(() => ({}));
-      console.error("Resend API error:", errorData);
-      
-      // User is already created, so we return success but log the email error
-      return new Response(JSON.stringify({ 
-        success: true, 
-        userId: newUser.id,
-        warning: "User created but email failed to send. Check Resend configuration." 
-      }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 200,
-      });
+    if (dbError) {
+      // If user already exists in auth but not in users table, try update
+      if (dbError.code === "23505") { // Unique constraint violation
+        const { error: updateError } = await supabase
+          .from("users")
+          .update({ name, isAdmin, approved: true })
+          .eq("id", user.id);
+        
+        if (updateError) {
+          return new Response(JSON.stringify({ error: `Failed to create/update user: ${dbError.message}` }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+            status: 400,
+          });
+        }
+      } else {
+        return new Response(JSON.stringify({ error: `Failed to create user: ${dbError.message}` }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 400,
+        });
+      }
     }
 
     return new Response(JSON.stringify({ 
       success: true, 
-      userId: newUser.id,
-      message: "User created and invitation email sent successfully" 
+      userId: user.id,
+      message: "User invited successfully. Invitation email sent via Supabase email service." 
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 200,

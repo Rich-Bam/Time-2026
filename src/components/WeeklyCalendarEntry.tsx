@@ -71,7 +71,6 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
     return getWeekDates(now)[0];
   });
   const [days, setDays] = useState(() => getWeekDates(new Date()).map(date => ({ date, entries: [{ workType: "", project: "", hours: "", lunch: true, startTime: "", endTime: "" }], open: true }))); // Default open for better overview
-  const [viewMode, setViewMode] = useState<"table" | "cards">("table"); // New view mode state
   const [projects, setProjects] = useState<{ id: number; name: string }[]>([]);
   const { toast } = useToast();
   const [dbDaysOff, setDbDaysOff] = useState(0);
@@ -150,6 +149,16 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
     // eslint-disable-next-line
   }, [currentUser, weekStart]);
 
+  // Ensure every day always has at least one entry
+  useEffect(() => {
+    setDays(prevDays => prevDays.map(day => ({
+      ...day,
+      entries: day.entries.length > 0 
+        ? day.entries 
+        : [{ workType: "", project: "", hours: "", lunch: true, startTime: "", endTime: "" }]
+    })));
+  }, [weekStart]);
+
   const changeWeek = (delta: number) => {
     const newStart = new Date(weekStart);
     newStart.setDate(newStart.getDate() + delta * 7);
@@ -187,11 +196,19 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
   };
 
   const handleEntryChange = (dayIdx: number, entryIdx: number, field: string, value: any) => {
+    // Prevent updates for submitted entries (entryIdx === -1)
+    if (entryIdx < 0) return;
+    
     setDays(days.map((day, i) => {
       if (i !== dayIdx) return day;
+      // Ensure entries array exists and has at least one entry
+      const currentEntries = day.entries.length > 0 
+        ? day.entries 
+        : [{ workType: "", project: "", hours: "", lunch: true, startTime: "", endTime: "" }];
+      
       return {
         ...day,
-        entries: day.entries.map((entry, j) => {
+        entries: currentEntries.map((entry, j) => {
           if (j !== entryIdx) return entry;
           let updated = { ...entry, [field]: value };
           
@@ -742,15 +759,6 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
                 );
               })}
             </div>
-            <div className="ml-4">
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={() => setViewMode(viewMode === "table" ? "cards" : "table")}
-              >
-                {viewMode === "table" ? "📋 Cards" : "📊 Table"}
-              </Button>
-            </div>
           </div>
           
           {confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin && (
@@ -759,294 +767,7 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
             </div>
           )}
 
-          {viewMode === "table" ? (
-            // Table view - all days visible at once
-            <div className="overflow-x-auto">
-              <table className="min-w-full border-collapse">
-                <thead>
-                  <tr className="bg-gray-100">
-                    <th className="border p-2 text-left sticky left-0 bg-gray-100 z-10 min-w-[120px]">Dag</th>
-                    <th className="border p-2 text-left min-w-[100px]">Werk Type</th>
-                    <th className="border p-2 text-left min-w-[150px]">Project</th>
-                    <th className="border p-2 text-left min-w-[80px]">Van</th>
-                    <th className="border p-2 text-left min-w-[80px]">Tot</th>
-                    <th className="border p-2 text-left min-w-[80px]">Uren</th>
-                    <th className="border p-2 text-center min-w-[60px]">Lunch</th>
-                    <th className="border p-2 text-center min-w-[50px]">Actie</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {days.map((day, dayIdx) => {
-                    const dateStr = day.date.toISOString().split('T')[0];
-                    const submitted = submittedEntries[dateStr] || [];
-                    const isLocked = confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin;
-                    const dayName = day.date.toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short' });
-                    
-                    // Combine new entries and submitted entries
-                    const allEntriesForDay = [
-                      ...day.entries.filter(e => e.project || e.workType || e.hours),
-                      ...submitted.map(s => ({ 
-                        id: s.id, 
-                        workType: s.description, 
-                        project: s.project, 
-                        hours: s.hours, 
-                        startTime: s.startTime, 
-                        endTime: s.endTime,
-                        lunch: false,
-                        isSubmitted: true 
-                      }))
-                    ];
-
-                    if (allEntriesForDay.length === 0) {
-                      // Show at least one empty row for input
-                      return (
-                        <tr key={dayIdx} className="border-t">
-                          <td className="border p-2 sticky left-0 bg-white font-medium">{dayName}</td>
-                          <td className="border p-1">
-                            <Select 
-                              value="" 
-                              onValueChange={val => handleEntryChange(dayIdx, 0, "workType", val)}
-                              disabled={isLocked}
-                            >
-                              <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Type" /></SelectTrigger>
-                              <SelectContent>
-                                {workTypes.map(type => (
-                                  <SelectItem key={type.value} value={String(type.value)}>{type.value} - {type.label}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </td>
-                          <td className="border p-1">
-                            <Select
-                              value=""
-                              onValueChange={val => handleEntryChange(dayIdx, 0, "project", val)}
-                              disabled={isLocked}
-                            >
-                              <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Project" /></SelectTrigger>
-                              <SelectContent>
-                                {projects.map(project => (
-                                  <SelectItem key={project.id} value={project.name}>{project.name}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </td>
-                          <td className="border p-1">
-                            <Input
-                              type="text"
-                              value=""
-                              onChange={e => handleEntryChange(dayIdx, 0, "startTime", roundToQuarterHour(e.target.value))}
-                              placeholder="08:00"
-                              className="h-8 text-xs w-20"
-                              disabled={isLocked}
-                            />
-                          </td>
-                          <td className="border p-1">
-                            <Input
-                              type="text"
-                              value=""
-                              onChange={e => handleEntryChange(dayIdx, 0, "endTime", roundToQuarterHour(e.target.value))}
-                              placeholder="17:00"
-                              className="h-8 text-xs w-20"
-                              disabled={isLocked}
-                            />
-                          </td>
-                          <td className="border p-1">
-                            <Input 
-                              type="number" 
-                              min="0" 
-                              step="0.25" 
-                              value=""
-                              onChange={e => handleEntryChange(dayIdx, 0, "hours", e.target.value)} 
-                              placeholder="0"
-                              className="h-8 text-xs w-16"
-                              disabled={isLocked}
-                            />
-                          </td>
-                          <td className="border p-1 text-center">
-                            <input
-                              type="checkbox"
-                              checked={false}
-                              onChange={e => handleEntryChange(dayIdx, 0, "lunch", e.target.checked)}
-                              className="h-4 w-4"
-                              disabled={isLocked}
-                            />
-                          </td>
-                          <td className="border p-1 text-center">
-                            <Button 
-                              variant="outline" 
-                              size="sm"
-                              className="h-7 text-xs"
-                              onClick={() => handleSubmitDay(dayIdx)}
-                              disabled={isLocked}
-                            >
-                              ✓
-                            </Button>
-                          </td>
-                        </tr>
-                      );
-                    }
-
-                    return allEntriesForDay.map((entry, entryIdx) => {
-                      const isSubmitted = (entry as any).isSubmitted;
-                      const actualEntryIdx = isSubmitted ? 0 : entryIdx;
-                      
-                      return (
-                        <tr key={`${dayIdx}-${entryIdx}`} className="border-t hover:bg-gray-50">
-                          {entryIdx === 0 && (
-                            <td rowSpan={allEntriesForDay.length} className="border p-2 sticky left-0 bg-white font-medium align-top">
-                              {dayName}
-                              <div className="mt-2">
-                                <Button 
-                                  variant="outline" 
-                                  size="sm"
-                                  className="h-6 text-xs w-full"
-                                  onClick={() => handleAddEntry(dayIdx)}
-                                  disabled={isLocked}
-                                >
-                                  + Toevoegen
-                                </Button>
-                              </div>
-                            </td>
-                          )}
-                          <td className="border p-1">
-                            {isSubmitted ? (
-                              <span className="text-xs">{getWorkTypeLabel(entry.workType || "")}</span>
-                            ) : (
-                              <Select 
-                                value={entry.workType} 
-                                onValueChange={val => handleEntryChange(dayIdx, actualEntryIdx, "workType", val)}
-                                disabled={isLocked}
-                              >
-                                <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Type" /></SelectTrigger>
-                                <SelectContent>
-                                  {workTypes.map(type => (
-                                    <SelectItem key={type.value} value={String(type.value)}>{type.value} - {type.label}</SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            )}
-                          </td>
-                          <td className="border p-1">
-                            {isSubmitted ? (
-                              <span className="text-xs">{entry.project || "-"}</span>
-                            ) : (
-                              <Select
-                                value={entry.project}
-                                onValueChange={val => handleEntryChange(dayIdx, actualEntryIdx, "project", val)}
-                                disabled={entry.workType === "31" || isLocked}
-                              >
-                                <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Project" /></SelectTrigger>
-                                <SelectContent>
-                                  {projects.map(project => (
-                                    <SelectItem key={project.id} value={project.name}>{project.name}</SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            )}
-                          </td>
-                          <td className="border p-1">
-                            {isSubmitted ? (
-                              <span className="text-xs">{entry.startTime || "-"}</span>
-                            ) : (
-                              <Input
-                                type="text"
-                                value={entry.startTime}
-                                onChange={e => handleEntryChange(dayIdx, actualEntryIdx, "startTime", roundToQuarterHour(e.target.value))}
-                                placeholder="08:00"
-                                className="h-8 text-xs w-20"
-                                disabled={isLocked}
-                              />
-                            )}
-                          </td>
-                          <td className="border p-1">
-                            {isSubmitted ? (
-                              <span className="text-xs">{entry.endTime || "-"}</span>
-                            ) : (
-                              <Input
-                                type="text"
-                                value={entry.endTime}
-                                onChange={e => handleEntryChange(dayIdx, actualEntryIdx, "endTime", roundToQuarterHour(e.target.value))}
-                                placeholder="17:00"
-                                className="h-8 text-xs w-20"
-                                disabled={isLocked}
-                              />
-                            )}
-                          </td>
-                          <td className="border p-1">
-                            {isSubmitted ? (
-                              <span className="text-xs">{entry.hours || "0"}</span>
-                            ) : (
-                              <Input 
-                                type="number" 
-                                min="0" 
-                                step="0.25" 
-                                value={entry.hours} 
-                                onChange={e => handleEntryChange(dayIdx, actualEntryIdx, "hours", e.target.value)} 
-                                placeholder="0"
-                                className="h-8 text-xs w-16"
-                                disabled={isLocked}
-                              />
-                            )}
-                          </td>
-                          <td className="border p-1 text-center">
-                            {isSubmitted ? (
-                              <span className="text-xs">-</span>
-                            ) : (
-                              <input
-                                type="checkbox"
-                                checked={entry.lunch}
-                                onChange={e => handleEntryChange(dayIdx, actualEntryIdx, "lunch", e.target.checked)}
-                                className="h-4 w-4"
-                                disabled={isLocked}
-                              />
-                            )}
-                          </td>
-                          <td className="border p-1 text-center">
-                            {isSubmitted ? (
-                              !isLocked && (
-                                <Button 
-                                  size="icon" 
-                                  variant="ghost" 
-                                  className="h-7 w-7"
-                                  onClick={() => handleDeleteEntry((entry as any).id, dateStr)}
-                                >
-                                  <Trash2 className="h-3 w-3 text-red-500" />
-                                </Button>
-                              )
-                            ) : (
-                              <div className="flex gap-1 justify-center">
-                                <Button 
-                                  variant="outline" 
-                                  size="sm"
-                                  className="h-7 text-xs"
-                                  onClick={() => handleSubmitDay(dayIdx)}
-                                  disabled={isLocked}
-                                >
-                                  ✓
-                                </Button>
-                                <Button 
-                                  variant="destructive" 
-                                  size="sm"
-                                  className="h-7 w-7 text-xs"
-                                  onClick={() => handleRemoveEntry(dayIdx, actualEntryIdx)}
-                                  disabled={isLocked}
-                                >
-                                  -
-                                </Button>
-                              </div>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    });
-                  })}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            // Original cards view
-            <>
-            {days.map((day, dayIdx) => day.open && (
+          {days.map((day, dayIdx) => day.open && (
             <div key={dayIdx} className="mb-4 border rounded-lg p-4 bg-white shadow">
               <div className="font-semibold mb-2">{day.date.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'short', day: 'numeric' })}</div>
               {confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin && (
@@ -1227,8 +948,6 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
               )}
             </div>
             ))}
-            </>
-          )}
         </CardContent>
       </Card>
       {!confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && allWeekdaysFilled && (
