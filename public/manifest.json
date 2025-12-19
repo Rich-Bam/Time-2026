@@ -1,0 +1,36 @@
+{
+  "name": "BAMPRO MARINE - Urenregistratie",
+  "short_name": "BAMPRO Uren",
+  "description": "BAMPRO MARINE urenregistratie systeem",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#ea580c",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/bampro-marine-logo.jpg",
+      "sizes": "192x192",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/bampro-marine-logo.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["business", "productivity"],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Weekly Entry",
+      "short_name": "Weekly",
+      "description": "Open Weekly Entry",
+      "url": "/?tab=weekly",
+      "icons": [{ "src": "/bampro-marine-logo.jpg", "sizes": "96x96" }]
+    }
+  ]
+}
+
