@@ -101,6 +101,17 @@ const AuthSection = ({ onLogin, setCurrentUser }: AuthSectionProps) => {
       return;
     }
     
+    // Validate email domain - only @bampro.nl allowed
+    if (!registerData.email.toLowerCase().endsWith('@bampro.nl')) {
+      toast({
+        title: "Alleen BAMPRO Email Toegestaan",
+        description: "Je kunt alleen een account aanmaken met een @bampro.nl email adres. Voor andere email adressen moet je door een admin worden uitgenodigd.",
+        variant: "destructive",
+        duration: 8000,
+      });
+      return;
+    }
+    
     // Validate password length
     if (registerData.password.length < 6) {
       toast({
