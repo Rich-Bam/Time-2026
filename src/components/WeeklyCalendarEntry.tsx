@@ -84,22 +84,49 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
 
   useEffect(() => {
     const fetchProjects = async () => {
-      // Fetch global projects (user_id is null) and user's custom projects
-      const { data, error } = await supabase
-        .from("projects")
-        .select("id, name, user_id")
-        .or(`user_id.is.null,user_id.eq.${currentUser?.id || ''}`);
-      if (data) {
-        // Only show global projects and current user's custom projects
-        const filteredProjects = data.filter(
-          p => !p.user_id || p.user_id === currentUser?.id
-        );
-        setProjects(filteredProjects);
+      try {
+        // Fetch global projects (user_id is null) and user's custom projects
+        // Try to fetch with user_id filter, but fallback to all projects if column doesn't exist
+        let query = supabase
+          .from("projects")
+          .select("id, name, user_id");
+        
+        // Only filter by user_id if currentUser exists
+        if (currentUser?.id) {
+          try {
+            const { data, error } = await query.or(`user_id.is.null,user_id.eq.${currentUser.id}`);
+            if (error && error.message.includes("does not exist")) {
+              // user_id column doesn't exist yet, fetch all projects
+              const { data: allData } = await supabase.from("projects").select("id, name");
+              setProjects(allData || []);
+              return;
+            }
+            if (data) {
+              // Only show global projects and current user's custom projects
+              const filteredProjects = data.filter(
+                p => !p.user_id || p.user_id === currentUser.id
+              );
+              setProjects(filteredProjects);
+              return;
+            }
+          } catch (err) {
+            // If user_id column doesn't exist, just fetch all projects
+            const { data: allData } = await supabase.from("projects").select("id, name");
+            setProjects(allData || []);
+            return;
+          }
+        } else {
+          // No currentUser, just fetch all projects
+          const { data } = await supabase.from("projects").select("id, name");
+          setProjects(data || []);
+        }
+      } catch (err) {
+        // Fallback: fetch all projects without user_id
+        const { data } = await supabase.from("projects").select("id, name");
+        setProjects(data || []);
       }
     };
-    if (currentUser?.id) {
-      fetchProjects();
-    }
+    fetchProjects();
   }, [currentUser]);
 
   // Fetch days off from database for the current user and year
