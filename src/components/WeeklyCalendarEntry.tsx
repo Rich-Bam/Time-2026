@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { Trash2, Download } from 'lucide-react';
 import * as XLSX from "xlsx";
 
@@ -65,6 +66,7 @@ const timeOptions = Array.from({ length: 24 * 4 }, (_, i) => {
 });
 
 const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
+  const { t } = useLanguage();
   const [weekStart, setWeekStart] = useState(() => {
     const now = new Date();
     now.setHours(0, 0, 0, 0);
@@ -1218,7 +1220,7 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
               {day.entries.map((entry, entryIdx) => (
                 <div key={entryIdx} className="flex flex-wrap gap-2 items-end mb-2">
                   <div>
-                    <Label>Work Type</Label>
+                    <Label>{t('weekly.workType')}</Label>
                     <Select 
                       value={entry.workType} 
                       onValueChange={val => handleEntryChange(dayIdx, entryIdx, "workType", val)}
@@ -1233,13 +1235,13 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
                     </Select>
                   </div>
                   <div>
-                    <Label>Project</Label>
+                    <Label>{t('weekly.project')}</Label>
                     {entry.project && !projects.some(p => p.name === entry.project) ? (
                       <div className="flex gap-2 items-center">
                         <Input
                           value={entry.project}
                           onChange={e => handleEntryChange(dayIdx, entryIdx, "project", e.target.value)}
-                          placeholder="Project"
+                          placeholder={t('weekly.projectPlaceholder')}
                           disabled={entry.workType === "31" || (confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin)}
                         />
                         <Button 

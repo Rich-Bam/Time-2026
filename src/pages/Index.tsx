@@ -745,10 +745,10 @@ const Index = () => {
             <CardHeader className="bg-gradient-to-r from-orange-50 to-orange-100 rounded-t-lg">
               <CardTitle className="flex items-center text-orange-900">
                 <Download className="h-6 w-6 mr-3" />
-                Export Timesheet Data
+                {t('export.title')}
               </CardTitle>
               <CardDescription className="text-orange-700">
-                Export timesheet data to Excel for reporting and analysis
+                {t('export.description')}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6 p-8">
@@ -758,14 +758,14 @@ const Index = () => {
                   {/* User Selection Dropdown */}
                   <div className="bg-orange-50 p-4 rounded-lg border border-orange-200">
                     <label className="block text-sm font-medium text-orange-900 mb-2">
-                      Selecteer Gebruiker (optioneel)
+                      {t('export.selectUser')}
                     </label>
                     <Select value={selectedUserId || "all"} onValueChange={(value) => setSelectedUserId(value === "all" ? "" : value)}>
                       <SelectTrigger className="w-full bg-white">
-                        <SelectValue placeholder="Alle gebruikers" />
+                        <SelectValue placeholder={t('export.allUsers')} />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="all">Alle gebruikers</SelectItem>
+                        <SelectItem value="all">{t('export.allUsers')}</SelectItem>
                         {users && users.length > 0 && users.map((user) => (
                           <SelectItem key={user.id} value={user.id}>
                             {user.name || user.email}
@@ -774,7 +774,7 @@ const Index = () => {
                       </SelectContent>
                     </Select>
                     <p className="text-xs text-orange-700 mt-2">
-                      Laat leeg om alle gebruikers te exporteren, of selecteer een specifieke gebruiker.
+                      {t('export.selectUserHelp')}
                     </p>
                   </div>
 
@@ -786,7 +786,7 @@ const Index = () => {
                       disabled={exporting}
                     >
                       <FileText className="h-8 w-8 mb-3" />
-                      <span className="text-lg font-medium">Export All Data</span>
+                      <span className="text-lg font-medium">{t('export.allData')}</span>
                     </Button>
                     
                     <div className="flex flex-col items-center justify-center gap-2">
@@ -809,7 +809,7 @@ const Index = () => {
                         disabled={exporting}
                       >
                         <Calendar className="h-8 w-8 mb-3" />
-                        <span className="text-lg font-medium">Export Datumbereik</span>
+                        <span className="text-lg font-medium">{t('export.dateRange')}</span>
                       </Button>
                     </div>
 
@@ -819,7 +819,7 @@ const Index = () => {
                           type="number" 
                           min="1" 
                           max="53" 
-                          placeholder="Week" 
+                          placeholder={t('export.weekPlaceholder')} 
                           value={selectedWeekNumber} 
                           onChange={e => setSelectedWeekNumber(e.target.value)} 
                           className="flex-1 border rounded px-2 py-1 text-center" 
@@ -828,7 +828,7 @@ const Index = () => {
                           type="number" 
                           min="2020" 
                           max="2100" 
-                          placeholder="Jaar" 
+                          placeholder={t('export.yearPlaceholder')} 
                           value={selectedYear} 
                           onChange={e => setSelectedYear(e.target.value)} 
                           className="flex-1 border rounded px-2 py-1 text-center" 
@@ -841,7 +841,7 @@ const Index = () => {
                         disabled={exporting || !selectedWeekNumber || !selectedYear}
                       >
                         <Calendar className="h-8 w-8 mb-3" />
-                        <span className="text-lg font-medium">Export Week Nummer</span>
+                        <span className="text-lg font-medium">{t('export.weekNumber')}</span>
                       </Button>
                     </div>
 
@@ -852,7 +852,7 @@ const Index = () => {
                       disabled={exporting || !selectedUserId || selectedUserId === "all"}
                     >
                       <Users className="h-8 w-8 mb-3" />
-                      <span className="text-lg font-medium">Export Per Gebruiker</span>
+                      <span className="text-lg font-medium">{t('export.perUser')}</span>
                     </Button>
                   </div>
                 </div>
@@ -861,22 +861,22 @@ const Index = () => {
                 <div className="space-y-4">
                   <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
                     <div className="flex-1">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Selecteer Periode</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">{t('export.selectPeriod')}</label>
                       <Select value={exportPeriod} onValueChange={(value: "day" | "week" | "month" | "year") => setExportPeriod(value)}>
                         <SelectTrigger className="w-full">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="day">Dag</SelectItem>
-                          <SelectItem value="week">Week</SelectItem>
-                          <SelectItem value="month">Maand</SelectItem>
-                          <SelectItem value="year">Jaar</SelectItem>
+                          <SelectItem value="day">{t('export.day')}</SelectItem>
+                          <SelectItem value="week">{t('export.week')}</SelectItem>
+                          <SelectItem value="month">{t('export.month')}</SelectItem>
+                          <SelectItem value="year">{t('export.year')}</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
                     <div className="flex-1">
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        {exportPeriod === "day" ? "Selecteer Dag" : exportPeriod === "week" ? "Selecteer Week (elke dag in de week)" : exportPeriod === "month" ? "Selecteer Maand (elke dag in de maand)" : "Selecteer Jaar (elke dag in het jaar)"}
+                        {exportPeriod === "day" ? t('export.selectDay') : exportPeriod === "week" ? t('export.selectWeek') : exportPeriod === "month" ? t('export.selectMonth') : t('export.selectYear')}
                       </label>
                       <input 
                         type="date" 
@@ -893,15 +893,15 @@ const Index = () => {
                   >
                     <Download className="h-6 w-6 mb-2" />
                     <span className="text-lg font-medium">
-                      {exporting ? "Exporteren..." : `Export ${exportPeriod === "day" ? "Dag" : exportPeriod === "week" ? "Week" : exportPeriod === "month" ? "Maand" : "Jaar"}`}
+                      {exporting ? t('export.exporting') : `${t('export.title')} ${exportPeriod === "day" ? t('export.day') : exportPeriod === "week" ? t('export.week') : exportPeriod === "month" ? t('export.month') : t('export.year')}`}
                     </span>
                   </Button>
                 </div>
               )}
               <div className="text-sm text-orange-800 bg-orange-50 p-6 rounded-lg border border-orange-200">
-                <strong className="text-orange-900">Let op:</strong> {currentUser?.isAdmin 
-                  ? "Admins kunnen alle data exporteren, een datumbereik selecteren, of per gebruiker exporteren. Selecteer een gebruiker om alleen die gebruiker te exporteren, of laat leeg voor alle gebruikers." 
-                  : "Selecteer een periode en datum om je uren te exporteren naar Excel."}
+                <strong className="text-orange-900">{t('export.note')}</strong> {currentUser?.isAdmin 
+                  ? t('export.adminNote')
+                  : t('export.userNote')}
               </div>
             </CardContent>
           </Card>
