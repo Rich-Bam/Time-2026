@@ -117,10 +117,11 @@ const Index = () => {
         <div className="container mx-auto px-4 py-12">
           <div className="text-center mb-12">
             <div className="flex items-center justify-center mb-6">
-              <h1 className="text-5xl font-bold tracking-tight">
-                <span style={{ color: '#ea580c' }}>BAM</span>
-                <span style={{ color: '#888888' }}>PRO MARINE</span>
-              </h1>
+              <img 
+                src="/bampro-marine-logo.jpg" 
+                alt="BAMPRO MARINE" 
+                className="h-20 sm:h-24 md:h-28 object-contain"
+              />
             </div>
           </div>
           
@@ -171,10 +172,11 @@ const Index = () => {
         <div className="container mx-auto px-4 sm:px-6 py-4 sm:py-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-12">
-              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-center md:text-left">
-                <span style={{ color: '#ea580c' }}>BAM</span>
-                <span style={{ color: '#888888' }}>PRO MARINE</span>
-              </h1>
+              <img 
+                src="/bampro-marine-logo.jpg" 
+                alt="BAMPRO MARINE" 
+                className="h-12 sm:h-14 md:h-16 object-contain"
+              />
               <nav className="flex flex-wrap md:flex-nowrap items-center gap-2 md:gap-8 justify-center md:justify-start">
                 <button
                   className={`text-base sm:text-lg font-medium px-3 py-1 rounded transition-colors ${activeTab === 'weekly' ? 'bg-orange-600 text-white' : 'text-orange-700 hover:bg-orange-50'}`}
