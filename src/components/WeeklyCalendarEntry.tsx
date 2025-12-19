@@ -1260,7 +1260,7 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
                           onValueChange={val => handleEntryChange(dayIdx, entryIdx, "project", val)}
                           disabled={entry.workType === "31" || (confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin)}
                         >
-                          <SelectTrigger><SelectValue placeholder="Project" /></SelectTrigger>
+                          <SelectTrigger><SelectValue placeholder={t('weekly.projectPlaceholder')} /></SelectTrigger>
                           <SelectContent>
                             {projects.map(project => (
                               <SelectItem key={project.id} value={project.name}>{project.name}</SelectItem>
@@ -1288,7 +1288,7 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
                     )}
                   </div>
                   <div>
-                    <Label>Start Time</Label>
+                    <Label>{t('weekly.startTime')}</Label>
                     <Input
                       type="text"
                       value={entry.startTime}
@@ -1299,7 +1299,7 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
                     />
                   </div>
                   <div>
-                    <Label>End Time</Label>
+                    <Label>{t('weekly.endTime')}</Label>
                     <Input
                       type="text"
                       value={entry.endTime}
@@ -1310,7 +1310,7 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
                     />
                   </div>
                   <div>
-                    <Label>Hours</Label>
+                    <Label>{t('weekly.hours')}</Label>
                     <Input 
                       type="number" 
                       min="0" 
@@ -1331,7 +1331,7 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
                       disabled={confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin}
                     />
                     <label htmlFor={`lunch-${dayIdx}-${entryIdx}`} className="ml-1 text-xs text-gray-700 select-none">
-                      Lunch
+                      {t('weekly.lunch')}
                     </label>
                   </div>
                   <Button 
