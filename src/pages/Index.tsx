@@ -13,12 +13,14 @@ import AdminPanel from "@/components/AdminPanel";
 import ChangePasswordForm from "@/components/ChangePasswordForm";
 import WeeklyCalendarEntry from "@/components/WeeklyCalendarEntry";
 import ScreenshotButton from "@/components/ScreenshotButton";
+import BugReports from "@/components/BugReports";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 
 const Index = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
+  const SUPER_ADMIN_EMAIL = "r.blance@bampro.nl";
   const [dateRange, setDateRange] = useState({ from: "", to: "" });
   const [exporting, setExporting] = useState(false);
   const [activeTab, setActiveTab] = useState("weekly");
@@ -434,6 +436,14 @@ const Index = () => {
                     Admin
                   </button>
                 )}
+                {currentUser?.email === SUPER_ADMIN_EMAIL && (
+                  <button
+                    className={`text-base sm:text-lg font-medium px-3 py-1 rounded transition-colors ${activeTab === 'bugreports' ? 'bg-orange-600 text-white' : 'text-orange-700 hover:bg-orange-50'}`}
+                    onClick={() => setActiveTab('bugreports')}
+                  >
+                    Report Bug
+                  </button>
+                )}
                 <button
                   className={`text-base sm:text-lg font-medium px-3 py-1 rounded transition-colors ${activeTab === 'overview' ? 'bg-orange-600 text-white' : 'text-orange-700 hover:bg-orange-50'}`}
                   onClick={() => setActiveTab('overview')}
@@ -444,7 +454,9 @@ const Index = () => {
             </div>
             <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-6 justify-center md:justify-end">
               <span className="text-gray-700 font-medium text-center sm:text-left">Welcome, {currentUser?.name || "User"}</span>
-              <ScreenshotButton currentUser={currentUser} />
+              {currentUser?.isAdmin && (
+                <ScreenshotButton currentUser={currentUser} />
+              )}
               <Button 
                 variant="outline" 
                 size="sm"

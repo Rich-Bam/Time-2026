@@ -4,6 +4,9 @@ import { Camera } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import html2canvas from "html2canvas";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 
 interface ScreenshotButtonProps {
   currentUser: any;
@@ -12,8 +15,10 @@ interface ScreenshotButtonProps {
 const ScreenshotButton = ({ currentUser }: ScreenshotButtonProps) => {
   const { toast } = useToast();
   const [isCapturing, setIsCapturing] = useState(false);
+  const [showDialog, setShowDialog] = useState(false);
+  const [description, setDescription] = useState("");
 
-  const captureScreenshot = async () => {
+  const handleOpenDialog = () => {
     if (!currentUser?.isAdmin) {
       toast({
         title: "Geen toegang",
@@ -22,8 +27,12 @@ const ScreenshotButton = ({ currentUser }: ScreenshotButtonProps) => {
       });
       return;
     }
+    setShowDialog(true);
+  };
 
+  const captureScreenshot = async () => {
     setIsCapturing(true);
+    setShowDialog(false);
     try {
       // Capture the entire page
       const canvas = await html2canvas(document.body, {
@@ -86,6 +95,7 @@ const ScreenshotButton = ({ currentUser }: ScreenshotButtonProps) => {
             filename: filename,
             storage_path: uploadData.path,
             url: urlData.publicUrl,
+            description: description.trim() || null,
             created_at: new Date().toISOString(),
           });
 
@@ -108,6 +118,7 @@ const ScreenshotButton = ({ currentUser }: ScreenshotButtonProps) => {
             title: "Screenshot Opgeslagen",
             description: "De screenshot is succesvol opgeslagen en is zichtbaar voor de super admin.",
           });
+          setDescription(""); // Reset description
         } catch (error: any) {
           console.error("Screenshot upload error:", error);
           toast({
@@ -130,22 +141,58 @@ const ScreenshotButton = ({ currentUser }: ScreenshotButtonProps) => {
     }
   };
 
+  // Always show button for debugging - will check admin status on click
+  // Remove this check if you want button always visible
   if (!currentUser?.isAdmin) {
     return null;
   }
 
   return (
-    <Button
-      variant="outline"
-      size="sm"
-      onClick={captureScreenshot}
-      disabled={isCapturing}
-      className="border-orange-200 text-orange-700 hover:bg-orange-50"
-      title="Maak een screenshot (voor bug reports)"
-    >
-      <Camera className="h-4 w-4 mr-2" />
-      {isCapturing ? "Bezig..." : "Screenshot"}
-    </Button>
+    <>
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={handleOpenDialog}
+        disabled={isCapturing}
+        className="border-orange-200 text-orange-700 hover:bg-orange-50"
+        title="Maak een screenshot (voor bug reports)"
+      >
+        <Camera className="h-4 w-4 mr-2" />
+        {isCapturing ? "Bezig..." : "Report Bug"}
+      </Button>
+
+      <Dialog open={showDialog} onOpenChange={setShowDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Bug Report Maken</DialogTitle>
+            <DialogDescription>
+              Voeg een beschrijving toe van het probleem (optioneel). De screenshot wordt automatisch gemaakt.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <Label htmlFor="description">Beschrijving (optioneel)</Label>
+              <Textarea
+                id="description"
+                placeholder="Beschrijf het probleem dat je ziet..."
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                rows={4}
+                className="mt-2"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setShowDialog(false); setDescription(""); }}>
+              Annuleren
+            </Button>
+            <Button onClick={captureScreenshot} disabled={isCapturing}>
+              {isCapturing ? "Bezig..." : "Screenshot Maken"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 };
 

@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
-import { User, Calendar, Camera, Image as ImageIcon } from "lucide-react";
+import { User, Calendar } from "lucide-react";
 
 interface AdminPanelProps {
   currentUser: any;
@@ -30,8 +30,6 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
   const [projectsMap, setProjectsMap] = useState<Record<string, string>>({});
   const [confirmedWeeks, setConfirmedWeeks] = useState<any[]>([]);
   const [usersMap, setUsersMap] = useState<Record<string, any>>({});
-  const [screenshots, setScreenshots] = useState<any[]>([]);
-  const [loadingScreenshots, setLoadingScreenshots] = useState(false);
 
   // Fetch users
   const fetchUsers = async () => {
@@ -349,38 +347,6 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
   };
 
   const SUPER_ADMIN_EMAIL = "r.blance@bampro.nl";
-  const isSuperAdmin = currentUser?.email === SUPER_ADMIN_EMAIL;
-
-  // Fetch screenshots (only for super admin)
-  const fetchScreenshots = async () => {
-    if (!isSuperAdmin) return;
-    setLoadingScreenshots(true);
-    const { data, error } = await supabase
-      .from("screenshots")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(50); // Show last 50 screenshots
-    if (error) {
-      console.error("Error fetching screenshots:", error);
-      // Don't show error if table doesn't exist yet
-      if (!error.message.includes("does not exist")) {
-        toast({ title: "Error", description: error.message, variant: "destructive" });
-      }
-    } else {
-      setScreenshots(data || []);
-    }
-    setLoadingScreenshots(false);
-  };
-
-  useEffect(() => {
-    if (isSuperAdmin) {
-      fetchScreenshots();
-      // Refresh every 30 seconds to catch new screenshots
-      const interval = setInterval(fetchScreenshots, 30000);
-      return () => clearInterval(interval);
-    }
-    // eslint-disable-next-line
-  }, [isSuperAdmin]);
   // Toggle admin flag for an existing user
   const handleToggleAdmin = async (userId: string, userEmail: string, makeAdmin: boolean) => {
     if (userEmail === SUPER_ADMIN_EMAIL && !makeAdmin) {
@@ -896,95 +862,6 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
           })}
         </Accordion>
       </div>
-      {/* Screenshots Section - Only for Super Admin */}
-      {isSuperAdmin && (
-        <div className="mt-12">
-          <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-            <Camera className="h-5 w-5 text-orange-600" />
-            Bug Report Screenshots
-          </h3>
-          {loadingScreenshots ? (
-            <div className="text-center py-8 text-gray-500">Laden...</div>
-          ) : screenshots.length === 0 ? (
-            <div className="text-center py-8 text-gray-500 border rounded-lg bg-gray-50">
-              <ImageIcon className="h-12 w-12 mx-auto mb-2 text-gray-400" />
-              <p>Nog geen screenshots ontvangen.</p>
-              <p className="text-sm mt-1">Admins kunnen screenshots maken met de camera knop in de header.</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {screenshots.map((screenshot) => (
-                <div key={screenshot.id} className="border rounded-lg p-4 bg-white shadow hover:shadow-lg transition-shadow">
-                  <div className="mb-2">
-                    <div className="text-sm font-semibold text-gray-700">
-                      {screenshot.user_name || screenshot.user_email}
-                    </div>
-                    <div className="text-xs text-gray-500">
-                      {new Date(screenshot.created_at).toLocaleString('nl-NL')}
-                    </div>
-                  </div>
-                  <div className="mb-3">
-                    <a
-                      href={screenshot.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="block"
-                    >
-                      <img
-                        src={screenshot.url}
-                        alt={`Screenshot van ${screenshot.user_name || screenshot.user_email}`}
-                        className="w-full h-auto rounded border cursor-pointer hover:opacity-90 transition-opacity"
-                        loading="lazy"
-                      />
-                    </a>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => window.open(screenshot.url, '_blank')}
-                      className="flex-1"
-                    >
-                      Open Volledig
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      onClick={async () => {
-                        if (confirm(`Weet je zeker dat je deze screenshot wilt verwijderen?`)) {
-                          // Delete from storage
-                          const { error: storageError } = await supabase.storage
-                            .from("screenshots")
-                            .remove([screenshot.filename]);
-                          
-                          // Delete from database
-                          const { error: dbError } = await supabase
-                            .from("screenshots")
-                            .delete()
-                            .eq("id", screenshot.id);
-                          
-                          if (storageError || dbError) {
-                            toast({
-                              title: "Error",
-                              description: storageError?.message || dbError?.message || "Kon screenshot niet verwijderen",
-                              variant: "destructive",
-                            });
-                          } else {
-                            toast({ title: "Screenshot Verwijderd" });
-                            fetchScreenshots();
-                          }
-                        }
-                      }}
-                    >
-                      Verwijder
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 };
