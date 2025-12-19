@@ -654,7 +654,7 @@ const Index = () => {
                     <label className="block text-sm font-medium text-orange-900 mb-2">
                       Selecteer Gebruiker (optioneel)
                     </label>
-                    <Select value={selectedUserId || undefined} onValueChange={(value) => setSelectedUserId(value || "")}>
+                    <Select value={selectedUserId || "all"} onValueChange={(value) => setSelectedUserId(value === "all" ? "" : value)}>
                       <SelectTrigger className="w-full bg-white">
                         <SelectValue placeholder="Alle gebruikers" />
                       </SelectTrigger>
