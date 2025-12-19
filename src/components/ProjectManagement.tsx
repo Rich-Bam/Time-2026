@@ -37,10 +37,14 @@ const ProjectManagement = () => {
   const [modalProject, setModalProject] = useState<any>(null);
   const [modalOpen, setModalOpen] = useState(false);
 
-  // Fetch projects from Supabase on mount
+  // Fetch projects from Supabase on mount (only global projects, not user-specific custom projects)
   useEffect(() => {
     const fetchProjects = async () => {
-      const { data, error } = await supabase.from("projects").select("*");
+      // Only fetch global projects (user_id is null) - custom projects are user-specific
+      const { data, error } = await supabase
+        .from("projects")
+        .select("*")
+        .is("user_id", null);
       if (error) {
         toast({
           title: "Error loading projects",
