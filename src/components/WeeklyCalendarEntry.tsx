@@ -411,6 +411,31 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
     return hasSubmitted || hasNew;
   });
 
+  // Helper to format date as DD/MM/YY
+  const formatDateDDMMYY = (dateStr: string) => {
+    const date = new Date(dateStr);
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = String(date.getFullYear()).slice(-2);
+    return `${day}/${month}/${year}`;
+  };
+
+  // Helper to format hours as HH:MM
+  const formatHoursHHMM = (hours: number | string) => {
+    const numHours = typeof hours === 'string' ? parseFloat(hours) : hours;
+    if (isNaN(numHours)) return "00:00";
+    const h = Math.floor(numHours);
+    const m = Math.round((numHours - h) * 60);
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  };
+
+  // Helper to get day name in Dutch
+  const getDayNameNL = (dateStr: string) => {
+    const date = new Date(dateStr);
+    const days = ['Zondag', 'Maandag', 'Dinsdag', 'Woensdag', 'Donderdag', 'Vrijdag', 'Zaterdag'];
+    return days[date.getDay()];
+  };
+
   // Export week entries to Excel
   const handleExportWeek = async () => {
     if (!currentUser) {
@@ -454,27 +479,67 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
     // Get work type label for each entry
     const getWorkTypeLabel = (desc: string) => {
       const workType = workTypes.find(wt => String(wt.value) === String(desc));
-      return workType ? `${workType.value} - ${workType.label}` : desc;
+      return workType ? workType.label : desc;
     };
 
-    // Format data for Excel
-    const excelData = data.map((entry) => ({
-      Date: entry.date,
-      Project: entry.projects?.name || entry.project || "-",
-      "Work Type": getWorkTypeLabel(entry.description || ""),
-      Hours: entry.hours,
-      "Start Time": entry.startTime || "-",
-      "End Time": entry.endTime || "-",
-      Description: entry.notes || "",
-    }));
-
-    // Create workbook and worksheet
-    const ws = XLSX.utils.json_to_sheet(excelData);
+    // Create workbook
     const wb = XLSX.utils.book_new();
+    
+    // Create header rows
+    const headerRows = [
+      ["Naam werknemer:", currentUser.name || currentUser.email || ""],
+      ["Datum:", `Van: ${formatDateDDMMYY(fromDate)}`, `Tot: ${formatDateDDMMYY(toDate)}`],
+      ["Dag:", ""],
+      ["Weeknummer:", weekNumber.toString()],
+      [""], // Empty row
+      ["Jaar:", new Date().getFullYear().toString()],
+      [""], // Empty row
+    ];
+
+    // Create table headers
+    const tableHeaders = [
+      ["Dag", "Soort werk", "Project", "Werkbon", "Van", "Tot", "Gewerkte uren", "Projectleider", "Km stand auto", "Uitgevoerde werkzaamheden"]
+    ];
+
+    // Format data rows
+    const dataRows = data.map((entry) => [
+      getDayNameNL(entry.date),
+      getWorkTypeLabel(entry.description || ""),
+      entry.projects?.name || entry.project || "",
+      "", // Werkbon - not in database yet
+      entry.startTime || "",
+      entry.endTime || "",
+      formatHoursHHMM(entry.hours || 0),
+      "", // Projectleider - not in database yet
+      "", // Km stand auto - not in database yet
+      entry.notes || "",
+    ]);
+
+    // Combine all rows
+    const allRows = [...headerRows, ...tableHeaders, ...dataRows];
+
+    // Create worksheet from array
+    const ws = XLSX.utils.aoa_to_sheet(allRows);
+
+    // Set column widths
+    ws['!cols'] = [
+      { wch: 12 }, // Dag
+      { wch: 20 }, // Soort werk
+      { wch: 20 }, // Project
+      { wch: 12 }, // Werkbon
+      { wch: 8 },  // Van
+      { wch: 8 },  // Tot
+      { wch: 12 }, // Gewerkte uren
+      { wch: 15 }, // Projectleider
+      { wch: 12 }, // Km stand auto
+      { wch: 30 }, // Uitgevoerde werkzaamheden
+    ];
+
+    // Append worksheet to workbook
     XLSX.utils.book_append_sheet(wb, ws, "Week Entries");
 
-    // Generate filename with week number and date range
-    const filename = `Week_${weekNumber}_${fromDate}_to_${toDate}.xlsx`;
+    // Generate filename
+    const filename = `Week_${weekNumber}_${formatDateDDMMYY(fromDate)}_${formatDateDDMMYY(toDate)}.xlsx`;
     XLSX.writeFile(wb, filename);
 
     toast({
