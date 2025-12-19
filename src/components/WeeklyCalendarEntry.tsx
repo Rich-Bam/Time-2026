@@ -86,42 +86,48 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
     const fetchProjects = async () => {
       try {
         // Fetch global projects (user_id is null) and user's custom projects
+        // Only show active projects (not closed) for time entry
         // Try to fetch with user_id filter, but fallback to all projects if column doesn't exist
         let query = supabase
           .from("projects")
-          .select("id, name, user_id");
+          .select("id, name, user_id, status");
         
         // Only filter by user_id if currentUser exists
         if (currentUser?.id) {
           try {
             const { data, error } = await query.or(`user_id.is.null,user_id.eq.${currentUser.id}`);
             if (error && error.message.includes("does not exist")) {
-              // user_id column doesn't exist yet, fetch all projects
+              // user_id or status column doesn't exist yet, fetch all projects
               const { data: allData } = await supabase.from("projects").select("id, name");
               setProjects(allData || []);
               return;
             }
             if (data) {
               // Only show global projects and current user's custom projects
-              const filteredProjects = data.filter(
-                p => !p.user_id || p.user_id === currentUser.id
-              );
+              // Filter out closed projects (only show active projects for time entry)
+              const filteredProjects = data
+                .filter(p => !p.user_id || p.user_id === currentUser.id)
+                .filter(p => !p.status || p.status !== "closed")
+                .map(p => ({ id: p.id, name: p.name }));
               setProjects(filteredProjects);
               return;
             }
           } catch (err) {
-            // If user_id column doesn't exist, just fetch all projects
+            // If user_id or status column doesn't exist, just fetch all projects
             const { data: allData } = await supabase.from("projects").select("id, name");
             setProjects(allData || []);
             return;
           }
         } else {
-          // No currentUser, just fetch all projects
-          const { data } = await supabase.from("projects").select("id, name");
-          setProjects(data || []);
+          // No currentUser, just fetch all active projects
+          const { data } = await supabase
+            .from("projects")
+            .select("id, name, status")
+            .or("status.is.null,status.neq.closed");
+          setProjects((data || []).map(p => ({ id: p.id, name: p.name })));
         }
       } catch (err) {
-        // Fallback: fetch all projects without user_id
+        // Fallback: fetch all projects without user_id/status filtering
         const { data } = await supabase.from("projects").select("id, name");
         setProjects(data || []);
       }

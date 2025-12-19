@@ -26,13 +26,21 @@ const TimesheetEntry = ({ currentUser }: TimesheetEntryProps) => {
 
   const { toast } = useToast();
 
-  // Fetch projects from Supabase (id and name)
+  // Fetch projects from Supabase (id and name) - only active projects
   const [projects, setProjects] = useState<{ id: number; name: string }[]>([]);
   useEffect(() => {
     const fetchProjects = async () => {
-      const { data, error } = await supabase.from("projects").select("id, name");
+      // Only fetch active projects (not closed) for time entry
+      const { data, error } = await supabase
+        .from("projects")
+        .select("id, name, status")
+        .or("status.is.null,status.neq.closed");
       if (data) {
-        setProjects(data);
+        // Filter out closed projects
+        const activeProjects = data
+          .filter(p => !p.status || p.status !== "closed")
+          .map(p => ({ id: p.id, name: p.name }));
+        setProjects(activeProjects);
       }
       // Optionally handle error
     };

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, FileText, Users, Clock, Trash2 } from "lucide-react";
+import { Plus, FileText, Users, Clock, Trash2, Lock, LockOpen } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Dialog,
@@ -128,12 +128,47 @@ const ProjectManagement = ({ currentUser }: ProjectManagementProps) => {
     switch (status) {
       case "active":
         return "bg-green-100 text-green-800 border-green-200";
+      case "closed":
+        return "bg-red-100 text-red-800 border-red-200";
       case "completed":
         return "bg-blue-100 text-blue-800 border-blue-200";
       case "on-hold":
         return "bg-yellow-100 text-yellow-800 border-yellow-200";
       default:
         return "bg-gray-100 text-gray-800 border-gray-200";
+    }
+  };
+
+  const handleCloseProject = async (project: any) => {
+    if (!currentUser?.isAdmin) {
+      toast({
+        title: "Geen Toegang",
+        description: "Alleen admins kunnen projecten sluiten.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const newStatus = project.status === "closed" ? "active" : "closed";
+    const { error } = await supabase
+      .from("projects")
+      .update({ status: newStatus })
+      .eq("id", project.id);
+
+    if (error) {
+      toast({
+        title: "Fout",
+        description: error.message,
+        variant: "destructive",
+      });
+    } else {
+      toast({
+        title: newStatus === "closed" ? "Project Gesloten" : "Project Heropend",
+        description: `${project.name} is ${newStatus === "closed" ? "gesloten" : "heropend"}. ${newStatus === "closed" ? "Er kunnen geen uren meer aan toegevoegd worden." : "Er kunnen weer uren aan toegevoegd worden."}`,
+      });
+      // Refresh projects list
+      const { data: updatedProjects } = await supabase.from("projects").select("*");
+      setProjects(updatedProjects || []);
     }
   };
 
@@ -343,15 +378,39 @@ const ProjectManagement = ({ currentUser }: ProjectManagementProps) => {
                         </DialogContent>
                       </Dialog>
                       {currentUser?.isAdmin && (
-                        <Button 
-                          variant="outline" 
-                          size="sm" 
-                          className="border-red-200 text-red-700 hover:bg-red-50" 
-                          onClick={() => openDeleteConfirm(project)}
-                        >
-                          <Trash2 className="h-4 w-4 mr-1" />
-                          Verwijder
-                        </Button>
+                        <>
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className={project.status === "closed" 
+                              ? "border-green-200 text-green-700 hover:bg-green-50" 
+                              : "border-orange-200 text-orange-700 hover:bg-orange-50"
+                            } 
+                            onClick={() => handleCloseProject(project)}
+                            title={project.status === "closed" ? "Project heropenen" : "Project sluiten"}
+                          >
+                            {project.status === "closed" ? (
+                              <>
+                                <LockOpen className="h-4 w-4 mr-1" />
+                                Heropen
+                              </>
+                            ) : (
+                              <>
+                                <Lock className="h-4 w-4 mr-1" />
+                                Sluiten
+                              </>
+                            )}
+                          </Button>
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="border-red-200 text-red-700 hover:bg-red-50" 
+                            onClick={() => openDeleteConfirm(project)}
+                          >
+                            <Trash2 className="h-4 w-4 mr-1" />
+                            Verwijder
+                          </Button>
+                        </>
                       )}
                     </div>
                   </div>
