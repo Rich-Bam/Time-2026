@@ -135,11 +135,13 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
     const weekKey = weekDates[0].toISOString().split('T')[0];
     const { data } = await supabase
       .from('confirmed_weeks')
-      .select('confirmed')
+      .select('confirmed, admin_approved')
       .eq('user_id', currentUser.id)
       .eq('week_start_date', weekKey)
       .single();
-    setConfirmedWeeks(prev => ({ ...prev, [weekKey]: !!data?.confirmed }));
+    // Week is locked if confirmed AND (not admin OR admin hasn't approved yet)
+    const isLocked = !!data?.confirmed && (!currentUser.isAdmin || !data?.admin_approved);
+    setConfirmedWeeks(prev => ({ ...prev, [weekKey]: isLocked }));
   };
 
   useEffect(() => {
@@ -232,6 +234,18 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
   const handleSubmitAll = async () => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+    const weekKey = weekDates[0].toISOString().split('T')[0];
+    const isWeekLocked = confirmedWeeks[weekKey];
+    
+    // Non-admins cannot submit if week is confirmed
+    if (isWeekLocked && !currentUser?.isAdmin) {
+      toast({
+        title: "Niet toegestaan",
+        description: "Deze week is bevestigd en kan niet meer worden gewijzigd. Neem contact op met een admin.",
+        variant: "destructive",
+      });
+      return;
+    }
     
     const entriesToSave = [];
     for (let dayIdx = 0; dayIdx < days.length; dayIdx++) {
@@ -324,6 +338,18 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
   const handleSubmitDay = async (dayIdx: number) => {
     const day = days[dayIdx];
     const isWeekend = day.date.getDay() === 0 || day.date.getDay() === 6;
+    const weekKey = weekDates[0].toISOString().split('T')[0];
+    const isWeekLocked = confirmedWeeks[weekKey];
+    
+    // Non-admins cannot submit if week is confirmed
+    if (isWeekLocked && !currentUser?.isAdmin) {
+      toast({
+        title: "Niet toegestaan",
+        description: "Deze week is bevestigd en kan niet meer worden gewijzigd. Neem contact op met een admin.",
+        variant: "destructive",
+      });
+      return;
+    }
     
     // Prevent future dates
     const today = new Date();
@@ -460,15 +486,42 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
 
   const handleConfirmWeek = async () => {
     const weekKey = weekDates[0].toISOString().split('T')[0];
-    await supabase.from('confirmed_weeks').upsert({
+    const { error } = await supabase.from('confirmed_weeks').upsert({
       user_id: currentUser.id,
       week_start_date: weekKey,
-      confirmed: true
+      confirmed: true,
+      admin_approved: false,
+      admin_reviewed: false
     });
-    fetchConfirmedStatus();
+    if (error) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    } else {
+      toast({
+        title: "Week Bevestigd",
+        description: "De week is bevestigd en wacht op admin goedkeuring. Je kunt de uren niet meer wijzigen tot een admin dit heeft goedgekeurd of teruggezet.",
+      });
+      fetchConfirmedStatus();
+    }
   };
 
   const handleDeleteEntry = async (entryId: number, dateStr: string) => {
+    const weekKey = weekDates[0].toISOString().split('T')[0];
+    const isWeekLocked = confirmedWeeks[weekKey];
+    
+    // Non-admins cannot delete if week is confirmed
+    if (isWeekLocked && !currentUser?.isAdmin) {
+      toast({
+        title: "Niet toegestaan",
+        description: "Deze week is bevestigd en kan niet meer worden gewijzigd. Neem contact op met een admin.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     await supabase.from('timesheet').delete().eq('id', entryId);
     fetchSubmittedEntries(dateStr);
   };
@@ -674,11 +727,20 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
           {days.map((day, dayIdx) => day.open && (
             <div key={dayIdx} className="mb-4 border rounded-lg p-4 bg-white shadow">
               <div className="font-semibold mb-2">{day.date.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'short', day: 'numeric' })}</div>
+              {confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin && (
+                <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded text-yellow-800 text-sm">
+                  ⚠️ Deze week is bevestigd. Je kunt geen wijzigingen meer aanbrengen tot een admin dit heeft goedgekeurd of teruggezet.
+                </div>
+              )}
               {day.entries.map((entry, entryIdx) => (
                 <div key={entryIdx} className="flex flex-wrap gap-2 items-end mb-2">
                   <div>
                     <Label>Work Type</Label>
-                    <Select value={entry.workType} onValueChange={val => handleEntryChange(dayIdx, entryIdx, "workType", val)}>
+                    <Select 
+                      value={entry.workType} 
+                      onValueChange={val => handleEntryChange(dayIdx, entryIdx, "workType", val)}
+                      disabled={confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin}
+                    >
                       <SelectTrigger><SelectValue placeholder="Type" /></SelectTrigger>
                       <SelectContent>
                         {workTypes.map(type => (
@@ -695,16 +757,23 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
                           value={entry.project}
                           onChange={e => handleEntryChange(dayIdx, entryIdx, "project", e.target.value)}
                           placeholder="Project"
-                          disabled={entry.workType === "31"}
+                          disabled={entry.workType === "31" || (confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin)}
                         />
-                        <Button size="sm" variant="outline" onClick={() => handleEntryChange(dayIdx, entryIdx, "project", "")}>Clear</Button>
+                        <Button 
+                          size="sm" 
+                          variant="outline" 
+                          onClick={() => handleEntryChange(dayIdx, entryIdx, "project", "")}
+                          disabled={confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin}
+                        >
+                          Clear
+                        </Button>
                       </div>
                     ) : (
                       <>
                         <Select
                           value={entry.project}
                           onValueChange={val => handleEntryChange(dayIdx, entryIdx, "project", val)}
-                          disabled={entry.workType === "31"}
+                          disabled={entry.workType === "31" || (confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin)}
                         >
                           <SelectTrigger><SelectValue placeholder="Project" /></SelectTrigger>
                           <SelectContent>
@@ -718,13 +787,14 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
                             value={customProjects[`${dayIdx}-${entryIdx}`] || ""}
                             onChange={e => setCustomProjects(prev => ({ ...prev, [`${dayIdx}-${entryIdx}`]: e.target.value }))}
                             placeholder="Add custom project"
-                            disabled={entry.workType === "31"}
+                            disabled={entry.workType === "31" || (confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin)}
                           />
                           <Button
                             type="button"
                             size="sm"
                             className="ml-2"
                             onClick={() => handleAddCustomProject(dayIdx, entryIdx)}
+                            disabled={confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin}
                           >
                             Add
                           </Button>
@@ -740,6 +810,7 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
                       onChange={e => handleEntryChange(dayIdx, entryIdx, "startTime", roundToQuarterHour(e.target.value))}
                       placeholder="Start (e.g. 08:10)"
                       className="w-20"
+                      disabled={confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin}
                     />
                   </div>
                   <div>
@@ -750,11 +821,20 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
                       onChange={e => handleEntryChange(dayIdx, entryIdx, "endTime", roundToQuarterHour(e.target.value))}
                       placeholder="End (e.g. 17:45)"
                       className="w-20"
+                      disabled={confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin}
                     />
                   </div>
                   <div>
                     <Label>Hours</Label>
-                    <Input type="number" min="0" step="0.25" value={entry.hours} onChange={e => handleEntryChange(dayIdx, entryIdx, "hours", e.target.value)} placeholder="h" />
+                    <Input 
+                      type="number" 
+                      min="0" 
+                      step="0.25" 
+                      value={entry.hours} 
+                      onChange={e => handleEntryChange(dayIdx, entryIdx, "hours", e.target.value)} 
+                      placeholder="h"
+                      disabled={confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin}
+                    />
                   </div>
                   <div className="flex items-center ml-2">
                     <input
@@ -763,16 +843,30 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
                       checked={entry.lunch}
                       onChange={e => handleEntryChange(dayIdx, entryIdx, "lunch", e.target.checked)}
                       className="h-4 w-4 text-orange-600 border-gray-300 rounded focus:ring-orange-500"
+                      disabled={confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin}
                     />
                     <label htmlFor={`lunch-${dayIdx}-${entryIdx}`} className="ml-1 text-xs text-gray-700 select-none">
                       Lunch
                     </label>
                   </div>
-                  <Button variant="destructive" size="sm" onClick={() => handleRemoveEntry(dayIdx, entryIdx)}>-</Button>
+                  <Button 
+                    variant="destructive" 
+                    size="sm" 
+                    onClick={() => handleRemoveEntry(dayIdx, entryIdx)}
+                    disabled={confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin}
+                  >
+                    -
+                  </Button>
                 </div>
               ))}
               <div className="flex gap-4 mt-4">
-                <Button variant="default" onClick={() => handleSubmitDay(dayIdx)}>Submit Day</Button>
+                <Button 
+                  variant="default" 
+                  onClick={() => handleSubmitDay(dayIdx)}
+                  disabled={confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin}
+                >
+                  Submit Day
+                </Button>
               </div>
               {submittedEntries[day.date.toISOString().split('T')[0]] && submittedEntries[day.date.toISOString().split('T')[0]].length > 0 && (
                 <div className="mt-4">
@@ -814,10 +908,31 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
         </CardContent>
       </Card>
       {!confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && allWeekdaysFilled && (
-        <Button className="mt-4 w-full bg-orange-600 hover:bg-orange-700 text-white" variant="default" onClick={handleConfirmWeek}>Confirm Week</Button>
+        <Card className="mt-4 bg-orange-50 border-orange-200">
+          <CardContent className="p-4">
+            <div className="flex flex-col gap-3">
+              <div className="text-sm text-orange-800">
+                <strong>Let op:</strong> Na bevestiging kun je de uren niet meer wijzigen tot een admin dit heeft goedgekeurd of teruggezet.
+              </div>
+              <Button 
+                className="w-full bg-orange-600 hover:bg-orange-700 text-white" 
+                variant="default" 
+                onClick={handleConfirmWeek}
+              >
+                Week Bevestigen
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       )}
       {confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && (
-        <div className="mt-4 text-green-700 font-semibold">This week is confirmed. No further changes allowed.</div>
+        <Card className="mt-4 bg-blue-50 border-blue-200">
+          <CardContent className="p-4">
+            <div className="text-blue-800 font-semibold">
+              ✓ Deze week is bevestigd en wacht op admin goedkeuring. Je kunt de uren niet meer wijzigen.
+            </div>
+          </CardContent>
+        </Card>
       )}
     </div>
   );

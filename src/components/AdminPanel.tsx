@@ -28,6 +28,8 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
   const [daysOffInput, setDaysOffInput] = useState<Record<string, string>>({});
   const [allEntries, setAllEntries] = useState<any[]>([]);
   const [projectsMap, setProjectsMap] = useState<Record<string, string>>({});
+  const [confirmedWeeks, setConfirmedWeeks] = useState<any[]>([]);
+  const [usersMap, setUsersMap] = useState<Record<string, any>>({});
 
   // Fetch users
   const fetchUsers = async () => {
@@ -44,6 +46,29 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
   useEffect(() => {
     fetchUsers();
     // eslint-disable-next-line
+  }, []);
+
+  // Build users map for quick lookup
+  useEffect(() => {
+    const map: Record<string, any> = {};
+    users.forEach(u => { map[u.id] = u; });
+    setUsersMap(map);
+  }, [users]);
+
+  // Fetch confirmed weeks that need admin review
+  useEffect(() => {
+    const fetchConfirmedWeeks = async () => {
+      const { data } = await supabase
+        .from('confirmed_weeks')
+        .select('*')
+        .eq('confirmed', true)
+        .order('week_start_date', { ascending: false });
+      setConfirmedWeeks(data || []);
+    };
+    fetchConfirmedWeeks();
+    // Refresh every 30 seconds to catch new confirmations
+    const interval = setInterval(fetchConfirmedWeeks, 30000);
+    return () => clearInterval(interval);
   }, []);
 
   // Fetch days off for all users
@@ -288,6 +313,70 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
     );
   }
 
+  // Handle admin actions on confirmed weeks
+  const handleApproveWeek = async (userId: string, weekStartDate: string) => {
+    const { error } = await supabase
+      .from('confirmed_weeks')
+      .update({ admin_approved: true, admin_reviewed: true })
+      .eq('user_id', userId)
+      .eq('week_start_date', weekStartDate);
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Week Goedgekeurd", description: "De week is goedgekeurd door admin." });
+      // Refresh confirmed weeks
+      const { data } = await supabase
+        .from('confirmed_weeks')
+        .select('*')
+        .eq('confirmed', true)
+        .order('week_start_date', { ascending: false });
+      setConfirmedWeeks(data || []);
+    }
+  };
+
+  const handleRejectWeek = async (userId: string, weekStartDate: string) => {
+    const { error } = await supabase
+      .from('confirmed_weeks')
+      .update({ admin_approved: false, admin_reviewed: true })
+      .eq('user_id', userId)
+      .eq('week_start_date', weekStartDate);
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Week Afgekeurd", description: "De week is afgekeurd door admin." });
+      // Refresh confirmed weeks
+      const { data } = await supabase
+        .from('confirmed_weeks')
+        .select('*')
+        .eq('confirmed', true)
+        .order('week_start_date', { ascending: false });
+      setConfirmedWeeks(data || []);
+    }
+  };
+
+  const handleUnlockWeek = async (userId: string, weekStartDate: string) => {
+    const { error } = await supabase
+      .from('confirmed_weeks')
+      .update({ confirmed: false, admin_approved: false, admin_reviewed: false })
+      .eq('user_id', userId)
+      .eq('week_start_date', weekStartDate);
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      toast({ 
+        title: "Week Teruggezet", 
+        description: "De week is teruggezet. De gebruiker kan de uren nu opnieuw aanpassen." 
+      });
+      // Refresh confirmed weeks
+      const { data } = await supabase
+        .from('confirmed_weeks')
+        .select('*')
+        .eq('confirmed', true)
+        .order('week_start_date', { ascending: false });
+      setConfirmedWeeks(data || []);
+    }
+  };
+
   return (
     <div className="p-4 sm:p-8 bg-white rounded shadow w-full max-w-full">
       <h2 className="text-2xl font-bold mb-4">Admin Panel</h2>
@@ -445,6 +534,96 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
           </div>
         )}
       </div>
+      {/* Pending Week Confirmations Section */}
+      {confirmedWeeks.filter(cw => !cw.admin_reviewed || !cw.admin_approved).length > 0 && (
+        <div className="mt-8 mb-8">
+          <h3 className="text-lg font-semibold mb-4 text-orange-600">⚠️ Te Controleren Weken</h3>
+          <div className="space-y-4">
+            {confirmedWeeks
+              .filter(cw => !cw.admin_reviewed || !cw.admin_approved)
+              .map((cw) => {
+                const weekStart = new Date(cw.week_start_date);
+                const weekEnd = new Date(weekStart);
+                weekEnd.setDate(weekEnd.getDate() + 6);
+                const weekNum = getISOWeek(cw.week_start_date);
+                const user = usersMap[cw.user_id];
+                const weekEntries = allEntries.filter(
+                  e => e.user_id === cw.user_id && 
+                  e.date >= cw.week_start_date && 
+                  e.date <= weekEnd.toISOString().split('T')[0]
+                );
+                const totalHours = weekEntries.reduce((sum, e) => sum + Number(e.hours || 0), 0);
+                
+                return (
+                  <div key={`${cw.user_id}-${cw.week_start_date}`} className="border rounded-lg p-4 bg-orange-50 shadow">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+                      <div>
+                        <div className="font-semibold text-lg">
+                          {user?.name || user?.email || 'Onbekende gebruiker'} - Week {weekNum}
+                        </div>
+                        <div className="text-sm text-gray-600">
+                          {weekStart.toLocaleDateString('nl-NL')} - {weekEnd.toLocaleDateString('nl-NL')}
+                        </div>
+                        <div className="text-sm font-medium mt-1">
+                          Totaal: {totalHours.toFixed(2)} uur ({weekEntries.length} entries)
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          size="sm"
+                          variant="default"
+                          className="bg-green-600 hover:bg-green-700"
+                          onClick={() => handleApproveWeek(cw.user_id, cw.week_start_date)}
+                        >
+                          ✓ Goedkeuren
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => handleRejectWeek(cw.user_id, cw.week_start_date)}
+                        >
+                          ✗ Afkeuren
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="border-orange-600 text-orange-600 hover:bg-orange-100"
+                          onClick={() => handleUnlockWeek(cw.user_id, cw.week_start_date)}
+                        >
+                          🔓 Terugzetten (Unlock)
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full text-xs border rounded">
+                        <thead className="bg-white">
+                          <tr>
+                            <th className="p-2 border">Datum</th>
+                            <th className="p-2 border">Project</th>
+                            <th className="p-2 border">Uren</th>
+                            <th className="p-2 border">Werk Type</th>
+                            <th className="p-2 border">Tijd</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {weekEntries.map((entry, idx) => (
+                            <tr key={entry.id || idx} className="border-t">
+                              <td className="p-2 border">{entry.date}</td>
+                              <td className="p-2 border">{entry.projects?.name || projectsMap[entry.project_id] || entry.project || "-"}</td>
+                              <td className="p-2 border">{entry.hours}</td>
+                              <td className="p-2 border">{entry.description}</td>
+                              <td className="p-2 border">{entry.startTime && entry.endTime ? `${entry.startTime} - ${entry.endTime}` : '-'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+        </div>
+      )}
       {/* Below user table: User Weekly Entries Accordion */}
       <div className="mt-12">
         <h3 className="text-lg font-semibold mb-4">View User Weekly Entries</h3>
