@@ -34,6 +34,8 @@ const Index = () => {
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [users, setUsers] = useState<any[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<string>("");
+  const [selectedWeekNumber, setSelectedWeekNumber] = useState<string>("");
+  const [selectedYear, setSelectedYear] = useState<string>(new Date().getFullYear().toString());
   const { toast } = useToast();
 
   // Check for saved session on page load (14 days persistence)
@@ -107,6 +109,24 @@ const Index = () => {
     const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
     const weekNum = Math.ceil((((Number(d.getTime()) - Number(yearStart.getTime())) / 86400000) + 1) / 7);
     return weekNum;
+  }
+
+  // Helper to get date range from week number and year
+  function getWeekDateRange(weekNumber: number, year: number) {
+    const simple = new Date(year, 0, 1 + (weekNumber - 1) * 7);
+    const dow = simple.getDay();
+    const ISOweekStart = simple;
+    if (dow <= 4) {
+      ISOweekStart.setDate(simple.getDate() - simple.getDay() + 1);
+    } else {
+      ISOweekStart.setDate(simple.getDate() + 8 - simple.getDay());
+    }
+    const ISOweekEnd = new Date(ISOweekStart);
+    ISOweekEnd.setDate(ISOweekStart.getDate() + 6);
+    return {
+      from: ISOweekStart.toISOString().split('T')[0],
+      to: ISOweekEnd.toISOString().split('T')[0]
+    };
   }
   const [reminderWeekNum, setReminderWeekNum] = useState("");
 
@@ -673,7 +693,7 @@ const Index = () => {
                   </div>
 
                   {/* Export Buttons */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                     <Button 
                       className="h-24 flex flex-col items-center justify-center bg-orange-600 hover:bg-orange-700 text-white shadow-lg rounded-lg transition-all" 
                       onClick={handleExportAll} 
@@ -704,6 +724,38 @@ const Index = () => {
                       >
                         <Calendar className="h-8 w-8 mb-3" />
                         <span className="text-lg font-medium">Export Datumbereik</span>
+                      </Button>
+                    </div>
+
+                    <div className="flex flex-col items-center justify-center gap-2">
+                      <div className="flex gap-2 w-full">
+                        <input 
+                          type="number" 
+                          min="1" 
+                          max="53" 
+                          placeholder="Week" 
+                          value={selectedWeekNumber} 
+                          onChange={e => setSelectedWeekNumber(e.target.value)} 
+                          className="flex-1 border rounded px-2 py-1 text-center" 
+                        />
+                        <input 
+                          type="number" 
+                          min="2020" 
+                          max="2100" 
+                          placeholder="Jaar" 
+                          value={selectedYear} 
+                          onChange={e => setSelectedYear(e.target.value)} 
+                          className="flex-1 border rounded px-2 py-1 text-center" 
+                        />
+                      </div>
+                      <Button 
+                        variant="outline" 
+                        className="h-16 w-full flex flex-col items-center justify-center border-orange-200 text-orange-700 hover:bg-orange-50 shadow-lg rounded-lg transition-all" 
+                        onClick={handleExportWeekNumber} 
+                        disabled={exporting || !selectedWeekNumber || !selectedYear}
+                      >
+                        <Calendar className="h-8 w-8 mb-3" />
+                        <span className="text-lg font-medium">Export Week Nummer</span>
                       </Button>
                     </div>
 
