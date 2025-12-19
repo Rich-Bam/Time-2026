@@ -84,11 +84,23 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
 
   useEffect(() => {
     const fetchProjects = async () => {
-      const { data, error } = await supabase.from("projects").select("id, name");
-      if (data) setProjects(data);
+      // Fetch global projects (user_id is null) and user's custom projects
+      const { data, error } = await supabase
+        .from("projects")
+        .select("id, name, user_id")
+        .or(`user_id.is.null,user_id.eq.${currentUser?.id || ''}`);
+      if (data) {
+        // Only show global projects and current user's custom projects
+        const filteredProjects = data.filter(
+          p => !p.user_id || p.user_id === currentUser?.id
+        );
+        setProjects(filteredProjects);
+      }
     };
-    fetchProjects();
-  }, []);
+    if (currentUser?.id) {
+      fetchProjects();
+    }
+  }, [currentUser]);
 
   // Fetch days off from database for the current user and year
   useEffect(() => {
@@ -324,8 +336,48 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
         if (entry.lunch && !isDayOff) {
           hoursToSave = Math.max(0, hoursToSave - 0.5);
         }
+        
+        // Check if project is a custom project (not in global projects list)
+        let projectToSave = isDayOff ? null : entry.project;
+        if (projectToSave && !isDayOff && currentUser?.id) {
+          // Check if this is a custom project (not in the projects list)
+          const isCustomProject = !projects.some(p => p.name === projectToSave);
+          if (isCustomProject) {
+            // Save custom project to database for this user only
+            const { data: existingProject } = await supabase
+              .from("projects")
+              .select("id")
+              .eq("name", projectToSave)
+              .eq("user_id", currentUser.id)
+              .single();
+            
+            if (!existingProject) {
+              // Create new custom project for this user
+              await supabase
+                .from("projects")
+                .insert([{
+                  name: projectToSave,
+                  user_id: currentUser.id,
+                  description: null
+                }]);
+              
+              // Refresh projects list to include the new custom project
+              const { data: updatedProjects } = await supabase
+                .from("projects")
+                .select("id, name, user_id")
+                .or(`user_id.is.null,user_id.eq.${currentUser.id}`);
+              if (updatedProjects) {
+                const filteredProjects = updatedProjects.filter(
+                  p => !p.user_id || p.user_id === currentUser.id
+                );
+                setProjects(filteredProjects);
+              }
+            }
+          }
+        }
+        
         entriesToSave.push({
-          project: isDayOff ? null : entry.project,
+          project: projectToSave,
           user_id: currentUser?.id || null,
           date: day.date.toISOString().split('T')[0],
           hours: hoursToSave,
@@ -441,8 +493,48 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
       if (entry.lunch && !isDayOff) {
         hoursToSave = Math.max(0, hoursToSave - 0.5);
       }
+      
+      // Check if project is a custom project (not in global projects list)
+      let projectToSave = isDayOff ? null : entry.project;
+      if (projectToSave && !isDayOff && currentUser?.id) {
+        // Check if this is a custom project (not in the projects list)
+        const isCustomProject = !projects.some(p => p.name === projectToSave);
+        if (isCustomProject) {
+          // Save custom project to database for this user only
+          const { data: existingProject } = await supabase
+            .from("projects")
+            .select("id")
+            .eq("name", projectToSave)
+            .eq("user_id", currentUser.id)
+            .single();
+          
+          if (!existingProject) {
+            // Create new custom project for this user
+            await supabase
+              .from("projects")
+              .insert([{
+                name: projectToSave,
+                user_id: currentUser.id,
+                description: null
+              }]);
+            
+            // Refresh projects list to include the new custom project
+            const { data: updatedProjects } = await supabase
+              .from("projects")
+              .select("id, name, user_id")
+              .or(`user_id.is.null,user_id.eq.${currentUser.id}`);
+            if (updatedProjects) {
+              const filteredProjects = updatedProjects.filter(
+                p => !p.user_id || p.user_id === currentUser.id
+              );
+              setProjects(filteredProjects);
+            }
+          }
+        }
+      }
+      
       entriesToSave.push({
-        project: isDayOff ? null : entry.project,
+        project: projectToSave,
         user_id: currentUser?.id || null,
         date: day.date.toISOString().split('T')[0],
         hours: hoursToSave,
