@@ -82,9 +82,12 @@ const Index = () => {
   };
 
   // Reminder logic: check if previous week is missing entries after login
+  // Skip reminder for admins
   useEffect(() => {
     const checkPreviousWeek = async () => {
       if (!isLoggedIn || !currentUser) return;
+      // Don't show reminder to admins
+      if (currentUser.isAdmin) return;
       // Get previous week (Monday-Sunday)
       const now = new Date();
       const day = now.getDay();

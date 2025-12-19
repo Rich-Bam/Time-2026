@@ -48,6 +48,15 @@ const AuthSection = ({ onLogin, setCurrentUser }: AuthSectionProps) => {
       });
       return;
     }
+    // Check if user is approved (for new accounts, admin must approve)
+    if (user.approved === false) {
+      toast({
+        title: "Account Pending Approval",
+        description: "Your account is waiting for admin approval. Please contact an administrator.",
+        variant: "destructive",
+      });
+      return;
+    }
     // Check password (plaintext for now)
     if (user.password !== loginData.password) {
       toast({
@@ -85,6 +94,7 @@ const AuthSection = ({ onLogin, setCurrentUser }: AuthSectionProps) => {
         // These fields are used elsewhere in the app (Admin panel / password change)
         isAdmin: false,
         must_change_password: false,
+        approved: false, // New users need admin approval
       },
     ]);
     setRegisterLoading(false);
@@ -97,11 +107,10 @@ const AuthSection = ({ onLogin, setCurrentUser }: AuthSectionProps) => {
       return;
     }
     toast({
-      title: "User created",
-      description: "You can now log in with this email and password.",
+      title: "Account Created",
+      description: "Your account has been created and is pending admin approval. You will be able to log in once an administrator approves your account.",
     });
-    // Convenience: prefill login form with the new user's credentials
-    setLoginData({ email: registerData.email, password: registerData.password });
+    // Clear form
     setRegisterData({ email: "", name: "", password: "" });
   };
 

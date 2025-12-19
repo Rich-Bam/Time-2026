@@ -32,7 +32,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
   // Fetch users
   const fetchUsers = async () => {
     setLoading(true);
-    const { data, error } = await supabase.from("users").select("id, email, name, isAdmin, must_change_password");
+    const { data, error } = await supabase.from("users").select("id, email, name, isAdmin, must_change_password, approved");
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
@@ -122,12 +122,31 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
       setForm({ email: "", name: "", password: "", isAdmin: false, must_change_password: true });
       fetchUsers();
     } catch (err: any) {
-      // Fallback: if function not deployed or fails, show a clear error
-      toast({
-        title: "Error inviting user",
-        description: err?.message || "Failed to send invite. Check the invite-user edge function deployment.",
-        variant: "destructive",
-      });
+      // Fallback: if function not deployed or fails, create user directly with approved = true
+      const { error: insertError } = await supabase.from("users").insert([
+        {
+          email: form.email,
+          name: form.name || form.email,
+          password: form.password,
+          isAdmin: form.isAdmin,
+          must_change_password: form.must_change_password,
+          approved: true, // Admins can create users directly, so they're auto-approved
+        },
+      ]);
+      if (insertError) {
+        toast({
+          title: "Error creating user",
+          description: insertError.message,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "User created",
+          description: `${form.email} has been created and can log in immediately.`,
+        });
+        setForm({ email: "", name: "", password: "", isAdmin: false, must_change_password: true });
+        fetchUsers();
+      }
     }
   };
 
@@ -174,6 +193,20 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
       toast({
         title: "Admin status updated",
         description: `${userEmail} is now ${makeAdmin ? "an admin" : "a regular user"}.`,
+      });
+      fetchUsers();
+    }
+  };
+
+  // Approve pending user
+  const handleApproveUser = async (userId: string, userEmail: string) => {
+    const { error } = await supabase.from("users").update({ approved: true }).eq("id", userId);
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      toast({
+        title: "User Approved",
+        description: `${userEmail} can now log in.`,
       });
       fetchUsers();
     }
@@ -284,6 +317,44 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
           <Button type="submit">Add User</Button>
         </form>
       </div>
+      {/* Pending Users Section */}
+      {users.filter(u => u.approved === false).length > 0 && (
+        <div className="mb-8">
+          <h3 className="text-lg font-semibold mb-2 text-orange-600">Pending Approval</h3>
+          <div className="overflow-x-auto w-full">
+            <table className="min-w-full border mt-2 text-sm">
+              <thead>
+                <tr className="bg-orange-100">
+                  <th className="p-2 text-left">Email</th>
+                  <th className="p-2 text-left">Name</th>
+                  <th className="p-2 text-left">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {users.filter(u => u.approved === false).map(user => (
+                  <tr key={user.id} className="border-t">
+                    <td className="p-2">{user.email}</td>
+                    <td className="p-2">{user.name || "-"}</td>
+                    <td className="p-2">
+                      <Button size="sm" variant="default" onClick={() => handleApproveUser(user.id, user.email)}>
+                        Approve
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        className="ml-2"
+                        onClick={() => handleDeleteUser(user.id, user.email)}
+                      >
+                        Reject
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
       <div>
         <h3 className="text-lg font-semibold mb-2">Existing Users</h3>
         {loading ? (
@@ -296,13 +367,14 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                   <th className="p-2 text-left">Email</th>
                   <th className="p-2 text-left">Name</th>
                   <th className="p-2 text-left">Admin</th>
+                  <th className="p-2 text-left">Approved</th>
                   <th className="p-2 text-left">Must Change Password</th>
                   <th className="p-2 text-left">Days Off Left</th>
                   <th className="p-2 text-left">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {users.map(user => (
+                {users.filter(u => u.approved !== false).map(user => (
                   <tr key={user.id} className="border-t">
                     <td className="p-2">{user.email}{user.email === SUPER_ADMIN_EMAIL && <span className="ml-2 px-2 py-1 text-xs bg-orange-200 text-orange-800 rounded">Super Admin</span>}</td>
                     <td className="p-2">{user.name}</td>
@@ -317,6 +389,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                         <span>{user.isAdmin ? "Yes" : "No"}</span>
                       </div>
                     </td>
+                    <td className="p-2">{user.approved !== false ? "Yes" : "No"}</td>
                     <td className="p-2">{user.must_change_password ? "Yes" : "No"}</td>
                     <td className="p-2">{(totalDaysOff - ((daysOffMap[user.id] || 0) / 8)).toFixed(2)} / {totalDaysOff}</td>
                     <td className="p-2">
