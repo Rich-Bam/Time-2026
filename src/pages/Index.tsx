@@ -111,22 +111,43 @@ const Index = () => {
     return weekNum;
   }
 
-  // Helper to get date range from week number and year
+  // Helper to get date range from week number and year (ISO week)
   function getWeekDateRange(weekNumber: number, year: number) {
-    const simple = new Date(year, 0, 1 + (weekNumber - 1) * 7);
-    const dow = simple.getDay();
-    const ISOweekStart = simple;
-    if (dow <= 4) {
-      ISOweekStart.setDate(simple.getDate() - simple.getDay() + 1);
-    } else {
-      ISOweekStart.setDate(simple.getDate() + 8 - simple.getDay());
+    try {
+      // Calculate the date of the first Thursday of the year (ISO week standard)
+      const jan4 = new Date(year, 0, 4);
+      const jan4Day = jan4.getDay() || 7; // Convert Sunday (0) to 7
+      const daysToMonday = jan4Day === 1 ? 0 : 1 - jan4Day;
+      
+      // Get the Monday of week 1
+      const week1Monday = new Date(year, 0, 4 + daysToMonday);
+      
+      // Calculate the Monday of the requested week
+      const weekMonday = new Date(week1Monday);
+      weekMonday.setDate(week1Monday.getDate() + (weekNumber - 1) * 7);
+      
+      // Calculate the Sunday of that week
+      const weekSunday = new Date(weekMonday);
+      weekSunday.setDate(weekMonday.getDate() + 6);
+      
+      return {
+        from: weekMonday.toISOString().split('T')[0],
+        to: weekSunday.toISOString().split('T')[0]
+      };
+    } catch (error) {
+      console.error("Error calculating week date range:", error);
+      // Fallback: return current week
+      const today = new Date();
+      const dayOfWeek = today.getDay();
+      const diff = today.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
+      const monday = new Date(today.setDate(diff));
+      const sunday = new Date(monday);
+      sunday.setDate(monday.getDate() + 6);
+      return {
+        from: monday.toISOString().split('T')[0],
+        to: sunday.toISOString().split('T')[0]
+      };
     }
-    const ISOweekEnd = new Date(ISOweekStart);
-    ISOweekEnd.setDate(ISOweekStart.getDate() + 6);
-    return {
-      from: ISOweekStart.toISOString().split('T')[0],
-      to: ISOweekEnd.toISOString().split('T')[0]
-    };
   }
   const [reminderWeekNum, setReminderWeekNum] = useState("");
 
