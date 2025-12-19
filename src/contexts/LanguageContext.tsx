@@ -218,13 +218,13 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setLanguageState(lang);
   };
 
-  const t = (key: string, params?: Record<string, string>): string => {
+  const t = (key: string, params?: Record<string, string | number>): string => {
     let translation = translations[language][key] || key;
     
     // Replace parameters like {name} with actual values
     if (params) {
       Object.keys(params).forEach(param => {
-        translation = translation.replace(`{${param}}`, params[param]);
+        translation = translation.replace(`{${param}}`, String(params[param]));
       });
     }
     
