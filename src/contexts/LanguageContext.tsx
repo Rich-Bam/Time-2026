@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
-type Language = 'nl' | 'en';
+type Language = 'nl' | 'en' | 'es' | 'el' | 'ro' | 'pl';
 
 interface LanguageContextType {
   language: Language;
@@ -270,7 +270,7 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [language, setLanguageState] = useState<Language>(() => {
     // Load from localStorage or default to Dutch
     const saved = localStorage.getItem('bampro_language');
-    return (saved === 'nl' || saved === 'en') ? saved : 'nl';
+    return (saved === 'nl' || saved === 'en' || saved === 'es' || saved === 'el' || saved === 'ro' || saved === 'pl') ? saved : 'nl';
   });
 
   useEffect(() => {
