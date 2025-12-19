@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Clock, Users, FileText, Calendar, BarChart3, Download, AlertTriangle } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import TimesheetEntry from "@/components/TimesheetEntry";
 import ProjectManagement from "@/components/ProjectManagement";
 import TimeOverview from "@/components/TimeOverview";
@@ -12,6 +13,7 @@ import AdminPanel from "@/components/AdminPanel";
 import ChangePasswordForm from "@/components/ChangePasswordForm";
 import WeeklyCalendarEntry from "@/components/WeeklyCalendarEntry";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { useToast } from "@/hooks/use-toast";
 
 const Index = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -22,6 +24,9 @@ const Index = () => {
   const [weeklySubTab, setWeeklySubTab] = useState('daylist');
   const [showReminder, setShowReminder] = useState(false);
   const [reminderWeek, setReminderWeek] = useState("");
+  const [exportPeriod, setExportPeriod] = useState<"day" | "week" | "month" | "year">("week");
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const { toast } = useToast();
 
   // Helper to get ISO week number
   function getISOWeekNumber(date) {
@@ -42,14 +47,74 @@ const Index = () => {
     XLSX.writeFile(wb, filename);
   };
 
-  // Export all data
+  // Helper to format date as DD/MM/YY
+  const formatDateDDMMYY = (dateStr: string) => {
+    const date = new Date(dateStr);
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = String(date.getFullYear()).slice(-2);
+    return `${day}/${month}/${year}`;
+  };
+
+  // Helper to format hours as HH:MM
+  const formatHoursHHMM = (hours: number | string) => {
+    const numHours = typeof hours === 'string' ? parseFloat(hours) : hours;
+    if (isNaN(numHours)) return "00:00";
+    const h = Math.floor(numHours);
+    const m = Math.round((numHours - h) * 60);
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  };
+
+  // Helper to get work type label
+  const getWorkTypeLabel = (desc: string) => {
+    const workTypes = [
+      { value: 10, label: "Work" },
+      { value: 11, label: "Production" },
+      { value: 12, label: "Administration" },
+      { value: 13, label: "Drawing" },
+      { value: 14, label: "Trade Fair" },
+      { value: 15, label: "Commercial" },
+      { value: 16, label: "Telephone Support" },
+      { value: 17, label: "Internal BAMPRO" },
+      { value: 20, label: "Commute: Home - Work" },
+      { value: 21, label: "Commute: Work - Work" },
+      { value: 22, label: "Loading / Unloading" },
+      { value: 23, label: "Waiting" },
+      { value: 30, label: "Sick" },
+      { value: 31, label: "Day Off / Vacation" },
+      { value: 32, label: "Doctor/Dentist/Hospital" },
+      { value: 33, label: "Funeral/Wedding" },
+      { value: 34, label: "Warehouse" },
+      { value: 35, label: "Break" },
+      { value: 36, label: "Course/Training" },
+      { value: 37, label: "Meeting" },
+      { value: 38, label: "Public Holiday" },
+      { value: 39, label: "Time Off in Lieu (ADV)" },
+      { value: 40, label: "Taken Time-for-Time (TFT)" },
+    ];
+    const workType = workTypes.find(wt => String(wt.value) === String(desc));
+    return workType ? workType.label : desc;
+  };
+
+  // Helper to get day name in Dutch
+  const getDayNameNL = (dateStr: string) => {
+    const date = new Date(dateStr);
+    const days = ['Zondag', 'Maandag', 'Dinsdag', 'Woensdag', 'Donderdag', 'Vrijdag', 'Zaterdag'];
+    return days[date.getDay()];
+  };
+
+  // Export all data (admin only)
   const handleExportAll = async () => {
     setExporting(true);
     const { data, error } = await supabase
       .from("timesheet")
       .select("*, projects(name)");
     if (error) {
-      alert("Failed to fetch data: " + error.message);
+      toast({
+        title: "Export Failed",
+        description: error.message,
+        variant: "destructive",
+      });
       setExporting(false);
       return;
     }
@@ -57,12 +122,20 @@ const Index = () => {
     const rows = (data || []).map((row) => ({ ...row, project: row.projects?.name || "" }));
     downloadExcel(rows, "timesheet_all.xlsx");
     setExporting(false);
+    toast({
+      title: "Export Successful",
+      description: "All timesheet data exported.",
+    });
   };
 
-  // Export by date range
+  // Export by date range (admin only)
   const handleExportRange = async () => {
     if (!dateRange.from || !dateRange.to) {
-      alert("Please select a date range.");
+      toast({
+        title: "Missing Dates",
+        description: "Please select a date range.",
+        variant: "destructive",
+      });
       return;
     }
     setExporting(true);
@@ -72,13 +145,162 @@ const Index = () => {
       .gte("date", dateRange.from)
       .lte("date", dateRange.to);
     if (error) {
-      alert("Failed to fetch data: " + error.message);
+      toast({
+        title: "Export Failed",
+        description: error.message,
+        variant: "destructive",
+      });
       setExporting(false);
       return;
     }
     const rows = (data || []).map((row) => ({ ...row, project: row.projects?.name || "" }));
     downloadExcel(rows, `timesheet_${dateRange.from}_to_${dateRange.to}.xlsx`);
     setExporting(false);
+    toast({
+      title: "Export Successful",
+      description: `Data exported from ${dateRange.from} to ${dateRange.to}.`,
+    });
+  };
+
+  // Export for normal users (day/week/month/year)
+  const handleExportPeriod = async () => {
+    if (!currentUser) {
+      toast({
+        title: "Error",
+        description: "User not found",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setExporting(true);
+    let fromDate: string;
+    let toDate: string;
+    let filename: string;
+
+    const selected = new Date(selectedDate);
+    selected.setHours(0, 0, 0, 0);
+
+    switch (exportPeriod) {
+      case "day":
+        fromDate = selected.toISOString().split('T')[0];
+        toDate = fromDate;
+        filename = `Uren_${formatDateDDMMYY(fromDate)}.xlsx`;
+        break;
+      case "week":
+        // Get Monday of the week
+        const dayOfWeek = selected.getDay();
+        const diff = selected.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
+        const monday = new Date(selected.setDate(diff));
+        monday.setHours(0, 0, 0, 0);
+        fromDate = monday.toISOString().split('T')[0];
+        const sunday = new Date(monday);
+        sunday.setDate(monday.getDate() + 6);
+        toDate = sunday.toISOString().split('T')[0];
+        filename = `Uren_Week_${formatDateDDMMYY(fromDate)}_tot_${formatDateDDMMYY(toDate)}.xlsx`;
+        break;
+      case "month":
+        fromDate = new Date(selected.getFullYear(), selected.getMonth(), 1).toISOString().split('T')[0];
+        toDate = new Date(selected.getFullYear(), selected.getMonth() + 1, 0).toISOString().split('T')[0];
+        filename = `Uren_${selected.getFullYear()}_${String(selected.getMonth() + 1).padStart(2, '0')}.xlsx`;
+        break;
+      case "year":
+        fromDate = new Date(selected.getFullYear(), 0, 1).toISOString().split('T')[0];
+        toDate = new Date(selected.getFullYear(), 11, 31).toISOString().split('T')[0];
+        filename = `Uren_${selected.getFullYear()}.xlsx`;
+        break;
+    }
+
+    const { data, error } = await supabase
+      .from("timesheet")
+      .select("*, projects(name)")
+      .eq("user_id", currentUser.id)
+      .gte("date", fromDate)
+      .lte("date", toDate)
+      .order("date", { ascending: true });
+
+    if (error) {
+      toast({
+        title: "Export Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+      setExporting(false);
+      return;
+    }
+
+    if (!data || data.length === 0) {
+      toast({
+        title: "No Data",
+        description: "Geen uren gevonden voor de geselecteerde periode.",
+        variant: "destructive",
+      });
+      setExporting(false);
+      return;
+    }
+
+    // Create workbook with formatted data
+    const wb = XLSX.utils.book_new();
+    
+    // Create header rows
+    const headerRows = [
+      ["Naam werknemer:", currentUser.name || currentUser.email || ""],
+      ["Datum:", `Van: ${formatDateDDMMYY(fromDate)} Tot: ${formatDateDDMMYY(toDate)}`],
+      ["Periode:", exportPeriod === "day" ? "Dag" : exportPeriod === "week" ? "Week" : exportPeriod === "month" ? "Maand" : "Jaar"],
+      ["Jaar:", selected.getFullYear().toString()],
+      [""], // Empty row
+    ];
+
+    // Create table headers
+    const tableHeaders = [
+      ["Dag", "Soort werk", "Project", "Werkbon", "Van", "Tot", "Gewerkte uren", "Projectleider", "Km stand auto", "Uitgevoerde werkzaamheden"]
+    ];
+
+    // Format data rows
+    const dataRows = data.map((entry) => [
+      getDayNameNL(entry.date),
+      getWorkTypeLabel(entry.description || ""),
+      entry.projects?.name || entry.project || "",
+      "", // Werkbon - not in database yet
+      entry.startTime || "",
+      entry.endTime || "",
+      formatHoursHHMM(entry.hours || 0),
+      "", // Projectleider - not in database yet
+      "", // Km stand auto - not in database yet
+      entry.notes || "",
+    ]);
+
+    // Combine all rows
+    const allRows = [...headerRows, ...tableHeaders, ...dataRows];
+
+    // Create worksheet from array
+    const ws = XLSX.utils.aoa_to_sheet(allRows);
+
+    // Set column widths
+    ws['!cols'] = [
+      { wch: 12 }, // Dag
+      { wch: 20 }, // Soort werk
+      { wch: 20 }, // Project
+      { wch: 12 }, // Werkbon
+      { wch: 8 },  // Van
+      { wch: 8 },  // Tot
+      { wch: 12 }, // Gewerkte uren
+      { wch: 15 }, // Projectleider
+      { wch: 12 }, // Km stand auto
+      { wch: 30 }, // Uitgevoerde werkzaamheden
+    ];
+
+    // Append worksheet to workbook
+    XLSX.utils.book_append_sheet(wb, ws, "Uren");
+
+    // Generate filename and save
+    XLSX.writeFile(wb, filename);
+
+    setExporting(false);
+    toast({
+      title: "Export Succesvol",
+      description: `${data.length} entries geëxporteerd naar ${filename}`,
+    });
   };
 
   // Reminder logic: check if previous week is missing entries after login
@@ -262,22 +484,66 @@ const Index = () => {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6 p-8">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <Button className="h-24 flex flex-col items-center justify-center bg-orange-600 hover:bg-orange-700 text-white shadow-lg rounded-lg transition-all" onClick={handleExportAll} disabled={exporting}>
-                  <FileText className="h-8 w-8 mb-3" />
-                  <span className="text-lg font-medium">Export All Data</span>
-                </Button>
-                <div className="flex flex-col items-center justify-center gap-2">
-                  <input type="date" value={dateRange.from} onChange={e => setDateRange({ ...dateRange, from: e.target.value })} className="mb-2 border rounded px-2 py-1" />
-                  <input type="date" value={dateRange.to} onChange={e => setDateRange({ ...dateRange, to: e.target.value })} className="mb-2 border rounded px-2 py-1" />
-                  <Button variant="outline" className="h-16 flex flex-col items-center justify-center border-orange-200 text-orange-700 hover:bg-orange-50 shadow-lg rounded-lg transition-all" onClick={handleExportRange} disabled={exporting}>
-                    <Calendar className="h-8 w-8 mb-3" />
-                    <span className="text-lg font-medium">Export Date Range</span>
+              {currentUser?.isAdmin ? (
+                // Admin export options
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <Button className="h-24 flex flex-col items-center justify-center bg-orange-600 hover:bg-orange-700 text-white shadow-lg rounded-lg transition-all" onClick={handleExportAll} disabled={exporting}>
+                    <FileText className="h-8 w-8 mb-3" />
+                    <span className="text-lg font-medium">Export All Data</span>
+                  </Button>
+                  <div className="flex flex-col items-center justify-center gap-2">
+                    <input type="date" value={dateRange.from} onChange={e => setDateRange({ ...dateRange, from: e.target.value })} className="mb-2 border rounded px-2 py-1" />
+                    <input type="date" value={dateRange.to} onChange={e => setDateRange({ ...dateRange, to: e.target.value })} className="mb-2 border rounded px-2 py-1" />
+                    <Button variant="outline" className="h-16 flex flex-col items-center justify-center border-orange-200 text-orange-700 hover:bg-orange-50 shadow-lg rounded-lg transition-all" onClick={handleExportRange} disabled={exporting}>
+                      <Calendar className="h-8 w-8 mb-3" />
+                      <span className="text-lg font-medium">Export Date Range</span>
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                // Normal user export options
+                <div className="space-y-4">
+                  <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+                    <div className="flex-1">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Selecteer Periode</label>
+                      <Select value={exportPeriod} onValueChange={(value: "day" | "week" | "month" | "year") => setExportPeriod(value)}>
+                        <SelectTrigger className="w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="day">Dag</SelectItem>
+                          <SelectItem value="week">Week</SelectItem>
+                          <SelectItem value="month">Maand</SelectItem>
+                          <SelectItem value="year">Jaar</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex-1">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        {exportPeriod === "day" ? "Selecteer Dag" : exportPeriod === "week" ? "Selecteer Week (elke dag in de week)" : exportPeriod === "month" ? "Selecteer Maand (elke dag in de maand)" : "Selecteer Jaar (elke dag in het jaar)"}
+                      </label>
+                      <input 
+                        type="date" 
+                        value={selectedDate} 
+                        onChange={e => setSelectedDate(e.target.value)} 
+                        className="w-full border rounded px-3 py-2"
+                      />
+                    </div>
+                  </div>
+                  <Button 
+                    className="w-full h-16 flex flex-col items-center justify-center bg-orange-600 hover:bg-orange-700 text-white shadow-lg rounded-lg transition-all" 
+                    onClick={handleExportPeriod} 
+                    disabled={exporting}
+                  >
+                    <Download className="h-6 w-6 mb-2" />
+                    <span className="text-lg font-medium">
+                      {exporting ? "Exporteren..." : `Export ${exportPeriod === "day" ? "Dag" : exportPeriod === "week" ? "Week" : exportPeriod === "month" ? "Maand" : "Jaar"}`}
+                    </span>
                   </Button>
                 </div>
-              </div>
+              )}
               <div className="text-sm text-orange-800 bg-orange-50 p-6 rounded-lg border border-orange-200">
-                <strong className="text-orange-900">Note:</strong> To enable Excel export functionality, connect to Supabase using the green button in the top right. This will allow you to store and retrieve timesheet data for export.
+                <strong className="text-orange-900">Note:</strong> {currentUser?.isAdmin ? "Admins kunnen alle data exporteren of een specifiek datumbereik selecteren." : "Selecteer een periode en datum om je uren te exporteren naar Excel."}
               </div>
             </CardContent>
           </Card>
