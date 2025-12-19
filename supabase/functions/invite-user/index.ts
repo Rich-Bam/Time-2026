@@ -54,7 +54,7 @@ Deno.serve(async (req) => {
     const appUrl = Deno.env.get("APP_URL") || "https://bampro-uren.nl";
     
     // Use Supabase Auth's built-in invite function - this sends email automatically!
-    // Redirect to /reset page where user only needs to set password
+    // Redirect to /invite-confirm page where user only needs to set password
     const {
       data: { user },
       error: authError,
@@ -63,7 +63,7 @@ Deno.serve(async (req) => {
         name, 
         isAdmin: isAdmin ? "true" : "false" // Store as string in user metadata
       },
-      redirectTo: `${appUrl}/reset`, // Redirect to password setup page
+      redirectTo: `${appUrl}/invite-confirm`, // Redirect to invite confirmation page
     });
 
     if (authError || !user) {
