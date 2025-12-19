@@ -190,12 +190,22 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
             duration: 15000,
           });
         } else {
-          toast({
-            title: "❌ Edge Function Error",
-            description: `${errorMsg}\n\nStatus: ${errorStatus || "unknown"}\n\nDruk F12 → Console voor volledige error details.`,
-            variant: "destructive",
-            duration: 15000,
-          });
+          // Check if it's a 404 even if status is unknown (network errors can hide the real status)
+          if (errorMsg.includes("non-2xx") || errorMsg.includes("status code") || errorStatus === undefined) {
+            toast({
+              title: "❌ Edge Function niet gevonden (404)",
+              description: "De 'invite-user' function bestaat NIET of is NIET gedeployed in Supabase.\n\nVolg deze stappen:\n1. Ga naar Supabase Dashboard → Edge Functions → Functions\n2. Check of 'invite-user' in de lijst staat\n3. Als die er NIET is: Create new edge function → Name: 'invite-user' → Kopieer code uit supabase/functions/invite-user/index.ts → Deploy\n4. Als die er WEL is: Klik erop → Deploy function opnieuw\n\nZie STEP_BY_STEP_DEPLOY_EDGE_FUNCTION.md voor details.",
+              variant: "destructive",
+              duration: 20000,
+            });
+          } else {
+            toast({
+              title: "❌ Edge Function Error",
+              description: `${errorMsg}\n\nStatus: ${errorStatus || "unknown"}\n\nDruk F12 → Console voor volledige error details.`,
+              variant: "destructive",
+              duration: 15000,
+            });
+          }
         }
       } else if (data?.success) {
         toast({
