@@ -12,6 +12,7 @@ import * as XLSX from "xlsx";
 import AdminPanel from "@/components/AdminPanel";
 import ChangePasswordForm from "@/components/ChangePasswordForm";
 import WeeklyCalendarEntry from "@/components/WeeklyCalendarEntry";
+import ScreenshotButton from "@/components/ScreenshotButton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 
@@ -443,6 +444,7 @@ const Index = () => {
             </div>
             <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-6 justify-center md:justify-end">
               <span className="text-gray-700 font-medium text-center sm:text-left">Welcome, {currentUser?.name || "User"}</span>
+              <ScreenshotButton currentUser={currentUser} />
               <Button 
                 variant="outline" 
                 size="sm"
