@@ -324,8 +324,8 @@ const ProjectManagement = ({ currentUser }: ProjectManagementProps) => {
                       <h3 className="text-xl font-bold text-gray-900">{project.name}</h3>
                       <p className="text-blue-700 font-medium">{project.client}</p>
                     </div>
-                    <Badge className={`${getStatusColor(project.status)} border font-medium`}>
-                      {project.status}
+                    <Badge className={`${getStatusColor(project.status || "active")} border font-medium`}>
+                      {project.status === "closed" ? "Gesloten" : project.status || "Actief"}
                     </Badge>
                   </div>
                   <p className="text-gray-700 mb-4 leading-relaxed">{project.description}</p>
