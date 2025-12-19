@@ -383,8 +383,10 @@ const Index = () => {
             </DialogTitle>
           </DialogHeader>
           <div className="py-2 text-base text-gray-700">
-            You have not filled in your work times for <b>week {reminderWeekNum}</b>.<br />
-            Please complete your timesheet for last week.
+            Je hebt je uren nog niet ingevuld voor <b>week {reminderWeekNum}</b>.<br />
+            <br />
+            <strong className="text-orange-700">Ingrid wil graag dat je je uren invult.</strong><br />
+            Vul je timesheet voor vorige week in.
           </div>
           <DialogFooter className="flex gap-2 justify-end">
             <Button variant="outline" onClick={() => setShowReminder(false)}>Dismiss</Button>
