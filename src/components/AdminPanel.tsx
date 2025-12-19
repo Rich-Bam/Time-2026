@@ -111,7 +111,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
     fetchAllEntries();
   }, [users]);
 
-  // Test Edge Function directly
+  // Test Edge Function directly - using Supabase client to avoid CORS issues
   const testEdgeFunction = async () => {
     const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
     const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -130,71 +130,59 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
     }
     
     const testEmail = `test-${Date.now()}@example.com`;
-    const functionUrl = `${supabaseUrl}/functions/v1/invite-user`;
     
-    console.log("🧪 Function URL:", functionUrl);
+    console.log("🧪 Using Supabase client to call Edge Function");
     console.log("🧪 Test email:", testEmail);
     
     try {
       toast({
         title: "🧪 Testing...",
-        description: `Testing Edge Function: ${functionUrl}`,
+        description: `Testing Edge Function via Supabase client...`,
       });
       
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-      
-      const response = await fetch(functionUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${anonKey}`,
-        },
-        body: JSON.stringify({
+      // Use Supabase client's functions.invoke() method - this handles auth and CORS automatically
+      const { data, error } = await supabase.functions.invoke('invite-user', {
+        body: {
           email: testEmail,
           name: "Test User",
           isAdmin: false,
-        }),
-        signal: controller.signal,
+        },
       });
       
-      clearTimeout(timeoutId);
+      console.log("🧪 Supabase client response:", { data, error });
       
-      console.log("🧪 Response status:", response.status);
-      console.log("🧪 Response headers:", Object.fromEntries(response.headers.entries()));
-      
-      let result: any;
-      try {
-        const text = await response.text();
-        console.log("🧪 Response text:", text);
-        result = JSON.parse(text);
-      } catch (e) {
-        result = { error: `Could not parse response (Status: ${response.status})` };
-      }
-      
-      console.log("🧪 Test Result:", { status: response.status, result });
-      
-      if (response.ok && result.success) {
+      if (error) {
+        console.error("🧪 Error from Supabase client:", error);
+        
+        // Check for specific error types
+        if (error.message?.includes("404") || error.message?.includes("not found")) {
+          toast({
+            title: "❌ Edge Function niet gevonden (404)",
+            description: "De 'invite-user' function bestaat NIET in Supabase. Ga naar Supabase Dashboard → Edge Functions → Create 'invite-user' function.",
+            variant: "destructive",
+          });
+        } else if (error.message?.includes("401") || error.message?.includes("403") || error.message?.includes("unauthorized")) {
+          toast({
+            title: "❌ Toegang geweigerd (401/403)",
+            description: "Check of VITE_SUPABASE_ANON_KEY correct is in Netlify environment variables.",
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: "❌ Edge Function Error",
+            description: error.message || JSON.stringify(error),
+            variant: "destructive",
+          });
+        }
+      } else if (data?.success) {
         toast({
           title: "✅ Edge Function werkt!",
           description: `Test email verstuurd naar ${testEmail}. Check Supabase Auth → Users.`,
         });
-      } else if (response.status === 404) {
-        toast({
-          title: "❌ Edge Function niet gevonden (404)",
-          description: "De 'invite-user' function bestaat NIET in Supabase. Ga naar Supabase Dashboard → Edge Functions → Create 'invite-user' function.",
-          variant: "destructive",
-        });
-      } else if (response.status === 401 || response.status === 403) {
-        toast({
-          title: "❌ Toegang geweigerd (401/403)",
-          description: "Check of VITE_SUPABASE_ANON_KEY correct is in Netlify environment variables.",
-          variant: "destructive",
-        });
       } else {
         toast({
-          title: `❌ Edge Function Error (${response.status})`,
-          description: result.error || result.message || JSON.stringify(result),
+          title: "⚠️ Onverwachte response",
+          description: JSON.stringify(data),
           variant: "destructive",
         });
       }
@@ -210,8 +198,8 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
       
       if (err.name === "AbortError") {
         errorMessage = "Timeout: Edge Function reageert niet binnen 10 seconden. Check of de function gedeployed is.";
-      } else if (err.message.includes("Failed to fetch")) {
-        errorMessage = "Kon Edge Function niet bereiken. Mogelijke oorzaken:\n1. Edge Function bestaat niet (404)\n2. CORS probleem\n3. Netwerk probleem\n\nCheck Supabase Dashboard → Edge Functions → Functions";
+      } else if (err.message?.includes("Failed to fetch") || err.message?.includes("network")) {
+        errorMessage = "Kon Edge Function niet bereiken. Mogelijke oorzaken:\n1. Edge Function bestaat niet (404)\n2. CORS probleem\n3. Netwerk probleem\n\nCheck Supabase Dashboard → Edge Functions → Functions → Logs";
       }
       
       toast({
@@ -248,78 +236,67 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
       // Continue with fallback anyway
     }
     
-    // First try Edge Function for email invite
+    // First try Edge Function for email invite - using Supabase client to avoid CORS issues
     try {
-      if (!supabaseUrl) {
-        throw new Error("VITE_SUPABASE_URL is not set");
-      }
+      console.log("🔵 Calling Edge Function via Supabase client...");
+      console.log("🔵 Email:", form.email);
+      console.log("🔵 Name:", form.name || form.email);
+      console.log("🔵 IsAdmin:", form.isAdmin);
       
-      const functionUrl = `${supabaseUrl}/functions/v1/invite-user`;
-      console.log("🔵 Calling Edge Function:", functionUrl);
-      console.log("🔵 Supabase URL:", supabaseUrl);
-      
-      const response = await fetch(functionUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-        },
-        body: JSON.stringify({
+      // Use Supabase client's functions.invoke() method - this handles auth and CORS automatically
+      const { data, error } = await supabase.functions.invoke('invite-user', {
+        body: {
           email: form.email,
           name: form.name || form.email,
           isAdmin: form.isAdmin,
-        }),
+        },
       });
       
-      console.log("🔵 Edge Function response status:", response.status);
-      console.log("🔵 Response headers:", Object.fromEntries(response.headers.entries()));
+      console.log("🔵 Edge Function response:", { data, error });
 
-      if (response.ok) {
-        const result = await response.json();
-        console.log("✅ Edge Function success:", result);
-        if (result.success) {
-          toast({
-            title: "Uitnodiging verstuurd",
-            description: `Een uitnodigingsemail is verstuurd naar ${form.email}. Check je inbox (en spam folder) voor de uitnodigingslink.`,
-          });
-          setForm({ email: "", name: "", password: "", isAdmin: false, must_change_password: true });
-          fetchUsers();
-          return;
-        }
+      if (!error && data?.success) {
+        console.log("✅ Edge Function success:", data);
+        toast({
+          title: "Uitnodiging verstuurd",
+          description: `Een uitnodigingsemail is verstuurd naar ${form.email}. Check je inbox (en spam folder) voor de uitnodigingslink.`,
+        });
+        setForm({ email: "", name: "", password: "", isAdmin: false, must_change_password: true });
+        fetchUsers();
+        return;
       }
       
       // If Edge Function fails, show error and try direct user creation
-      let errorBody: any = {};
-      try {
-        errorBody = await response.json();
-      } catch (e) {
-        const text = await response.text();
-        errorBody = { error: text || `HTTP ${response.status}` };
-      }
-      
-      console.error("❌ Edge Function failed:", {
-        status: response.status,
-        statusText: response.statusText,
-        error: errorBody,
-        url: functionUrl,
-        supabaseUrl: import.meta.env.VITE_SUPABASE_URL
-      });
+      console.error("❌ Edge Function failed:", { data, error });
       
       // Show specific error to user
-      if (response.status === 404) {
-        toast({
-          title: "⚠️ Edge Function niet gevonden (404)",
-          description: "De 'invite-user' function is NIET gedeployed in Supabase. Open Supabase Dashboard → Edge Functions → Functions → Create 'invite-user' function. Gebruiker wordt nu aangemaakt zonder email.",
-          variant: "destructive",
-        });
-      } else if (response.status === 401 || response.status === 403) {
-        toast({
-          title: "⚠️ Toegang geweigerd (401/403)",
-          description: "Check of VITE_SUPABASE_ANON_KEY correct is in .env.local. Gebruiker wordt nu aangemaakt zonder email.",
-          variant: "destructive",
-        });
-      } else if (errorBody?.error) {
-        let errorMessage = errorBody.error;
+      if (error) {
+        if (error.message?.includes("404") || error.message?.includes("not found")) {
+          toast({
+            title: "⚠️ Edge Function niet gevonden (404)",
+            description: "De 'invite-user' function is NIET gedeployed in Supabase. Open Supabase Dashboard → Edge Functions → Functions → Create 'invite-user' function. Gebruiker wordt nu aangemaakt zonder email.",
+            variant: "destructive",
+          });
+        } else if (error.message?.includes("401") || error.message?.includes("403") || error.message?.includes("unauthorized")) {
+          toast({
+            title: "⚠️ Toegang geweigerd (401/403)",
+            description: "Check of VITE_SUPABASE_ANON_KEY correct is in Netlify environment variables. Gebruiker wordt nu aangemaakt zonder email.",
+            variant: "destructive",
+          });
+        } else {
+          let errorMessage = error.message || JSON.stringify(error);
+          if (errorMessage.includes("already registered") || errorMessage.includes("already exists")) {
+            errorMessage = "Dit email adres is al geregistreerd in Supabase Auth.";
+          } else if (errorMessage.includes("email service") || errorMessage.includes("email")) {
+            errorMessage = "Supabase email service probleem. Check Authentication → Email Templates.";
+          }
+          toast({
+            title: "⚠️ Email kon niet worden verstuurd",
+            description: `${errorMessage}. Druk F12 → Console voor details. Gebruiker wordt nu aangemaakt zonder email.`,
+            variant: "destructive",
+          });
+        }
+      } else if (data?.error) {
+        let errorMessage = data.error;
         if (errorMessage.includes("already registered") || errorMessage.includes("already exists")) {
           errorMessage = "Dit email adres is al geregistreerd in Supabase Auth.";
         } else if (errorMessage.includes("email service") || errorMessage.includes("email")) {
@@ -327,21 +304,25 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
         }
         toast({
           title: "⚠️ Email kon niet worden verstuurd",
-          description: `${errorMessage} (Status: ${response.status}). Druk F12 → Console voor details. Gebruiker wordt nu aangemaakt zonder email.`,
+          description: `${errorMessage}. Druk F12 → Console voor details. Gebruiker wordt nu aangemaakt zonder email.`,
           variant: "destructive",
         });
       } else {
         toast({
           title: "⚠️ Edge Function Error",
-          description: `Status ${response.status}: ${response.statusText}. Druk F12 → Console voor details. Gebruiker wordt nu aangemaakt zonder email.`,
+          description: `Onverwachte response: ${JSON.stringify(data)}. Druk F12 → Console voor details. Gebruiker wordt nu aangemaakt zonder email.`,
           variant: "destructive",
         });
       }
     } catch (err: any) {
       console.error("❌ Edge Function network error, falling back:", err);
+      let errorMessage = err.message || "Unknown error";
+      if (err.message?.includes("Failed to fetch") || err.message?.includes("network")) {
+        errorMessage = "Kon Edge Function niet bereiken. Check of de function gedeployed is in Supabase Dashboard → Edge Functions → Functions.";
+      }
       toast({
         title: "⚠️ Netwerkfout",
-        description: `Kon Edge Function niet bereiken: ${err.message}. Check of de function gedeployed is. Gebruiker wordt nu aangemaakt zonder email.`,
+        description: `${errorMessage}. Gebruiker wordt nu aangemaakt zonder email.`,
         variant: "destructive",
       });
     }
