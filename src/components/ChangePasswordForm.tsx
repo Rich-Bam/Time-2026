@@ -18,10 +18,34 @@ const ChangePasswordForm = ({ currentUser, setCurrentUser }: ChangePasswordFormP
 
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!password || password !== confirm) {
-      toast({ title: "Error", description: "Passwords do not match", variant: "destructive" });
+    
+    if (!password) {
+      toast({ 
+        title: "Fout", 
+        description: "Voer een wachtwoord in", 
+        variant: "destructive" 
+      });
       return;
     }
+    
+    if (password.length < 6) {
+      toast({ 
+        title: "Wachtwoord te kort", 
+        description: "Wachtwoord moet minimaal 6 tekens lang zijn.", 
+        variant: "destructive" 
+      });
+      return;
+    }
+    
+    if (password !== confirm) {
+      toast({ 
+        title: "Fout", 
+        description: "Wachtwoorden komen niet overeen", 
+        variant: "destructive" 
+      });
+      return;
+    }
+    
     setLoading(true);
     const { error } = await supabase
       .from("users")
@@ -29,39 +53,62 @@ const ChangePasswordForm = ({ currentUser, setCurrentUser }: ChangePasswordFormP
       .eq("id", currentUser.id);
     setLoading(false);
     if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      toast({ 
+        title: "Fout", 
+        description: error.message, 
+        variant: "destructive" 
+      });
     } else {
-      toast({ title: "Password changed", description: "You can now use your new password." });
+      toast({ 
+        title: "Wachtwoord gewijzigd", 
+        description: "Je kunt nu je nieuwe wachtwoord gebruiken." 
+      });
       setCurrentUser({ ...currentUser, must_change_password: false });
+      setPassword("");
+      setConfirm("");
     }
   };
 
   return (
     <div className="bg-white p-8 rounded shadow w-full max-w-md">
-      <h2 className="text-xl font-bold mb-4">Change Password</h2>
+      <h2 className="text-xl font-bold mb-4">Wachtwoord Wijzigen</h2>
       <form onSubmit={handleChangePassword} className="space-y-4">
         <div>
-          <Label htmlFor="new-password">New Password</Label>
+          <Label htmlFor="new-password">Nieuw Wachtwoord</Label>
           <Input
             id="new-password"
             type="password"
+            placeholder="Minimaal 6 tekens"
             value={password}
             onChange={e => setPassword(e.target.value)}
             required
+            minLength={6}
           />
+          {password && password.length > 0 && password.length < 6 && (
+            <p className="text-xs text-red-500 mt-1">Wachtwoord moet minimaal 6 tekens lang zijn.</p>
+          )}
         </div>
         <div>
-          <Label htmlFor="confirm-password">Confirm Password</Label>
+          <Label htmlFor="confirm-password">Bevestig Wachtwoord</Label>
           <Input
             id="confirm-password"
             type="password"
+            placeholder="Bevestig je wachtwoord"
             value={confirm}
             onChange={e => setConfirm(e.target.value)}
             required
+            minLength={6}
           />
+          {confirm && password !== confirm && (
+            <p className="text-xs text-red-500 mt-1">Wachtwoorden komen niet overeen.</p>
+          )}
         </div>
-        <Button type="submit" className="w-full" disabled={loading}>
-          {loading ? "Saving..." : "Change Password"}
+        <Button 
+          type="submit" 
+          className="w-full" 
+          disabled={loading || !password || !confirm || password.length < 6 || password !== confirm}
+        >
+          {loading ? "Opslaan..." : "Wachtwoord Wijzigen"}
         </Button>
       </form>
     </div>
