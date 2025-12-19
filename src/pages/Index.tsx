@@ -728,7 +728,7 @@ const Index = () => {
         )}
         {activeTab === 'projects' && (
           currentUser?.isAdmin ? (
-            <ProjectManagement />
+            <ProjectManagement currentUser={currentUser} />
           ) : (
             <div className="p-8 text-center text-red-600 font-semibold">You do not have permission to view this page.</div>
           )

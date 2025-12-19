@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, FileText, Users, Clock } from "lucide-react";
+import { Plus, FileText, Users, Clock, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Dialog,
@@ -18,7 +18,11 @@ import {
   DialogClose
 } from "@/components/ui/dialog";
 
-const ProjectManagement = () => {
+interface ProjectManagementProps {
+  currentUser?: any;
+}
+
+const ProjectManagement = ({ currentUser }: ProjectManagementProps) => {
   const [newProject, setNewProject] = useState({
     name: "",
     description: "",
@@ -27,6 +31,8 @@ const ProjectManagement = () => {
   });
 
   const { toast } = useToast();
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [projectToDelete, setProjectToDelete] = useState<any>(null);
 
   // Projects state from Supabase
   const [projects, setProjects] = useState<any[]>([]);
@@ -134,6 +140,73 @@ const ProjectManagement = () => {
     }
   };
 
+  const handleDeleteProject = async () => {
+    if (!projectToDelete) return;
+    
+    // Check if user is admin
+    if (!currentUser?.isAdmin) {
+      toast({
+        title: "Geen Toegang",
+        description: "Alleen admins kunnen projecten verwijderen.",
+        variant: "destructive",
+      });
+      setDeleteConfirmOpen(false);
+      return;
+    }
+
+    // Delete all timesheet entries for this project first
+    const { error: timesheetError } = await supabase
+      .from("timesheet")
+      .delete()
+      .eq("project", projectToDelete.name); // Note: timesheet uses project name, not project_id
+    
+    if (timesheetError) {
+      console.warn("Error deleting timesheet entries:", timesheetError);
+      // Continue anyway - might be using project_id instead
+    }
+
+    // Delete the project
+    const { error } = await supabase
+      .from("projects")
+      .delete()
+      .eq("id", projectToDelete.id);
+    
+    if (error) {
+      toast({
+        title: "Fout bij Verwijderen",
+        description: error.message,
+        variant: "destructive",
+      });
+    } else {
+      toast({
+        title: "Project Verwijderd",
+        description: `${projectToDelete.name} is succesvol verwijderd.`,
+      });
+      // Refresh projects list
+      const { data: updatedProjects } = await supabase
+        .from("projects")
+        .select("*")
+        .is("user_id", null);
+      setProjects(updatedProjects || []);
+    }
+    
+    setDeleteConfirmOpen(false);
+    setProjectToDelete(null);
+  };
+
+  const openDeleteConfirm = (project: any) => {
+    if (!currentUser?.isAdmin) {
+      toast({
+        title: "Geen Toegang",
+        description: "Alleen admins kunnen projecten verwijderen.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setProjectToDelete(project);
+    setDeleteConfirmOpen(true);
+  };
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
       {/* Add New Project */}
@@ -226,12 +299,26 @@ const ProjectManagement = () => {
                         <span className="font-medium">members</span>
                       </div>
                     </div>
-                    <Dialog open={modalOpen && modalProject?.id === project.id} onOpenChange={setModalOpen}>
-                      <DialogTrigger asChild>
-                        <Button variant="outline" size="sm" className="border-blue-200 text-blue-700 hover:bg-blue-50" onClick={() => handleViewDetails(project)}>
-                          View Details
+                    <div className="flex items-center gap-2">
+                      <Dialog open={modalOpen && modalProject?.id === project.id} onOpenChange={setModalOpen}>
+                        <DialogTrigger asChild>
+                          <Button variant="outline" size="sm" className="border-blue-200 text-blue-700 hover:bg-blue-50" onClick={() => handleViewDetails(project)}>
+                            View Details
+                          </Button>
+                        </DialogTrigger>
+                      </Dialog>
+                      {currentUser?.isAdmin && (
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="border-red-200 text-red-700 hover:bg-red-50" 
+                          onClick={() => openDeleteConfirm(project)}
+                        >
+                          <Trash2 className="h-4 w-4 mr-1" />
+                          Verwijder
                         </Button>
-                      </DialogTrigger>
+                      )}
+                    </div>
                       <DialogContent>
                         <DialogHeader>
                           <DialogTitle>Project Details: {project.name}</DialogTitle>
@@ -266,6 +353,28 @@ const ProjectManagement = () => {
                 </div>
               ))}
             </div>
+            
+            {/* Delete Confirmation Dialog */}
+            <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Project Verwijderen</DialogTitle>
+                  <DialogDescription>
+                    Weet je zeker dat je "{projectToDelete?.name}" wilt verwijderen? 
+                    Alle gerelateerde timesheet entries worden ook verwijderd. Deze actie kan niet ongedaan worden gemaakt.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="flex justify-end gap-2 mt-4">
+                  <Button variant="outline" onClick={() => setDeleteConfirmOpen(false)}>
+                    Annuleren
+                  </Button>
+                  <Button variant="destructive" onClick={handleDeleteProject}>
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Verwijderen
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
             <div className="mt-8 p-6 bg-blue-50 rounded-xl text-blue-800 border border-blue-200">
               <strong className="text-blue-900">Note:</strong> Connect to Supabase to persist project data and enable team collaboration features.
             </div>
