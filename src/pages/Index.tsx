@@ -468,11 +468,17 @@ const Index = () => {
         <div className="container mx-auto px-4 sm:px-6 py-4 sm:py-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-12">
-              <img 
-                src="/bampro-marine-logo.jpg" 
-                alt="BAMPRO MARINE" 
-                className="h-12 sm:h-14 md:h-16 object-contain"
-              />
+              <button
+                onClick={() => setActiveTab('weekly')}
+                className="cursor-pointer hover:opacity-80 transition-opacity"
+                title="Ga naar homepage"
+              >
+                <img 
+                  src="/bampro-marine-logo.jpg" 
+                  alt="BAMPRO MARINE" 
+                  className="h-12 sm:h-14 md:h-16 object-contain"
+                />
+              </button>
               <nav className="flex flex-wrap md:flex-nowrap items-center gap-2 md:gap-8 justify-center md:justify-start">
                 <button
                   className={`text-base sm:text-lg font-medium px-3 py-1 rounded transition-colors ${activeTab === 'weekly' ? 'bg-orange-600 text-white' : 'text-orange-700 hover:bg-orange-50'}`}
