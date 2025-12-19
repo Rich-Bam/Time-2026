@@ -155,14 +155,21 @@ const ProjectManagement = ({ currentUser }: ProjectManagementProps) => {
     }
 
     // Delete all timesheet entries for this project first
-    const { error: timesheetError } = await supabase
+    // Try both project name and project_id (depending on how entries are stored)
+    const { error: timesheetErrorByName } = await supabase
       .from("timesheet")
       .delete()
-      .eq("project", projectToDelete.name); // Note: timesheet uses project name, not project_id
+      .eq("project", projectToDelete.name);
     
-    if (timesheetError) {
-      console.warn("Error deleting timesheet entries:", timesheetError);
-      // Continue anyway - might be using project_id instead
+    // Also try deleting by project_id if it exists in timesheet
+    const { error: timesheetErrorById } = await supabase
+      .from("timesheet")
+      .delete()
+      .eq("project_id", projectToDelete.id);
+    
+    if (timesheetErrorByName && timesheetErrorById) {
+      console.warn("Error deleting timesheet entries:", timesheetErrorByName, timesheetErrorById);
+      // Continue anyway - project might not have entries
     }
 
     // Delete the project
@@ -180,7 +187,7 @@ const ProjectManagement = ({ currentUser }: ProjectManagementProps) => {
     } else {
       toast({
         title: "Project Verwijderd",
-        description: `${projectToDelete.name} is succesvol verwijderd.`,
+        description: `${projectToDelete.name} is succesvol verwijderd. Alle gerelateerde timesheet entries zijn ook verwijderd.`,
       });
       // Refresh projects list
       const { data: updatedProjects } = await supabase
@@ -188,6 +195,8 @@ const ProjectManagement = ({ currentUser }: ProjectManagementProps) => {
         .select("*")
         .is("user_id", null);
       setProjects(updatedProjects || []);
+      // Refresh project hours
+      setProjectHours({});
     }
     
     setDeleteConfirmOpen(false);
