@@ -279,6 +279,59 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
     }
     
     const entriesToSave = [];
+    const customProjectsToCreate = new Set<string>();
+    
+    // First pass: collect all custom projects that need to be created
+    for (let dayIdx = 0; dayIdx < days.length; dayIdx++) {
+      const day = days[dayIdx];
+      const isWeekend = day.date.getDay() === 0 || day.date.getDay() === 6;
+      for (let entryIdx = 0; entryIdx < day.entries.length; entryIdx++) {
+        const entry = day.entries[entryIdx];
+        const isDayOff = entry.workType === "31";
+        if (entry.project && !isDayOff && currentUser?.id) {
+          const isCustomProject = !projects.some(p => p.name === entry.project);
+          if (isCustomProject) {
+            customProjectsToCreate.add(entry.project);
+          }
+        }
+      }
+    }
+    
+    // Create all custom projects in batch
+    if (customProjectsToCreate.size > 0 && currentUser?.id) {
+      for (const projectName of customProjectsToCreate) {
+        const { data: existingProject } = await supabase
+          .from("projects")
+          .select("id")
+          .eq("name", projectName)
+          .eq("user_id", currentUser.id)
+          .single();
+        
+        if (!existingProject) {
+          await supabase
+            .from("projects")
+            .insert([{
+              name: projectName,
+              user_id: currentUser.id,
+              description: null
+            }]);
+        }
+      }
+      
+      // Refresh projects list once after creating all custom projects
+      const { data: updatedProjects } = await supabase
+        .from("projects")
+        .select("id, name, user_id")
+        .or(`user_id.is.null,user_id.eq.${currentUser.id}`);
+      if (updatedProjects) {
+        const filteredProjects = updatedProjects.filter(
+          p => !p.user_id || p.user_id === currentUser.id
+        );
+        setProjects(filteredProjects);
+      }
+    }
+    
+    // Second pass: create entries
     for (let dayIdx = 0; dayIdx < days.length; dayIdx++) {
       const day = days[dayIdx];
       
@@ -337,47 +390,8 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
           hoursToSave = Math.max(0, hoursToSave - 0.5);
         }
         
-        // Check if project is a custom project (not in global projects list)
-        let projectToSave = isDayOff ? null : entry.project;
-        if (projectToSave && !isDayOff && currentUser?.id) {
-          // Check if this is a custom project (not in the projects list)
-          const isCustomProject = !projects.some(p => p.name === projectToSave);
-          if (isCustomProject) {
-            // Save custom project to database for this user only
-            const { data: existingProject } = await supabase
-              .from("projects")
-              .select("id")
-              .eq("name", projectToSave)
-              .eq("user_id", currentUser.id)
-              .single();
-            
-            if (!existingProject) {
-              // Create new custom project for this user
-              await supabase
-                .from("projects")
-                .insert([{
-                  name: projectToSave,
-                  user_id: currentUser.id,
-                  description: null
-                }]);
-              
-              // Refresh projects list to include the new custom project
-              const { data: updatedProjects } = await supabase
-                .from("projects")
-                .select("id, name, user_id")
-                .or(`user_id.is.null,user_id.eq.${currentUser.id}`);
-              if (updatedProjects) {
-                const filteredProjects = updatedProjects.filter(
-                  p => !p.user_id || p.user_id === currentUser.id
-                );
-                setProjects(filteredProjects);
-              }
-            }
-          }
-        }
-        
         entriesToSave.push({
-          project: projectToSave,
+          project: isDayOff ? null : entry.project,
           user_id: currentUser?.id || null,
           date: day.date.toISOString().split('T')[0],
           hours: hoursToSave,
