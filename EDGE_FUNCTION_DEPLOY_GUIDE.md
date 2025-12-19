@@ -58,15 +58,29 @@ Je project reference vind je in:
 
 ---
 
-## Stap 4: Environment Variabelen Instellen
+## Stap 4: Resend API Key Aanmaken
 
-### Optie A: Via Supabase Dashboard (Aanbevolen)
+1. Ga naar **Resend**: https://resend.com
+2. Maak een account aan (gratis plan beschikbaar)
+3. Ga naar **API Keys**: https://resend.com/api-keys
+4. Klik op **Create API Key**
+5. Geef het een naam (bijv. "BAMPRO Timesheet")
+6. Kopieer de API key (je ziet hem maar één keer!)
+
+**Resend Gratis Plan:**
+- 3,000 emails per maand
+- 100 emails per dag
+- Goede deliverability
+- Transactional emails
+
+## Stap 5: Environment Variabelen Instellen
+
+### Via Supabase Dashboard (Aanbevolen)
 
 1. Ga naar je **Supabase Dashboard**: https://supabase.com/dashboard
 2. Selecteer je project
-3. Ga naar **Project Settings** → **Edge Functions**
-4. Klik op **Manage secrets**
-5. Voeg de volgende secrets toe:
+3. Ga naar **Edge Functions** → **Secrets** (of **Project Settings** → **Edge Functions** → **Manage secrets**)
+4. Klik op **Add new secret** en voeg de volgende secrets toe:
 
    **Secret 1:**
    - Name: `SUPABASE_URL`
@@ -76,6 +90,19 @@ Je project reference vind je in:
    **Secret 2:**
    - Name: `SUPABASE_SERVICE_ROLE_KEY`
    - Value: (Je service_role key - zie hieronder hoe je die vindt)
+
+   **Secret 3:**
+   - Name: `RESEND_API_KEY`
+   - Value: (Je Resend API key van stap 4)
+
+   **Secret 4 (Optioneel):**
+   - Name: `RESEND_FROM_EMAIL`
+   - Value: `noreply@bampro.nl` (of je eigen verified email in Resend)
+   - **Let op:** Je moet deze email eerst verifiëren in Resend!
+
+   **Secret 5 (Optioneel):**
+   - Name: `APP_URL`
+   - Value: `https://bampro-uren.nl` (je website URL voor login links)
 
 ### Service Role Key vinden:
 
@@ -93,7 +120,14 @@ supabase secrets set SUPABASE_SERVICE_ROLE_KEY=your_service_role_key_here --proj
 
 ---
 
-## Stap 5: Edge Function Deployen
+## Stap 6: Email Verifiëren in Resend
+
+1. Ga naar **Resend** → **Domains**: https://resend.com/domains
+2. Voeg je domein toe (bijv. `bampro.nl`) of gebruik een verified email
+3. Volg de DNS instructies om je domein te verifiëren
+4. **Alternatief:** Gebruik een verified email adres (bijv. Gmail) voor `RESEND_FROM_EMAIL`
+
+## Stap 7: Edge Function Deployen
 
 ```bash
 cd C:\time-track-teamwork-excel-main\time-track-teamwork-excel-main
@@ -108,53 +142,9 @@ Function invite-user deployed successfully
 
 ---
 
-## Stap 6: Supabase Email Configureren
-
-### 6.1 Email Templates Controleren
-
-1. Ga naar **Authentication** → **Email Templates**
-2. Controleer of de **"Invite user"** template actief is
-3. Optioneel: Pas de template aan met je eigen branding
-
-### 6.2 SMTP Settings Configureren
-
-**Optie A: Supabase Default Email (Gratis, maar beperkt)**
-
-1. Ga naar **Project Settings** → **Auth** → **SMTP Settings**
-2. Supabase gebruikt standaard hun eigen email service
-3. Dit werkt automatisch, maar heeft beperkingen:
-   - Max 3 emails per uur (gratis plan)
-   - Max 4 emails per uur (Pro plan)
-   - Emails kunnen in spam terechtkomen
-
-**Optie B: Custom SMTP (Aanbevolen voor productie)**
-
-1. Ga naar **Project Settings** → **Auth** → **SMTP Settings**
-2. Schakel **"Enable Custom SMTP"** in
-3. Vul je SMTP gegevens in:
-
-   **Voor Gmail:**
-   - Host: `smtp.gmail.com`
-   - Port: `587`
-   - Username: `jouw-email@gmail.com`
-   - Password: (App Password - zie hieronder)
-   - Sender email: `jouw-email@gmail.com`
-   - Sender name: `BAMPRO MARINE`
-
-   **Voor andere providers:**
-   - Check de documentatie van je email provider voor SMTP instellingen
-
-### Gmail App Password Aanmaken:
-
-1. Ga naar je Google Account: https://myaccount.google.com/
-2. Ga naar **Security** → **2-Step Verification** (moet aan staan)
-3. Scroll naar **App passwords**
-4. Maak een nieuwe app password aan voor "Mail"
-5. Gebruik dit wachtwoord in Supabase SMTP settings
-
 ---
 
-## Stap 7: Testen
+## Stap 8: Testen
 
 1. Log in op je website als admin
 2. Ga naar **Admin Panel**
@@ -166,7 +156,9 @@ Function invite-user deployed successfully
 **Geen email ontvangen?**
 - Check je spam/junk folder
 - Controleer Supabase Dashboard → **Logs** → **Edge Functions** voor errors
-- Controleer of SMTP correct is geconfigureerd
+- Controleer Resend Dashboard → **Emails** voor email status
+- Verifieer dat `RESEND_API_KEY` correct is ingesteld
+- Controleer of `RESEND_FROM_EMAIL` geverifieerd is in Resend
 - Test met een ander email adres
 
 **Edge Function error?**
@@ -180,7 +172,7 @@ Function invite-user deployed successfully
 
 ---
 
-## Stap 8: Verificatie
+## Stap 9: Verificatie
 
 Na succesvol deployen zou je moeten kunnen:
 
@@ -215,10 +207,11 @@ supabase functions delete invite-user --project-ref bgddtkiekjcdhcmrnxsi
 - Gebruik environment variabelen, niet hardcoded keys
 - De Edge Function gebruikt de service_role key veilig server-side
 
-📧 **Email Limits:**
-- Gratis plan: 3 emails/uur
-- Pro plan: 4 emails/uur
-- Met custom SMTP: afhankelijk van je provider
+📧 **Email Limits (Resend):**
+- Gratis plan: 3,000 emails/maand, 100 emails/dag
+- Pro plan: 50,000+ emails/maand
+- Goede deliverability (minder spam)
+- Transactional emails geoptimaliseerd
 
 🔧 **Onderhoud:**
 - Update de Edge Function na code wijzigingen
