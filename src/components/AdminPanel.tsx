@@ -249,7 +249,21 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
   const handleAddUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.email || !form.password) {
-      toast({ title: "Missing info", description: "Email and password required", variant: "destructive" });
+      toast({ 
+        title: "Ontbrekende informatie", 
+        description: "Email en wachtwoord zijn verplicht", 
+        variant: "destructive" 
+      });
+      return;
+    }
+    
+    // Validate password length
+    if (form.password.length < 6) {
+      toast({ 
+        title: "Wachtwoord te kort", 
+        description: "Wachtwoord moet minimaal 6 tekens lang zijn.", 
+        variant: "destructive" 
+      });
       return;
     }
     
@@ -640,8 +654,18 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
             <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
           </div>
           <div>
-            <Label>Password</Label>
-            <Input type="text" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} required />
+            <Label>Wachtwoord</Label>
+            <Input 
+              type="password" 
+              value={form.password} 
+              onChange={e => setForm(f => ({ ...f, password: e.target.value }))} 
+              required 
+              minLength={6}
+              placeholder="Minimaal 6 tekens"
+            />
+            {form.password && form.password.length > 0 && form.password.length < 6 && (
+              <p className="text-xs text-red-500 mt-1">Wachtwoord moet minimaal 6 tekens lang zijn.</p>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <input type="checkbox" id="isAdmin" checked={form.isAdmin} onChange={e => setForm(f => ({ ...f, isAdmin: e.target.checked }))} />
