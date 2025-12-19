@@ -114,16 +114,16 @@ const AuthSection = ({ onLogin, setCurrentUser }: AuthSectionProps) => {
     setRegisterData({ email: "", name: "", password: "" });
   };
 
-  // Handle password reset
+  // Handle password reset - send email via Supabase Auth
   const handleResetPassword = async () => {
     if (!resetEmail) {
-      setResetMessage("Please enter an email address.");
+      setResetMessage("Voer een email adres in.");
       return;
     }
     setResetLoading(true);
     setResetMessage("");
     
-    // Check if user exists in our custom users table
+    // First check if user exists in our custom users table
     const { data: user, error: userError } = await supabase
       .from("users")
       .select("id, email")
@@ -131,35 +131,50 @@ const AuthSection = ({ onLogin, setCurrentUser }: AuthSectionProps) => {
       .single();
     
     if (userError || !user) {
-      setResetMessage("User not found. Please check your email address.");
+      setResetMessage("Gebruiker niet gevonden. Controleer je email adres.");
       setResetLoading(false);
       return;
     }
     
-    // Generate a temporary random password
-    const tempPassword = Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-8);
+    // Get app URL for redirect (use the actual website URL, not Supabase URL)
+    const appUrl = 'https://bampro-uren.nl'; // Or use window.location.origin for current domain
     
-    // Update password in database
-    const { error: updateError } = await supabase
-      .from("users")
-      .update({ 
-        password: tempPassword,
-        must_change_password: true 
-      })
-      .eq("id", user.id);
+    // Use Supabase Auth's password reset - this sends email automatically!
+    // Note: This only works if the user exists in Supabase Auth
+    // Users invited via Edge Function will be in Auth, but direct-created users might not be
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(resetEmail, {
+      redirectTo: `${appUrl}/reset`, // Redirect to password reset page
+    });
     
-    if (updateError) {
-      setResetMessage(`Error: ${updateError.message}`);
+    if (resetError) {
+      // If user doesn't exist in Supabase Auth, we need to use Edge Function
+      console.log("User not in Supabase Auth, trying Edge Function...");
+      
+      // Try calling password-reset Edge Function (if it exists)
+      // For now, show error but suggest contacting admin
+      setResetMessage(
+        "Kon geen password reset email versturen. " +
+        "Als je account via email uitnodiging is aangemaakt, probeer het opnieuw. " +
+        "Anders neem contact op met een administrator."
+      );
       setResetLoading(false);
       return;
     }
     
-    // For now, show the temporary password (in production, you'd send this via email)
-    setResetMessage(`Password reset! Your temporary password is: ${tempPassword}. Please change it after logging in.`);
+    // Success - email sent!
+    setResetMessage(
+      "Password reset email is verstuurd! " +
+      "Check je inbox (en spam folder) voor de reset link. " +
+      "De link is 1 uur geldig."
+    );
     setResetLoading(false);
+    setShowResetModal(false); // Close modal after success
+    setResetEmail(""); // Clear email
     
-    // Note: In production, you should send this via email using a Supabase Edge Function
-    // For now, we're showing it directly (not secure, but functional for testing)
+    toast({
+      title: "Reset email verstuurd",
+      description: `Een password reset link is verstuurd naar ${resetEmail}. Check je inbox.`,
+    });
   };
 
   return (
@@ -260,8 +275,8 @@ const AuthSection = ({ onLogin, setCurrentUser }: AuthSectionProps) => {
       <Dialog open={showResetModal} onOpenChange={setShowResetModal}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Reset Password</DialogTitle>
-            <DialogDescription>Enter your email to receive a password reset link.</DialogDescription>
+            <DialogTitle>Wachtwoord Resetten</DialogTitle>
+            <DialogDescription>Voer je email adres in om een wachtwoord reset link te ontvangen.</DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
             <Label htmlFor="reset-email">Email</Label>
@@ -275,10 +290,16 @@ const AuthSection = ({ onLogin, setCurrentUser }: AuthSectionProps) => {
               disabled={resetLoading}
             />
             <Button onClick={handleResetPassword} disabled={resetLoading || !resetEmail} className="w-full">
-              {resetLoading ? "Sending..." : "Send Reset Link"}
+              {resetLoading ? "Verzenden..." : "Verstuur Reset Link"}
             </Button>
             {resetMessage && (
-              <div className="text-sm text-center mt-2" style={{ color: resetMessage.includes('sent') ? 'green' : 'red' }}>
+              <div 
+                className={`text-sm text-center mt-2 p-3 rounded ${
+                  resetMessage.includes('verstuurd') || resetMessage.includes('inbox')
+                    ? 'bg-green-50 text-green-700 border border-green-200'
+                    : 'bg-red-50 text-red-700 border border-red-200'
+                }`}
+              >
                 {resetMessage}
               </div>
             )}
