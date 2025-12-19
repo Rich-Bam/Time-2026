@@ -450,6 +450,53 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
       return;
     }
     
+    // First, collect custom projects that need to be created
+    const customProjectsToCreate = new Set<string>();
+    for (let entryIdx = 0; entryIdx < day.entries.length; entryIdx++) {
+      const entry = day.entries[entryIdx];
+      const isDayOff = entry.workType === "31";
+      if (entry.project && !isDayOff && currentUser?.id) {
+        const isCustomProject = !projects.some(p => p.name === entry.project);
+        if (isCustomProject) {
+          customProjectsToCreate.add(entry.project);
+        }
+      }
+    }
+    
+    // Create all custom projects in batch
+    if (customProjectsToCreate.size > 0 && currentUser?.id) {
+      for (const projectName of customProjectsToCreate) {
+        const { data: existingProject } = await supabase
+          .from("projects")
+          .select("id")
+          .eq("name", projectName)
+          .eq("user_id", currentUser.id)
+          .single();
+        
+        if (!existingProject) {
+          await supabase
+            .from("projects")
+            .insert([{
+              name: projectName,
+              user_id: currentUser.id,
+              description: null
+            }]);
+        }
+      }
+      
+      // Refresh projects list once after creating all custom projects
+      const { data: updatedProjects } = await supabase
+        .from("projects")
+        .select("id, name, user_id")
+        .or(`user_id.is.null,user_id.eq.${currentUser.id}`);
+      if (updatedProjects) {
+        const filteredProjects = updatedProjects.filter(
+          p => !p.user_id || p.user_id === currentUser.id
+        );
+        setProjects(filteredProjects);
+      }
+    }
+    
     const entriesToSave = [];
     const dateStr = day.date.toISOString().split('T')[0];
     const allEntries = [
