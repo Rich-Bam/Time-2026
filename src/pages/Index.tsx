@@ -299,6 +299,67 @@ const Index = () => {
     });
   };
 
+  // Export by week number (admin only)
+  const handleExportWeekNumber = async () => {
+    if (!selectedWeekNumber || !selectedYear) {
+      toast({
+        title: "Ontbrekende Informatie",
+        description: "Selecteer een week nummer en jaar.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    const weekNum = parseInt(selectedWeekNumber);
+    const year = parseInt(selectedYear);
+    
+    if (isNaN(weekNum) || weekNum < 1 || weekNum > 53) {
+      toast({
+        title: "Ongeldig Week Nummer",
+        description: "Week nummer moet tussen 1 en 53 zijn.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    setExporting(true);
+    
+    // Get date range for the week
+    const { from, to } = getWeekDateRange(weekNum, year);
+    
+    // Build query with optional user filter
+    let queryBuilder = supabase
+      .from("timesheet")
+      .select("*, projects(name)")
+      .gte("date", from)
+      .lte("date", to);
+    
+    // If a user is selected, filter by user
+    if (selectedUserId && selectedUserId !== "all") {
+      queryBuilder = queryBuilder.eq("user_id", selectedUserId);
+    }
+    
+    const { data, error } = await queryBuilder;
+    if (error) {
+      toast({
+        title: "Export Mislukt",
+        description: error.message,
+        variant: "destructive",
+      });
+      setExporting(false);
+      return;
+    }
+    const rows = (data || []).map((row) => ({ ...row, project: row.projects?.name || "" }));
+    const selectedUser = users.find(u => u.id === selectedUserId);
+    const userLabel = selectedUser ? `_${selectedUser.name || selectedUser.email}` : "";
+    downloadExcel(rows, `timesheet_Week${weekNum}_${year}${userLabel}.xlsx`);
+    setExporting(false);
+    toast({
+      title: "Export Succesvol",
+      description: `Data geëxporteerd voor week ${weekNum} van ${year}${selectedUser ? ` voor ${selectedUser.name || selectedUser.email}` : ""}.`,
+    });
+  };
+
   // Fetch users for admin export dropdown
   useEffect(() => {
     if (currentUser?.isAdmin && activeTab === 'export') {
