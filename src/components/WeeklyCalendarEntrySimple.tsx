@@ -681,7 +681,10 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
         title: "Week Confirmed",
         description: "This week has been confirmed and locked. You can no longer make changes.",
       });
-      // Refresh confirmed status by fetching from database
+      // Immediately set locked state, then refresh from database to be sure
+      const weekKeyDate = weekDates[0].toISOString().split('T')[0];
+      setConfirmedWeeks(prev => ({ ...prev, [weekKeyDate]: true }));
+      // Also refresh confirmed status by fetching from database
       await fetchConfirmedStatus();
     }
   };
