@@ -37,6 +37,9 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
   const [reminderUserIds, setReminderUserIds] = useState<string[]>([]);
   const [reminderWeekNumber, setReminderWeekNumber] = useState<string>("");
   const [reminderYear, setReminderYear] = useState<string>(new Date().getFullYear().toString());
+  const [timebuzzerSyncing, setTimebuzzerSyncing] = useState(false);
+  const [timebuzzerSyncStartDate, setTimebuzzerSyncStartDate] = useState("");
+  const [timebuzzerSyncEndDate, setTimebuzzerSyncEndDate] = useState("");
 
   // Fetch users
   const fetchUsers = async () => {
@@ -621,6 +624,54 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
         .eq('confirmed', true)
         .order('week_start_date', { ascending: false });
       setConfirmedWeeks(data || []);
+    }
+  };
+
+  // Timebuzzer Sync
+  const handleTimebuzzerSync = async () => {
+    if (!timebuzzerSyncStartDate || !timebuzzerSyncEndDate) {
+      toast({
+        title: "Error",
+        description: "Please select both start and end dates",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setTimebuzzerSyncing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('timebuzzer-sync', {
+        body: {
+          action: 'sync-to-timesheet',
+          startDate: timebuzzerSyncStartDate,
+          endDate: timebuzzerSyncEndDate,
+        },
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      if (data.success) {
+        toast({
+          title: "Sync Successful",
+          description: `Synced ${data.inserted || 0} time entries from Timebuzzer`,
+        });
+        
+        // Reset dates
+        setTimebuzzerSyncStartDate("");
+        setTimebuzzerSyncEndDate("");
+      } else {
+        throw new Error(data.error || "Sync failed");
+      }
+    } catch (error: any) {
+      toast({
+        title: "Sync Error",
+        description: error.message || "Failed to sync Timebuzzer data",
+        variant: "destructive",
+      });
+    } finally {
+      setTimebuzzerSyncing(false);
     }
   };
 
