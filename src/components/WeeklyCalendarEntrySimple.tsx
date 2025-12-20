@@ -698,7 +698,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                 
                 return parseTime(timeA) - parseTime(timeB);
               });
-              const isDayLocked = confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin;
+              const isDayLocked = isLocked;
               const dayName = day.date.toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long' });
               const dayShort = day.date.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short' });
               const dayColors = [
