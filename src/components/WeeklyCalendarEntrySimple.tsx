@@ -96,6 +96,12 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
   const [dbDaysOff, setDbDaysOff] = useState(0);
   const [customProjectInputs, setCustomProjectInputs] = useState<Record<string, string>>({});
   const [editingEntry, setEditingEntry] = useState<{ id: number; dateStr: string } | null>(null);
+  
+  // Helper function to check if week is locked
+  const isWeekLocked = (): boolean => {
+    const weekKey = weekDates[0].toISOString().split('T')[0];
+    return confirmedWeeks[weekKey] && !currentUser?.isAdmin;
+  };
 
   const weekDates = getWeekDates(weekStart);
   const weekNumber = getISOWeekNumber(weekDates[0]);
@@ -219,10 +225,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
   };
 
   const handleAddEntry = (dayIdx: number) => {
-    const weekKey = weekDates[0].toISOString().split('T')[0];
-    const isWeekLocked = confirmedWeeks[weekKey];
-    
-    if (isWeekLocked && !currentUser?.isAdmin) {
+    if (isWeekLocked()) {
       toast({
         title: "Not Allowed",
         description: "This week is confirmed and cannot be changed anymore.",
@@ -239,10 +242,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
   };
 
   const handleRemoveEntry = (dayIdx: number, entryIdx: number) => {
-    const weekKey = weekDates[0].toISOString().split('T')[0];
-    const isWeekLocked = confirmedWeeks[weekKey];
-    
-    if (isWeekLocked && !currentUser?.isAdmin) {
+    if (isWeekLocked()) {
       toast({
         title: "Not Allowed",
         description: "This week is confirmed and cannot be changed anymore.",
@@ -260,9 +260,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
 
   const handleEntryChange = (dayIdx: number, entryIdx: number, field: string, value: any) => {
     // Prevent changes if week is locked
-    const weekKey = weekDates[0].toISOString().split('T')[0];
-    const isWeekLocked = confirmedWeeks[weekKey];
-    if (isWeekLocked && !currentUser?.isAdmin) {
+    if (isWeekLocked()) {
       return; // Silently ignore changes if week is locked
     }
     
@@ -294,10 +292,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
   const handleSaveEntry = async (dayIdx: number, entryIdx: number) => {
     if (!currentUser) return;
     
-    const weekKey = weekDates[0].toISOString().split('T')[0];
-    const isWeekLocked = confirmedWeeks[weekKey];
-    
-    if (isWeekLocked && !currentUser?.isAdmin) {
+    if (isWeekLocked()) {
       toast({
         title: "Not Allowed",
         description: "This week is confirmed and cannot be changed anymore.",
@@ -440,10 +435,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
   
   // Edit an existing entry
   const handleEditEntry = (entry: Entry, dateStr: string) => {
-    const weekKey = weekDates[0].toISOString().split('T')[0];
-    const isWeekLocked = confirmedWeeks[weekKey];
-    
-    if (isWeekLocked && !currentUser?.isAdmin) {
+    if (isWeekLocked()) {
       toast({
         title: "Not Allowed",
         description: "This week is confirmed and cannot be changed anymore.",
@@ -623,10 +615,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
   };
 
   const handleDeleteEntry = async (entryId: number, dateStr: string) => {
-    const weekKey = weekDates[0].toISOString().split('T')[0];
-    const isWeekLocked = confirmedWeeks[weekKey];
-    
-    if (isWeekLocked && !currentUser?.isAdmin) {
+    if (isWeekLocked()) {
       toast({
         title: "Not Allowed",
         description: "This week is confirmed and cannot be changed anymore.",
@@ -704,7 +693,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
     }
   };
 
-  const isLocked = confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin;
+  const isLocked = isWeekLocked();
 
   return (
     <div className="flex flex-col gap-3 sm:gap-4">
