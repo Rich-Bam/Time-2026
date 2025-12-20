@@ -925,26 +925,26 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
     <div className="flex flex-col gap-4">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold">Weekly Calendar Entry</h2>
+          <h2 className="text-2xl font-bold">{t('weekly.title')}</h2>
           <div className="mt-1 text-gray-700 font-medium">
-            Week {weekNumber} ({weekDates[0].toLocaleDateString()} - {weekDates[6].toLocaleDateString()})
+            {t('weekly.week')} {weekNumber} ({weekDates[0].toLocaleDateString()} - {weekDates[6].toLocaleDateString()})
           </div>
           <div className="flex items-center gap-4 mt-2">
-            <Button variant="outline" onClick={() => changeWeek(-1)}>&lt; Prev</Button>
-            <Button variant="outline" onClick={() => changeWeek(1)}>Next &gt;</Button>
+            <Button variant="outline" onClick={() => changeWeek(-1)}>&lt; {t('weekly.prev')}</Button>
+            <Button variant="outline" onClick={() => changeWeek(1)}>{t('weekly.next')} &gt;</Button>
             <Button variant="outline" onClick={handleExportWeek} className="ml-2">
               <Download className="h-4 w-4 mr-2" />
-              Export Week to Excel
+              {t('weekly.exportWeek')}
             </Button>
           </div>
         </div>
         <Card className="bg-blue-50 border-blue-200 min-w-[260px]">
           <CardHeader>
-            <CardTitle className="text-blue-900 text-lg">Days Off Remaining</CardTitle>
+            <CardTitle className="text-blue-900 text-lg">{t('weekly.daysOffRemaining')}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-blue-700">{daysOffLeft} / {totalDaysOff}</div>
-            <div className="text-sm text-blue-600 mt-2">You have {daysOffLeft} days off left this year.</div>
+            <div className="text-sm text-blue-600 mt-2">{t('weekly.daysOffLeft', { days: daysOffLeft })}</div>
           </CardContent>
         </Card>
       </div>
@@ -964,7 +964,7 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
                   >
                     <div className="font-semibold text-center text-sm">{day.date.toLocaleDateString(undefined, { weekday: 'short' })}</div>
                     <div className="font-medium text-center text-xs">{day.date.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}</div>
-                    <div className="text-xs text-center text-gray-500 mt-1">{totalEntries} {totalEntries === 1 ? 'entry' : 'entries'}</div>
+                    <div className="text-xs text-center text-gray-500 mt-1">{totalEntries} {totalEntries === 1 ? t('weekly.entry') : t('weekly.entries')}</div>
                   </div>
                 );
               })}
@@ -975,7 +975,7 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
                 size="sm"
                 onClick={() => setViewMode(viewMode === "cards" ? "overview" : "cards")}
               >
-                {viewMode === "cards" ? "📊 Week Overzicht" : "📋 Dag Weergave"}
+                {viewMode === "cards" ? `📊 ${t('weekly.weekOverview')}` : `📋 ${t('weekly.dayView')}`}
               </Button>
             </div>
           </div>
@@ -992,11 +992,11 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
               <table className="min-w-full border-collapse">
                 <thead>
                   <tr className="bg-gray-100">
-                    <th className="border p-2 text-left sticky left-0 bg-gray-100 z-10 min-w-[120px]">Dag</th>
-                    <th className="border p-2 text-left min-w-[100px]">Werk Type</th>
-                    <th className="border p-2 text-left min-w-[150px]">Project</th>
-                    <th className="border p-2 text-left min-w-[80px]">Van</th>
-                    <th className="border p-2 text-left min-w-[80px]">Tot</th>
+                    <th className="border p-2 text-left sticky left-0 bg-gray-100 z-10 min-w-[120px]">{t('weekly.day')}</th>
+                    <th className="border p-2 text-left min-w-[100px]">{t('weekly.workType')}</th>
+                    <th className="border p-2 text-left min-w-[150px]">{t('weekly.project')}</th>
+                    <th className="border p-2 text-left min-w-[80px]">{t('weekly.van')}</th>
+                    <th className="border p-2 text-left min-w-[80px]">{t('weekly.tot')}</th>
                     <th className="border p-2 text-left min-w-[80px]">Uren</th>
                     <th className="border p-2 text-center min-w-[60px]">Lunch</th>
                     <th className="border p-2 text-center min-w-[50px]">Actie</th>
@@ -1057,7 +1057,7 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
                               onValueChange={val => handleEntryChange(dayIdx, entryIdx, "workType", val)}
                               disabled={isLocked}
                             >
-                              <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Type" /></SelectTrigger>
+                              <SelectTrigger className="h-8 text-xs"><SelectValue placeholder={t('weekly.type')} /></SelectTrigger>
                               <SelectContent>
                                 {workTypes.map(type => (
                                   <SelectItem key={type.value} value={String(type.value)}>{type.value} - {type.label}</SelectItem>
@@ -1071,7 +1071,7 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
                               onValueChange={val => handleEntryChange(dayIdx, entryIdx, "project", val)}
                               disabled={entry.workType === "31" || isLocked}
                             >
-                              <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Project" /></SelectTrigger>
+                              <SelectTrigger className="h-8 text-xs"><SelectValue placeholder={t('weekly.projectPlaceholder')} /></SelectTrigger>
                               <SelectContent>
                                 {projects.map(project => (
                                   <SelectItem key={project.id} value={project.name}>{project.name}</SelectItem>
@@ -1084,7 +1084,7 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
                               type="text"
                               value={entry.startTime || ""}
                               onChange={e => handleEntryChange(dayIdx, entryIdx, "startTime", roundToQuarterHour(e.target.value))}
-                              placeholder="08:00"
+                              placeholder={t('weekly.startPlaceholder')}
                               className="h-8 text-xs w-20"
                               disabled={isLocked}
                             />
@@ -1094,7 +1094,7 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
                               type="text"
                               value={entry.endTime || ""}
                               onChange={e => handleEntryChange(dayIdx, entryIdx, "endTime", roundToQuarterHour(e.target.value))}
-                              placeholder="17:00"
+                              placeholder={t('weekly.endPlaceholder')}
                               className="h-8 text-xs w-20"
                               disabled={isLocked}
                             />
@@ -1106,7 +1106,7 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
                               step="0.25" 
                               value={entry.hours || ""}
                               onChange={e => handleEntryChange(dayIdx, entryIdx, "hours", e.target.value)} 
-                              placeholder="0"
+                              placeholder={t('weekly.hoursPlaceholder')}
                               className="h-8 text-xs w-16"
                               disabled={isLocked}
                             />
@@ -1250,7 +1250,7 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
                           onClick={() => handleEntryChange(dayIdx, entryIdx, "project", "")}
                           disabled={confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin}
                         >
-                          Clear
+                          {t('weekly.clear')}
                         </Button>
                       </div>
                     ) : (
@@ -1271,7 +1271,7 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
                           <Input
                             value={customProjects[`${dayIdx}-${entryIdx}`] || ""}
                             onChange={e => setCustomProjects(prev => ({ ...prev, [`${dayIdx}-${entryIdx}`]: e.target.value }))}
-                            placeholder="Add custom project"
+                            placeholder={t('weekly.addCustomProject')}
                             disabled={entry.workType === "31" || (confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin)}
                           />
                           <Button
@@ -1281,7 +1281,7 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
                             onClick={() => handleAddCustomProject(dayIdx, entryIdx)}
                             disabled={confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin}
                           >
-                            Add
+                            {t('weekly.add')}
                           </Button>
                         </div>
                       </>
@@ -1293,7 +1293,7 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
                       type="text"
                       value={entry.startTime}
                       onChange={e => handleEntryChange(dayIdx, entryIdx, "startTime", roundToQuarterHour(e.target.value))}
-                      placeholder="Start (e.g. 08:10)"
+                      placeholder={t('weekly.startPlaceholder')}
                       className="w-20"
                       disabled={confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin}
                     />
@@ -1304,7 +1304,7 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
                       type="text"
                       value={entry.endTime}
                       onChange={e => handleEntryChange(dayIdx, entryIdx, "endTime", roundToQuarterHour(e.target.value))}
-                      placeholder="End (e.g. 17:45)"
+                      placeholder={t('weekly.endPlaceholder')}
                       className="w-20"
                       disabled={confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin}
                     />
@@ -1317,7 +1317,7 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
                       step="0.25" 
                       value={entry.hours} 
                       onChange={e => handleEntryChange(dayIdx, entryIdx, "hours", e.target.value)} 
-                      placeholder="h"
+                      placeholder={t('weekly.hoursPlaceholder')}
                       disabled={confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin}
                     />
                   </div>
@@ -1350,12 +1350,12 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
                   onClick={() => handleSubmitDay(dayIdx)}
                   disabled={confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin}
                 >
-                  Submit Day
+                  {t('weekly.submitDay')}
                 </Button>
               </div>
               {submittedEntries[day.date.toISOString().split('T')[0]] && submittedEntries[day.date.toISOString().split('T')[0]].length > 0 && (
                 <div className="mt-4">
-                  <div className="font-semibold text-sm mb-1 text-gray-700">Submitted Entries:</div>
+                  <div className="font-semibold text-sm mb-1 text-gray-700">{t('weekly.submittedEntries')}</div>
                   <div className="overflow-x-auto">
                     <table className="min-w-full text-xs border rounded">
                       <thead className="bg-gray-100">

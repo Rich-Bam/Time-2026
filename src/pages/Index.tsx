@@ -654,28 +654,28 @@ const Index = () => {
                   className={`text-base sm:text-lg font-medium px-3 py-1 rounded transition-colors ${activeTab === 'weekly' ? 'bg-orange-600 text-white' : 'text-orange-700 hover:bg-orange-50'}`}
                   onClick={() => setActiveTab('weekly')}
                 >
-                  Weekly Entry
+                  {t('nav.weekly')}
                 </button>
                 {currentUser?.isAdmin && (
                   <button
                     className={`text-base sm:text-lg font-medium px-3 py-1 rounded transition-colors ${activeTab === 'projects' ? 'bg-orange-600 text-white' : 'text-orange-700 hover:bg-orange-50'}`}
                     onClick={() => setActiveTab('projects')}
                   >
-                    Projects
+                    {t('nav.projects')}
                   </button>
                 )}
                 <button
                   className={`text-base sm:text-lg font-medium px-3 py-1 rounded transition-colors ${activeTab === 'export' ? 'bg-orange-600 text-white' : 'text-orange-700 hover:bg-orange-50'}`}
                   onClick={() => setActiveTab('export')}
                 >
-                  Export
+                  {t('nav.export')}
                 </button>
                 {currentUser?.isAdmin && (
                   <button
                     className={`text-base sm:text-lg font-medium px-3 py-1 rounded transition-colors ${activeTab === 'admin' ? 'bg-orange-600 text-white' : 'text-orange-700 hover:bg-orange-50'}`}
                     onClick={() => setActiveTab('admin')}
                   >
-                    Admin
+                    {t('nav.admin')}
                   </button>
                 )}
                 {currentUser?.email === SUPER_ADMIN_EMAIL && (
@@ -683,14 +683,14 @@ const Index = () => {
                     className={`text-base sm:text-lg font-medium px-3 py-1 rounded transition-colors ${activeTab === 'bugreports' ? 'bg-orange-600 text-white' : 'text-orange-700 hover:bg-orange-50'}`}
                     onClick={() => setActiveTab('bugreports')}
                   >
-                    Report Bug
+                    {t('nav.reportBug')}
                   </button>
                 )}
                 <button
                   className={`text-base sm:text-lg font-medium px-3 py-1 rounded transition-colors ${activeTab === 'overview' ? 'bg-orange-600 text-white' : 'text-orange-700 hover:bg-orange-50'}`}
                   onClick={() => setActiveTab('overview')}
                 >
-                  Overview
+                  {t('nav.overview')}
                 </button>
               </nav>
             </div>
