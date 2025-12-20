@@ -14,9 +14,19 @@ CREATE TABLE IF NOT EXISTS public.reminders (
 ALTER TABLE public.reminders ENABLE ROW LEVEL SECURITY;
 
 -- Policy: Admins can insert reminders
+-- Drop existing policy if it exists
+DROP POLICY IF EXISTS "Admins can insert reminders" ON public.reminders;
+
 CREATE POLICY "Admins can insert reminders" ON public.reminders
   FOR INSERT
-  WITH CHECK (true);
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM users 
+      WHERE id::text = auth.uid()::text 
+      AND "isAdmin" = true
+    )
+    OR auth.role() = 'service_role'
+  );
 
 -- Policy: Users can view their own reminders
 CREATE POLICY "Users can view their own reminders" ON public.reminders
