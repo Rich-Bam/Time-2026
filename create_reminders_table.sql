@@ -22,7 +22,7 @@ CREATE POLICY "Admins can insert reminders" ON public.reminders
 CREATE POLICY "Users can view their own reminders" ON public.reminders
   FOR SELECT
   USING (auth.uid()::text = user_id OR EXISTS (
-    SELECT 1 FROM users WHERE id = auth.uid()::text AND isAdmin = true
+    SELECT 1 FROM users WHERE id::text = auth.uid()::text AND "isAdmin" = true
   ));
 
 -- Policy: Users can update their own reminders (to mark as read)
@@ -34,7 +34,7 @@ CREATE POLICY "Users can update their own reminders" ON public.reminders
 CREATE POLICY "Admins can delete reminders" ON public.reminders
   FOR DELETE
   USING (EXISTS (
-    SELECT 1 FROM users WHERE id = auth.uid()::text AND isAdmin = true
+    SELECT 1 FROM users WHERE id::text = auth.uid()::text AND "isAdmin" = true
   ));
 
 -- Create index for faster queries
