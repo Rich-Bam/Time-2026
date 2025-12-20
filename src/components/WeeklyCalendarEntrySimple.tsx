@@ -753,16 +753,28 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                             <div>
                               <Label className="text-xs font-semibold">Hours</Label>
                               <div className="h-10 flex items-center justify-center bg-gray-50 border rounded px-2 text-sm font-medium mt-1">
-                                {entry.startTime && entry.endTime 
-                                  ? `${calculateHours(entry.startTime, entry.endTime)}h`
-                                  : entry.hours 
-                                    ? `${entry.hours}h`
-                                    : "-"}
+                                {(() => {
+                                  if (entry.startTime && entry.endTime) {
+                                    const calculated = calculateHours(entry.startTime, entry.endTime);
+                                    const hours = parseFloat(calculated);
+                                    if (!isNaN(hours) && hours > 0) {
+                                      return `${hours.toFixed(2)}h`;
+                                    }
+                                  }
+                                  if (entry.hours) {
+                                    const hours = parseFloat(entry.hours);
+                                    if (!isNaN(hours) && hours > 0) {
+                                      return `${hours.toFixed(2)}h`;
+                                    }
+                                  }
+                                  return "-";
+                                })()}
                               </div>
                             </div>
                           </div>
                         </div>
-                      ))}
+                      );
+                      })}
                       
                       {/* Submitted entries (read-only with edit option) */}
                       {submitted.map((submittedEntry, subIdx) => (
@@ -818,8 +830,20 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                         </thead>
                         <tbody>
                           {/* Editable entries */}
-                          {day.entries.map((entry, entryIdx) => (
-                            <tr key={`edit-${dayIdx}-${entryIdx}`} className="border-t hover:bg-white/50 bg-white/30">
+                          {day.entries.map((entry, entryIdx) => {
+                            const isNewEntry = !entry.id;
+                            const isEditing = entry.id && editingEntry?.id === entry.id;
+                            return (
+                            <tr key={`edit-${dayIdx}-${entryIdx}`} className={`border-t hover:bg-white/50 ${isNewEntry ? 'bg-blue-50/50' : isEditing ? 'bg-yellow-50/50' : 'bg-white/30'}`}>
+                              <td className="border p-2">
+                                <div className="flex items-center gap-2">
+                                  {isNewEntry && (
+                                    <span className="text-xs bg-blue-500 text-white px-2 py-0.5 rounded font-semibold">NEW</span>
+                                  )}
+                                  {isEditing && (
+                                    <span className="text-xs bg-yellow-500 text-white px-2 py-0.5 rounded font-semibold">EDITING</span>
+                                  )}
+                                  <Select
                               <td className="border p-2">
                                 <Select 
                                   value={entry.workType || ""} 
@@ -903,11 +927,22 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                               </td>
                               <td className="border p-2">
                                 <div className="h-9 flex items-center justify-center bg-gray-50 border rounded px-3 text-sm font-medium">
-                                  {entry.startTime && entry.endTime 
-                                    ? `${calculateHours(entry.startTime, entry.endTime)}h`
-                                    : entry.hours 
-                                      ? `${entry.hours}h`
-                                      : "-"}
+                                  {(() => {
+                                    if (entry.startTime && entry.endTime) {
+                                      const calculated = calculateHours(entry.startTime, entry.endTime);
+                                      const hours = parseFloat(calculated);
+                                      if (!isNaN(hours) && hours > 0) {
+                                        return `${hours.toFixed(2)}h`;
+                                      }
+                                    }
+                                    if (entry.hours) {
+                                      const hours = parseFloat(entry.hours);
+                                      if (!isNaN(hours) && hours > 0) {
+                                        return `${hours.toFixed(2)}h`;
+                                      }
+                                    }
+                                    return "-";
+                                  })()}
                                 </div>
                               </td>
                               <td className="border p-2 text-center">
@@ -924,7 +959,8 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                                 )}
                               </td>
                             </tr>
-                          ))}
+                          );
+                          })}
                           
                           {/* Submitted entries (read-only with edit option) */}
                           {submitted.map((submittedEntry, subIdx) => (
