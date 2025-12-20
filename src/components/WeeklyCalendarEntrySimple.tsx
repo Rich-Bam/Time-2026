@@ -236,48 +236,57 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
   };
 
   const handleEntryChange = (dayIdx: number, entryIdx: number, field: string, value: any) => {
-    setDays(days.map((day, i) => {
-      if (i !== dayIdx) return day;
-      return {
-        ...day,
-        entries: day.entries.map((entry, j) => {
-          if (j !== entryIdx) return entry;
-          let updated = { ...entry, [field]: value };
-          
-          // Auto-calculate hours from start/end time
-          if (field === "startTime" || field === "endTime") {
-            const calculatedHours = calculateHours(updated.startTime, updated.endTime);
-            updated.hours = calculatedHours;
-          }
-          
-          return updated;
-        })
-      };
-    }));
-    
-    // Auto-save after 2 seconds of inactivity
-    const dateStr = days[dayIdx].date.toISOString().split('T')[0];
-    const entryKey = `${dateStr}-${entryIdx}`;
-    
-    // Clear existing timeout
-    if (autoSaveTimeouts[entryKey]) {
-      clearTimeout(autoSaveTimeouts[entryKey]);
-    }
-    
-    // Set new timeout for auto-save
-    const timeout = setTimeout(() => {
-      autoSaveEntry(dayIdx, entryIdx);
-    }, 2000);
-    
-    setAutoSaveTimeouts(prev => ({ ...prev, [entryKey]: timeout }));
+    setDays(prevDays => {
+      const updatedDays = prevDays.map((day, i) => {
+        if (i !== dayIdx) return day;
+        return {
+          ...day,
+          entries: day.entries.map((entry, j) => {
+            if (j !== entryIdx) return entry;
+            let updated = { ...entry, [field]: value };
+            
+            // Auto-calculate hours from start/end time
+            if (field === "startTime" || field === "endTime") {
+              const calculatedHours = calculateHours(updated.startTime, updated.endTime);
+              updated.hours = calculatedHours;
+            }
+            
+            return updated;
+          })
+        };
+      });
+      
+      // Auto-save after 2 seconds of inactivity
+      const dateStr = updatedDays[dayIdx].date.toISOString().split('T')[0];
+      const entryKey = `${dateStr}-${entryIdx}`;
+      
+      // Clear existing timeout
+      if (autoSaveTimeouts[entryKey]) {
+        clearTimeout(autoSaveTimeouts[entryKey]);
+      }
+      
+      // Set new timeout for auto-save
+      const timeout = setTimeout(() => {
+        autoSaveEntry(dayIdx, entryIdx, updatedDays);
+      }, 2000);
+      
+      setAutoSaveTimeouts(prev => ({ ...prev, [entryKey]: timeout }));
+      
+      return updatedDays;
+    });
   };
   
   // Auto-save a single entry
-  const autoSaveEntry = async (dayIdx: number, entryIdx: number) => {
+  const autoSaveEntry = async (dayIdx: number, entryIdx: number, currentDays?: DayData[]) => {
     if (!currentUser) return;
     
-    const day = days[dayIdx];
+    // Use provided days or get from state
+    const daysToUse = currentDays || days;
+    const day = daysToUse[dayIdx];
+    if (!day) return;
+    
     const entry = day.entries[entryIdx];
+    if (!entry) return;
     const dateStr = day.date.toISOString().split('T')[0];
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -324,7 +333,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
         // Refresh submitted entries
         fetchSubmittedEntries(dateStr);
         // Remove from editable entries
-        setDays(days.map((d, i) => 
+        setDays(prevDays => prevDays.map((d, i) => 
           i === dayIdx 
             ? { ...d, entries: d.entries.filter((_, j) => j !== entryIdx) }
             : d
@@ -351,7 +360,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
         // Refresh submitted entries
         fetchSubmittedEntries(dateStr);
         // Remove from editable entries
-        setDays(days.map((d, i) => 
+        setDays(prevDays => prevDays.map((d, i) => 
           i === dayIdx 
             ? { ...d, entries: d.entries.filter((_, j) => j !== entryIdx) }
             : d
@@ -589,6 +598,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
             {days.map((day, dayIdx) => {
               const dateStr = day.date.toISOString().split('T')[0];
               const submitted = submittedEntries[dateStr] || [];
+              const isDayLocked = confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin;
               const dayName = day.date.toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long' });
               const dayShort = day.date.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short' });
               const dayColors = [
@@ -746,7 +756,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                         <div key={`submitted-${dayIdx}-${subIdx}`} className="bg-gray-100 rounded-lg border p-3 space-y-2">
                           <div className="flex items-center justify-between">
                             <span className="text-sm font-semibold">{getWorkTypeLabel(submittedEntry.workType || "")}</span>
-                            {!isLocked && (
+                            {!isDayLocked && (
                               <div className="flex gap-1">
                                 <Button 
                                   size="icon" 
@@ -922,7 +932,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                                 <span className="text-sm font-medium">{submittedEntry.hours || "0"}</span>
                               </td>
                               <td className="border p-2 text-center">
-                                {!isLocked && (
+                                {!isDayLocked && (
                                   <div className="flex justify-center gap-1">
                                     <Button 
                                       size="icon" 
