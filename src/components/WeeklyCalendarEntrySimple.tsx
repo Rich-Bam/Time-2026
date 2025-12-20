@@ -256,7 +256,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
         };
       });
       
-      // Auto-save after 2 seconds of inactivity
+      // Auto-save after 4 seconds of inactivity
       const dateStr = updatedDays[dayIdx].date.toISOString().split('T')[0];
       const entryKey = `${dateStr}-${entryIdx}`;
       
