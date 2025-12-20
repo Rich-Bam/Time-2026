@@ -18,16 +18,47 @@ Deno.serve(async (req) => {
     const TIMEBUZZER_API_KEY = Deno.env.get('TIMEBUZZER_API_KEY')
     
     if (!TIMEBUZZER_API_KEY) {
-      throw new Error('TIMEBUZZER_API_KEY not configured in environment variables')
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: 'TIMEBUZZER_API_KEY not configured in environment variables. Please add it in Supabase Dashboard → Edge Functions → Secrets' 
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 },
+      )
     }
 
     // Get Supabase client
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+    
+    if (!supabaseUrl || !supabaseServiceKey) {
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: 'Supabase environment variables not configured' 
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 },
+      )
+    }
+    
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
     // Get request body
-    const { action, userId, startDate, endDate } = await req.json()
+    let body
+    try {
+      body = await req.json()
+    } catch (e) {
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: 'Invalid request body. Expected JSON.',
+          details: e instanceof Error ? e.message : String(e)
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 },
+      )
+    }
+    
+    const { action, userId, startDate, endDate } = body || {}
 
     if (action === 'fetch-activities') {
       // Fetch activities from Timebuzzer
