@@ -198,19 +198,20 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
   }, [currentUser, weekStart]);
 
   // Fetch confirmed status
+  const fetchConfirmedStatus = async () => {
+    if (!currentUser) return;
+    const weekKey = weekDates[0].toISOString().split('T')[0];
+    const { data } = await supabase
+      .from('confirmed_weeks')
+      .select('confirmed, admin_approved')
+      .eq('user_id', currentUser.id)
+      .eq('week_start_date', weekKey)
+      .single();
+    const isLocked = !!data?.confirmed && (!currentUser.isAdmin || !data?.admin_approved);
+    setConfirmedWeeks(prev => ({ ...prev, [weekKey]: isLocked }));
+  };
+
   useEffect(() => {
-    const fetchConfirmedStatus = async () => {
-      if (!currentUser) return;
-      const weekKey = weekDates[0].toISOString().split('T')[0];
-      const { data } = await supabase
-        .from('confirmed_weeks')
-        .select('confirmed, admin_approved')
-        .eq('user_id', currentUser.id)
-        .eq('week_start_date', weekKey)
-        .single();
-      const isLocked = !!data?.confirmed && (!currentUser.isAdmin || !data?.admin_approved);
-      setConfirmedWeeks(prev => ({ ...prev, [weekKey]: isLocked }));
-    };
     fetchConfirmedStatus();
   }, [currentUser, weekStart]);
 
@@ -681,15 +682,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
         description: "This week has been confirmed and locked. You can no longer make changes.",
       });
       // Refresh confirmed status by fetching from database
-      const weekKeyDate = weekDates[0].toISOString().split('T')[0];
-      const { data: refreshed } = await supabase
-        .from('confirmed_weeks')
-        .select('confirmed, admin_approved')
-        .eq('user_id', currentUser.id)
-        .eq('week_start_date', weekKeyDate)
-        .single();
-      const refreshedIsLocked = !!refreshed?.confirmed && (!currentUser.isAdmin || !refreshed?.admin_approved);
-      setConfirmedWeeks(prev => ({ ...prev, [weekKeyDate]: refreshedIsLocked }));
+      await fetchConfirmedStatus();
     }
   };
 
