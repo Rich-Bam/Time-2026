@@ -95,9 +95,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
   const [confirmedWeeks, setConfirmedWeeks] = useState<Record<string, boolean>>({});
   const [dbDaysOff, setDbDaysOff] = useState(0);
   const [customProjectInputs, setCustomProjectInputs] = useState<Record<string, string>>({});
-  const [autoSaveTimeouts, setAutoSaveTimeouts] = useState<Record<string, NodeJS.Timeout>>({});
   const [editingEntry, setEditingEntry] = useState<{ id: number; dateStr: string } | null>(null);
-  const [savingEntries, setSavingEntries] = useState<Set<string>>(new Set()); // Track entries currently being saved
 
   const weekDates = getWeekDates(weekStart);
   const weekNumber = getISOWeekNumber(weekDates[0]);
@@ -257,44 +255,20 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
         };
       });
       
-      // Auto-save after 4 seconds of inactivity
-      const dateStr = updatedDays[dayIdx].date.toISOString().split('T')[0];
-      const entryKey = `${dateStr}-${entryIdx}`;
-      
-      // Clear existing timeout
-      if (autoSaveTimeouts[entryKey]) {
-        clearTimeout(autoSaveTimeouts[entryKey]);
-      }
-      
-      // Set new timeout for auto-save (4 seconds delay)
-      const timeout = setTimeout(() => {
-        autoSaveEntry(dayIdx, entryIdx, updatedDays);
-      }, 4000);
-      
-      setAutoSaveTimeouts(prev => ({ ...prev, [entryKey]: timeout }));
-      
       return updatedDays;
     });
   };
   
-  // Auto-save a single entry
-  const autoSaveEntry = async (dayIdx: number, entryIdx: number, currentDays?: DayData[]) => {
+  // Save a single entry and add a new entry
+  const handleSaveEntry = async (dayIdx: number, entryIdx: number) => {
     if (!currentUser) return;
     
-    // Use provided days or get from state
-    const daysToUse = currentDays || days;
-    const day = daysToUse[dayIdx];
+    const day = days[dayIdx];
     if (!day) return;
     
     const entry = day.entries[entryIdx];
     if (!entry) return;
     const dateStr = day.date.toISOString().split('T')[0];
-    const entryKey = `${dateStr}-${entryIdx}`;
-    
-    // Prevent duplicate saves - if this entry is already being saved, skip
-    if (savingEntries.has(entryKey)) {
-      return;
-    }
     
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -302,11 +276,23 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
     entryDate.setHours(0, 0, 0, 0);
     
     // Don't save future dates
-    if (entryDate > today) return;
+    if (entryDate > today) {
+      toast({
+        title: "Error",
+        description: "Cannot save entries for future dates",
+        variant: "destructive",
+      });
+      return;
+    }
     
-    // Don't save if required fields are missing
+    // Validate required fields
     const isDayOff = entry.workType === "31";
     if (!isDayOff && (!entry.workType || (!entry.project && !isDayOff) || (!entry.startTime && !entry.endTime))) {
+      toast({
+        title: "Error",
+        description: "Please fill in all required fields",
+        variant: "destructive",
+      });
       return;
     }
     
@@ -320,16 +306,18 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
     }
     
     if (hoursToSave <= 0 && !isDayOff) {
+      toast({
+        title: "Error",
+        description: "Please enter valid start and end times",
+        variant: "destructive",
+      });
       return;
     }
-    
-    // Mark as saving to prevent duplicate saves
-    setSavingEntries(prev => new Set(prev).add(entryKey));
     
     try {
       // Check if this entry is being edited (has an id)
       if (entry.id) {
-        // Update existing entry in database (silent background save)
+        // Update existing entry in database
         const { error } = await supabase
           .from("timesheet")
           .update({
@@ -341,28 +329,25 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
           })
           .eq("id", entry.id);
         
-        if (!error) {
-          // Silently refresh submitted entries in background
-          fetchSubmittedEntries(dateStr);
-        }
+        if (error) throw error;
+        
+        toast({
+          title: "Success",
+          description: "Entry updated successfully",
+        });
+        
+        // Remove from editable entries and refresh submitted entries
+        setDays(prevDays => prevDays.map((d, i) => {
+          if (i !== dayIdx) return d;
+          return {
+            ...d,
+            entries: d.entries.filter((_, j) => j !== entryIdx)
+          };
+        }));
+        
+        setEditingEntry(null);
+        fetchSubmittedEntries(dateStr);
       } else {
-        // For new entries, check if there's already a similar entry that was just created
-        // We'll use a more flexible check - just check if there's an entry with same project, workType, and date
-        // that doesn't have an ID yet in our editable entries (to avoid creating duplicates)
-        const hasSimilarEditableEntry = daysToUse[dayIdx].entries.some((e, idx) => 
-          idx !== entryIdx && 
-          e.id && 
-          e.workType === entry.workType && 
-          e.project === entry.project &&
-          e.startTime === entry.startTime &&
-          e.endTime === entry.endTime
-        );
-        
-        if (hasSimilarEditableEntry) {
-          // Similar entry already exists in editable entries, skip
-          return;
-        }
-        
         // Create new entry
         const { data: newEntry, error } = await supabase.from("timesheet").insert([{
           project: isDayOff ? null : entry.project,
@@ -374,28 +359,38 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
           endTime: entry.endTime || null,
         }]).select("id").single();
         
-        if (!error && newEntry) {
-          // Update the entry in state with the ID so future saves will update instead of insert
-          setDays(prevDays => prevDays.map((d, i) => {
-            if (i !== dayIdx) return d;
-            return {
-              ...d,
-              entries: d.entries.map((e, j) => {
-                if (j !== entryIdx) return e;
-                return { ...e, id: newEntry.id };
-              })
-            };
-          }));
-          // Silently refresh submitted entries in background
-          fetchSubmittedEntries(dateStr);
-        }
+        if (error) throw error;
+        
+        toast({
+          title: "Success",
+          description: "Entry saved successfully",
+        });
+        
+        // Remove from editable entries and refresh submitted entries
+        setDays(prevDays => prevDays.map((d, i) => {
+          if (i !== dayIdx) return d;
+          return {
+            ...d,
+            entries: d.entries.filter((_, j) => j !== entryIdx)
+          };
+        }));
+        
+        fetchSubmittedEntries(dateStr);
       }
-    } finally {
-      // Remove from saving set after save completes
-      setSavingEntries(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(entryKey);
-        return newSet;
+      
+      // Add a new empty entry
+      setDays(prevDays => prevDays.map((d, i) => {
+        if (i !== dayIdx) return d;
+        return {
+          ...d,
+          entries: [...d.entries, { workType: "", project: "", hours: "", startTime: "", endTime: "" }]
+        };
+      }));
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to save entry",
+        variant: "destructive",
       });
     }
   };
@@ -661,17 +656,28 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                               )}
                               <Label className="text-xs font-semibold">Work Type</Label>
                             </div>
-                            {day.entries.length > 1 && (
+                            <div className="flex items-center gap-2">
                               <Button 
-                                variant="destructive" 
+                                variant="default" 
                                 size="sm"
-                                className="h-7 w-7 text-xs"
-                                onClick={() => handleRemoveEntry(dayIdx, entryIdx)}
+                                className="h-7 px-3 text-xs bg-green-600 hover:bg-green-700"
+                                onClick={() => handleSaveEntry(dayIdx, entryIdx)}
                                 disabled={isLocked}
                               >
-                                -
+                                Save
                               </Button>
-                            )}
+                              {day.entries.length > 1 && (
+                                <Button 
+                                  variant="destructive" 
+                                  size="sm"
+                                  className="h-7 w-7 text-xs"
+                                  onClick={() => handleRemoveEntry(dayIdx, entryIdx)}
+                                  disabled={isLocked}
+                                >
+                                  -
+                                </Button>
+                              )}
+                            </div>
                           </div>
                           <Select 
                             value={entry.workType || ""} 
@@ -952,17 +958,28 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                                 </div>
                               </td>
                               <td className="border p-2 text-center">
-                                {day.entries.length > 1 && (
+                                <div className="flex items-center justify-center gap-1">
                                   <Button 
-                                    variant="destructive" 
+                                    variant="default" 
                                     size="sm"
-                                    className="h-8 w-8"
-                                    onClick={() => handleRemoveEntry(dayIdx, entryIdx)}
+                                    className="h-8 px-3 text-xs bg-green-600 hover:bg-green-700"
+                                    onClick={() => handleSaveEntry(dayIdx, entryIdx)}
                                     disabled={isLocked}
                                   >
-                                    -
+                                    Save
                                   </Button>
-                                )}
+                                  {day.entries.length > 1 && (
+                                    <Button 
+                                      variant="destructive" 
+                                      size="sm"
+                                      className="h-8 w-8"
+                                      onClick={() => handleRemoveEntry(dayIdx, entryIdx)}
+                                      disabled={isLocked}
+                                    >
+                                      -
+                                    </Button>
+                                  )}
+                                </div>
                               </td>
                             </tr>
                           );
