@@ -97,6 +97,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
   const [customProjectInputs, setCustomProjectInputs] = useState<Record<string, string>>({});
   const [autoSaveTimeouts, setAutoSaveTimeouts] = useState<Record<string, NodeJS.Timeout>>({});
   const [editingEntry, setEditingEntry] = useState<{ id: number; dateStr: string } | null>(null);
+  const [savingEntries, setSavingEntries] = useState<Set<string>>(new Set()); // Track entries currently being saved
 
   const weekDates = getWeekDates(weekStart);
   const weekNumber = getISOWeekNumber(weekDates[0]);
@@ -288,6 +289,13 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
     const entry = day.entries[entryIdx];
     if (!entry) return;
     const dateStr = day.date.toISOString().split('T')[0];
+    const entryKey = `${dateStr}-${entryIdx}`;
+    
+    // Prevent duplicate saves - if this entry is already being saved, skip
+    if (savingEntries.has(entryKey)) {
+      return;
+    }
+    
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const entryDate = new Date(day.date);
@@ -315,42 +323,13 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
       return;
     }
     
-    // Check if this entry is being edited (has an id)
-    if (entry.id) {
-      // Update existing entry in database (silent background save)
-      const { error } = await supabase
-        .from("timesheet")
-        .update({
-          project: isDayOff ? null : entry.project,
-          hours: hoursToSave,
-          description: entry.workType,
-          startTime: entry.startTime || null,
-          endTime: entry.endTime || null,
-        })
-        .eq("id", entry.id);
-      
-      if (!error) {
-        // Silently refresh submitted entries in background
-        fetchSubmittedEntries(dateStr);
-        // Keep entry in editable entries - don't remove it
-        // Entry stays visible and editable
-      }
-      // No toast notification - silent save
-    } else {
-      // Check if a similar entry already exists (to prevent duplicates)
-      const { data: existingEntries } = await supabase
-        .from("timesheet")
-        .select("id")
-        .eq("user_id", currentUser.id)
-        .eq("date", dateStr)
-        .eq("description", entry.workType)
-        .eq("project", isDayOff ? null : entry.project)
-        .eq("startTime", entry.startTime || null)
-        .eq("endTime", entry.endTime || null);
-      
-      if (existingEntries && existingEntries.length > 0) {
-        // Entry already exists, update it instead
-        const existingId = existingEntries[0].id;
+    // Mark as saving to prevent duplicate saves
+    setSavingEntries(prev => new Set(prev).add(entryKey));
+    
+    try {
+      // Check if this entry is being edited (has an id)
+      if (entry.id) {
+        // Update existing entry in database (silent background save)
         const { error } = await supabase
           .from("timesheet")
           .update({
@@ -360,25 +339,31 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
             startTime: entry.startTime || null,
             endTime: entry.endTime || null,
           })
-          .eq("id", existingId);
+          .eq("id", entry.id);
         
         if (!error) {
-          // Update the entry in state with the ID so future saves will update instead of insert
-          setDays(prevDays => prevDays.map((d, i) => {
-            if (i !== dayIdx) return d;
-            return {
-              ...d,
-              entries: d.entries.map((e, j) => {
-                if (j !== entryIdx) return e;
-                return { ...e, id: existingId };
-              })
-            };
-          }));
           // Silently refresh submitted entries in background
           fetchSubmittedEntries(dateStr);
         }
       } else {
-        // Create new entry (only if it doesn't have an id and doesn't exist)
+        // For new entries, check if there's already a similar entry that was just created
+        // We'll use a more flexible check - just check if there's an entry with same project, workType, and date
+        // that doesn't have an ID yet in our editable entries (to avoid creating duplicates)
+        const hasSimilarEditableEntry = daysToUse[dayIdx].entries.some((e, idx) => 
+          idx !== entryIdx && 
+          e.id && 
+          e.workType === entry.workType && 
+          e.project === entry.project &&
+          e.startTime === entry.startTime &&
+          e.endTime === entry.endTime
+        );
+        
+        if (hasSimilarEditableEntry) {
+          // Similar entry already exists in editable entries, skip
+          return;
+        }
+        
+        // Create new entry
         const { data: newEntry, error } = await supabase.from("timesheet").insert([{
           project: isDayOff ? null : entry.project,
           user_id: currentUser.id,
@@ -405,7 +390,13 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
           fetchSubmittedEntries(dateStr);
         }
       }
-      // No toast notification - silent save
+    } finally {
+      // Remove from saving set after save completes
+      setSavingEntries(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(entryKey);
+        return newSet;
+      });
     }
   };
   
