@@ -242,7 +242,14 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
           ...day,
           entries: day.entries.map((entry, j) => {
             if (j !== entryIdx) return entry;
-            let updated = { ...entry, [field]: value };
+            let updatedValue = value;
+            
+            // Normalize time input for startTime and endTime fields (already normalized in onChange, but keep for safety)
+            if (field === "startTime" || field === "endTime") {
+              updatedValue = normalizeTimeInput(String(value));
+            }
+            
+            let updated = { ...entry, [field]: updatedValue };
             
             // Auto-calculate hours from start/end time
             if (field === "startTime" || field === "endTime") {
@@ -434,9 +441,72 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
     setEditingEntry({ id: entry.id!, dateStr });
   };
 
+  // Normalize time input: converts various formats (1400, 14:00, 14.00, etc.) to HH:MM format
+  const normalizeTimeInput = (input: string): string => {
+    if (!input || input.trim() === "") return input;
+    
+    // Remove all non-digit characters except colon and dot
+    let cleaned = input.replace(/[^\d:.]/g, "");
+    
+    // If already in HH:MM format, return as is (but validate)
+    if (cleaned.includes(":") || cleaned.includes(".")) {
+      // Replace dot with colon
+      cleaned = cleaned.replace(/\./g, ":");
+      const parts = cleaned.split(":");
+      if (parts.length === 2) {
+        let hours = parseInt(parts[0], 10);
+        let minutes = parseInt(parts[1], 10);
+        if (!isNaN(hours) && !isNaN(minutes)) {
+          // Validate ranges
+          if (hours < 0 || hours > 23) return input; // Invalid, return original
+          if (minutes < 0 || minutes > 59) return input; // Invalid, return original
+          return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+        }
+      }
+      return input; // Invalid format, return original
+    }
+    
+    // Handle numeric input (e.g., "1400", "140", "14")
+    const numericValue = cleaned.replace(/\D/g, "");
+    
+    if (numericValue.length === 0) return input;
+    
+    // Convert to number
+    const num = parseInt(numericValue, 10);
+    if (isNaN(num)) return input;
+    
+    // Handle different lengths
+    if (numericValue.length <= 2) {
+      // "14" -> "14:00"
+      const hours = num;
+      if (hours >= 0 && hours <= 23) {
+        return `${hours.toString().padStart(2, '0')}:00`;
+      }
+    } else if (numericValue.length === 3) {
+      // "140" -> "14:00" (treat first 2 as hours, last 1 as minutes*10)
+      const hours = Math.floor(num / 10);
+      const minutes = (num % 10) * 10;
+      if (hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59) {
+        return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+      }
+    } else if (numericValue.length === 4) {
+      // "1400" -> "14:00"
+      const hours = Math.floor(num / 100);
+      const minutes = num % 100;
+      if (hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59) {
+        return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+      }
+    }
+    
+    // Invalid input, return original
+    return input;
+  };
+
   const roundToQuarterHour = (timeStr: string) => {
-    const match = timeStr.match(/^(\d{1,2}):(\d{2})$/);
-    if (!match) return timeStr;
+    // First normalize the input
+    const normalized = normalizeTimeInput(timeStr);
+    const match = normalized.match(/^(\d{1,2}):(\d{2})$/);
+    if (!match) return normalized; // Return normalized even if format doesn't match exactly
     let [_, h, m] = match;
     let hour = parseInt(h, 10);
     let min = parseInt(m, 10);
@@ -444,6 +514,10 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
     if (min === 60) {
       hour += 1;
       min = 0;
+    }
+    if (hour >= 24) {
+      hour = 23;
+      min = 59;
     }
     return `${hour.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`;
   };
@@ -786,7 +860,10 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                               <Input
                                 type="text"
                                 value={entry.startTime || ""}
-                                onChange={e => handleEntryChange(dayIdx, entryIdx, "startTime", roundToQuarterHour(e.target.value))}
+                                onChange={e => {
+                                  const normalized = normalizeTimeInput(e.target.value);
+                                  handleEntryChange(dayIdx, entryIdx, "startTime", roundToQuarterHour(normalized));
+                                }}
                                 placeholder="08:00"
                                 className="h-10 text-sm bg-white mt-1"
                                 disabled={isLocked}
@@ -797,7 +874,10 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                               <Input
                                 type="text"
                                 value={entry.endTime || ""}
-                                onChange={e => handleEntryChange(dayIdx, entryIdx, "endTime", roundToQuarterHour(e.target.value))}
+                                onChange={e => {
+                                  const normalized = normalizeTimeInput(e.target.value);
+                                  handleEntryChange(dayIdx, entryIdx, "endTime", roundToQuarterHour(normalized));
+                                }}
                                 placeholder="17:00"
                                 className="h-10 text-sm bg-white mt-1"
                                 disabled={isLocked}
