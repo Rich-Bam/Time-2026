@@ -33,33 +33,41 @@ After creating the bucket, you need to add policies so users can upload and view
 1. Click on the `profile-photos` bucket
 2. Go to **Policies** tab
 3. Click **New Policy**
-4. Policy name: `Allow authenticated uploads`
-5. Allowed operation: `INSERT`
-6. Policy definition:
-```sql
-bucket_id() = 'profile-photos'
-```
-7. Click **Save**
+4. Choose: **"Create a policy from scratch"** (or **"For full customization"**)
+5. Fill in:
+   - **Policy name:** `Allow authenticated uploads`
+   - **Allowed operation:** Select **INSERT**
+   - **Policy definition:** Paste this:
+     ```sql
+     (bucket_id = 'profile-photos'::text)
+     ```
+   - **WITH CHECK expression:** Paste this:
+     ```sql
+     (bucket_id = 'profile-photos'::text)
+     ```
+6. Click **Review** and then **Save policy**
 
 #### Policy 2: Read (SELECT)
 1. Click **New Policy** again
-2. Policy name: `Allow public reads`
-3. Allowed operation: `SELECT`
-4. Policy definition:
-```sql
-true
-```
-5. Click **Save**
+2. Fill in:
+   - **Policy name:** `Allow public reads`
+   - **Allowed operation:** Select **SELECT**
+   - **Policy definition:** Paste this:
+     ```sql
+     (bucket_id = 'profile-photos'::text)
+     ```
+3. Click **Review** and then **Save policy**
 
 #### Policy 3: Delete
 1. Click **New Policy** again
-2. Policy name: `Allow authenticated deletes`
-3. Allowed operation: `DELETE`
-4. Policy definition:
-```sql
-bucket_id() = 'profile-photos'
-```
-5. Click **Save**
+2. Fill in:
+   - **Policy name:** `Allow authenticated deletes`
+   - **Allowed operation:** Select **DELETE**
+   - **Policy definition:** Paste this:
+     ```sql
+     (bucket_id = 'profile-photos'::text)
+     ```
+3. Click **Review** and then **Save policy**
 
 ## Step 3: Test the Profile Page
 
