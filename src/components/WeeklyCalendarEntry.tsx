@@ -997,9 +997,9 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
                     <th className="border p-2 text-left min-w-[150px]">{t('weekly.project')}</th>
                     <th className="border p-2 text-left min-w-[80px]">{t('weekly.van')}</th>
                     <th className="border p-2 text-left min-w-[80px]">{t('weekly.tot')}</th>
-                    <th className="border p-2 text-left min-w-[80px]">Uren</th>
-                    <th className="border p-2 text-center min-w-[60px]">Lunch</th>
-                    <th className="border p-2 text-center min-w-[50px]">Actie</th>
+                    <th className="border p-2 text-left min-w-[80px]">{t('weekly.hours')}</th>
+                    <th className="border p-2 text-center min-w-[60px]">{t('weekly.lunch')}</th>
+                    <th className="border p-2 text-center min-w-[50px]">{t('weekly.actions')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1046,7 +1046,7 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
                                   onClick={() => handleAddEntry(dayIdx)}
                                   disabled={isLocked}
                                 >
-                                  + Toevoegen
+                                  + {t('weekly.add')}
                                 </Button>
                               </div>
                             </td>
@@ -1201,7 +1201,7 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
                     onClick={handleSubmitAll}
                     className="bg-orange-600 hover:bg-orange-700"
                   >
-                    Submit All Days
+                    {t('weekly.submitAll')}
                   </Button>
                 </div>
               )}
@@ -1214,7 +1214,7 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
               <div className="font-semibold mb-2">{day.date.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'short', day: 'numeric' })}</div>
               {confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin && (
                 <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded text-yellow-800 text-sm">
-                  ⚠️ Deze week is bevestigd. Je kunt geen wijzigingen meer aanbrengen tot een admin dit heeft goedgekeurd of teruggezet.
+                  ⚠️ {t('weekly.confirmed')}
                 </div>
               )}
               {day.entries.map((entry, entryIdx) => (
@@ -1226,7 +1226,7 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
                       onValueChange={val => handleEntryChange(dayIdx, entryIdx, "workType", val)}
                       disabled={confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin}
                     >
-                      <SelectTrigger><SelectValue placeholder="Type" /></SelectTrigger>
+                      <SelectTrigger><SelectValue placeholder={t('weekly.type')} /></SelectTrigger>
                       <SelectContent>
                         {workTypes.map(type => (
                           <SelectItem key={type.value} value={String(type.value)}>{type.value} - {type.label}</SelectItem>
@@ -1360,11 +1360,11 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
                     <table className="min-w-full text-xs border rounded">
                       <thead className="bg-gray-100">
                         <tr>
-                          <th className="p-1 border">Project</th>
-                          <th className="p-1 border">Work Type</th>
-                          <th className="p-1 border">Hours</th>
+                          <th className="p-1 border">{t('weekly.project')}</th>
+                          <th className="p-1 border">{t('weekly.workType')}</th>
+                          <th className="p-1 border">{t('weekly.hours')}</th>
                           {!confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && (
-                            <th className="p-1 border">Actions</th>
+                            <th className="p-1 border">{t('weekly.actions')}</th>
                           )}
                         </tr>
                       </thead>
@@ -1399,14 +1399,14 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
           <CardContent className="p-4">
             <div className="flex flex-col gap-3">
               <div className="text-sm text-orange-800">
-                <strong>Let op:</strong> Na bevestiging kun je de uren niet meer wijzigen tot een admin dit heeft goedgekeurd of teruggezet.
+                <strong>{t('common.note')}:</strong> {t('weekly.confirmWeekText')}
               </div>
               <Button 
                 className="w-full bg-orange-600 hover:bg-orange-700 text-white" 
                 variant="default" 
                 onClick={handleConfirmWeek}
               >
-                Week Bevestigen
+                {t('weekly.confirmWeek')}
               </Button>
             </div>
           </CardContent>
@@ -1416,7 +1416,7 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
         <Card className="mt-4 bg-blue-50 border-blue-200">
           <CardContent className="p-4">
             <div className="text-blue-800 font-semibold">
-              ✓ Deze week is bevestigd en wacht op admin goedkeuring. Je kunt de uren niet meer wijzigen.
+              ✓ {t('weekly.weekConfirmedText')}
             </div>
           </CardContent>
         </Card>
