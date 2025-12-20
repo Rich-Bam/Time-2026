@@ -1040,10 +1040,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                                 <Input
                                   type="text"
                                   value={entry.startTime || ""}
-                                  onChange={e => {
-                                    const normalized = normalizeTimeInput(e.target.value);
-                                    handleEntryChange(dayIdx, entryIdx, "startTime", roundToQuarterHour(normalized));
-                                  }}
+                                  onChange={e => handleEntryChange(dayIdx, entryIdx, "startTime", roundToQuarterHour(e.target.value))}
                                   placeholder="08:00"
                                   className="h-9 text-sm w-24 bg-white"
                                   disabled={isLocked}
@@ -1053,10 +1050,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                                 <Input
                                   type="text"
                                   value={entry.endTime || ""}
-                                  onChange={e => {
-                                    const normalized = normalizeTimeInput(e.target.value);
-                                    handleEntryChange(dayIdx, entryIdx, "endTime", roundToQuarterHour(normalized));
-                                  }}
+                                  onChange={e => handleEntryChange(dayIdx, entryIdx, "endTime", roundToQuarterHour(e.target.value))}
                                   placeholder="17:00"
                                   className="h-9 text-sm w-24 bg-white"
                                   disabled={isLocked}
