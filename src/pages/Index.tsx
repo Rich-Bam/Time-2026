@@ -51,16 +51,22 @@ const Index = () => {
   // Check for unread reminders when user logs in (including admins)
   useEffect(() => {
     const checkReminders = async () => {
-      if (!isLoggedIn || !currentUser) return;
+      if (!isLoggedIn || !currentUser) {
+        console.log("Reminder check skipped: not logged in or no user", { isLoggedIn, hasUser: !!currentUser });
+        return;
+      }
       
       try {
+        console.log("Checking reminders for user:", currentUser.id, currentUser.email);
         const { data: reminders, error } = await supabase
           .from("reminders")
           .select("*")
-          .eq("user_id", currentUser.id)
+          .eq("user_id", currentUser.id.toString())
           .is("read_at", null)
           .order("created_at", { ascending: false })
           .limit(1);
+        
+        console.log("Reminder query result:", { reminders, error, count: reminders?.length });
         
         // If table doesn't exist, just ignore (table will be created later)
         if (error) {
@@ -74,8 +80,11 @@ const Index = () => {
         }
         
         if (reminders && reminders.length > 0) {
+          console.log("Found reminder, showing dialog:", reminders[0]);
           setUserReminder(reminders[0]);
           setShowReminderDialog(true);
+        } else {
+          console.log("No unread reminders found");
         }
       } catch (err) {
         console.error("Error in reminder check:", err);

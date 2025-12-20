@@ -516,20 +516,26 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
       const user = users.find(u => u.id.toString() === userId);
       const userName = user?.name || user?.email || "User";
       return {
-        user_id: userId,
+        user_id: userId.toString(),
         week_number: weekNum,
         year: year,
         message: `Please fill in your hours for week ${weekNum} of ${year}.`,
-        created_by: currentUser?.id || null,
+        created_by: currentUser?.id ? currentUser.id.toString() : null,
       };
     });
 
+    console.log("Inserting reminders:", remindersToInsert);
+
     // Insert reminders into database
-    const { error } = await supabase
+    const { data: insertedReminders, error } = await supabase
       .from("reminders")
-      .insert(remindersToInsert);
+      .insert(remindersToInsert)
+      .select();
+
+    console.log("Reminder insert result:", { insertedReminders, error });
 
     if (error) {
+      console.error("Error inserting reminders:", error);
       toast({
         title: "Error",
         description: error.message,
