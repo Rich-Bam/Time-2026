@@ -756,19 +756,6 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
     <div className="p-3 sm:p-4 md:p-8 bg-white rounded shadow w-full max-w-full">
       <h2 className="text-xl sm:text-2xl font-bold mb-3 sm:mb-4">Admin Panel</h2>
       
-      {/* Debug: Test Edge Function */}
-      <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded">
-        <div className={`flex ${isMobile ? 'flex-col' : 'items-center justify-between'} gap-3`}>
-          <div>
-            <p className="text-xs sm:text-sm font-semibold text-yellow-800">🔍 Edge Function Test</p>
-            <p className="text-xs text-yellow-700">Test if the invite-user function works without creating a user</p>
-          </div>
-          <Button onClick={testEdgeFunction} variant="outline" size={isMobile ? "sm" : "sm"} className={`${isMobile ? 'w-full' : ''} h-9 sm:h-8`}>
-            Test Edge Function
-          </Button>
-        </div>
-      </div>
-      
       <div className="mb-6 sm:mb-8">
         <h3 className="text-base sm:text-lg font-semibold mb-2">Add User</h3>
         <form onSubmit={handleAddUser} className={`flex ${isMobile ? 'flex-col' : 'flex-row flex-wrap'} gap-3 sm:gap-4 ${isMobile ? '' : 'items-end'} w-full`}>
