@@ -263,6 +263,18 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
   const handleSaveEntry = async (dayIdx: number, entryIdx: number) => {
     if (!currentUser) return;
     
+    const weekKey = weekDates[0].toISOString().split('T')[0];
+    const isWeekLocked = confirmedWeeks[weekKey];
+    
+    if (isWeekLocked && !currentUser?.isAdmin) {
+      toast({
+        title: "Not Allowed",
+        description: "This week is confirmed and cannot be changed anymore.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     const day = days[dayIdx];
     if (!day) return;
     
@@ -397,6 +409,18 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
   
   // Edit an existing entry
   const handleEditEntry = (entry: Entry, dateStr: string) => {
+    const weekKey = weekDates[0].toISOString().split('T')[0];
+    const isWeekLocked = confirmedWeeks[weekKey];
+    
+    if (isWeekLocked && !currentUser?.isAdmin) {
+      toast({
+        title: "Not Allowed",
+        description: "This week is confirmed and cannot be changed anymore.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     const dayIdx = days.findIndex(d => d.date.toISOString().split('T')[0] === dateStr);
     if (dayIdx === -1) return;
     
