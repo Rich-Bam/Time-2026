@@ -1324,19 +1324,37 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
               onClick={async () => {
                 setTimebuzzerSyncing(true);
                 try {
+                  console.log('Testing Timebuzzer API...');
                   const { data, error } = await supabase.functions.invoke('timebuzzer-sync', {
                     body: { action: 'test-api' },
                   });
-                  if (error) throw error;
-                  console.log('Timebuzzer API Test Response:', data);
-                  toast({
-                    title: "API Test",
-                    description: `Check console for API response. Status: ${data.status}`,
-                  });
+                  
+                  console.log('Response:', { data, error });
+                  
+                  if (error) {
+                    console.error('Error details:', error);
+                    throw error;
+                  }
+                  
+                  if (data?.success) {
+                    console.log('Timebuzzer API Test Response:', data);
+                    toast({
+                      title: "API Test Successful",
+                      description: `Status: ${data.status || 'OK'}. Check console for full response.`,
+                    });
+                  } else {
+                    console.error('API test failed:', data);
+                    toast({
+                      title: "API Test Failed",
+                      description: data?.error || 'Unknown error. Check console.',
+                      variant: "destructive",
+                    });
+                  }
                 } catch (error: any) {
+                  console.error('Test API Error:', error);
                   toast({
                     title: "Test Error",
-                    description: error.message,
+                    description: error.message || 'Failed to send a request to the Edge Function',
                     variant: "destructive",
                   });
                 } finally {
