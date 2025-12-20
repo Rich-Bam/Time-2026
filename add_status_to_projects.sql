@@ -16,3 +16,4 @@ COMMENT ON COLUMN public.projects.status IS 'Project status: active (can add hou
 -- Create index for faster queries
 CREATE INDEX IF NOT EXISTS idx_projects_status ON public.projects(status);
 
+

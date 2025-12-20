@@ -149,3 +149,4 @@ Als het nog steeds niet werkt, deel dan:
 3. Of de Edge Function bestaat (Supabase Dashboard → Edge Functions → Functions)
 4. De output van de browser console test (Stap 5 hierboven)
 
+

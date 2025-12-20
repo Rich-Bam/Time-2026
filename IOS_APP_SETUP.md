@@ -253,3 +253,4 @@ npx cap open ios
 5. ⏳ Archive en upload naar App Store
 6. ⏳ Submit voor review
 
+

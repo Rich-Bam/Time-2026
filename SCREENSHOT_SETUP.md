@@ -76,3 +76,4 @@ Na het aanmaken van de bucket, ga naar **Policies** en voeg toe:
 - Check of de storage policies correct zijn ingesteld
 - Check browser console (F12) voor errors
 
+

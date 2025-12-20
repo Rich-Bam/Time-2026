@@ -108,3 +108,4 @@ Als het nog steeds niet werkt na deze stappen, deel dan:
 3. Wat er in Supabase Logs staat (Edge Functions → Logs → invite-user)
 4. Wat je ziet in de Network tab na het testen
 
+

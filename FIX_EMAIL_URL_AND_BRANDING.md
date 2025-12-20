@@ -241,3 +241,4 @@ Na het aanpassen:
 2. Check of alles werkt zoals verwacht
 3. Pas eventueel de kleuren/styling aan naar je wensen
 
+

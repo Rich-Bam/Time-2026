@@ -337,7 +337,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
             description: "De 'invite-user' function is NIET gedeployed in Supabase. Open Supabase Dashboard → Edge Functions → Functions → Create 'invite-user' function. Gebruiker wordt nu aangemaakt zonder email.",
             variant: "destructive",
           });
-        } else if (errorMsg.includes("401") || errorMsg.includes("403") || errorMsg.includes("unauthorized") || errorStatus === 401 || errorStatus === 403) {
+        } else if (errorMsg.includes("401") || image.pngerrorMsg.includes("403") || errorMsg.includes("unauthorized") || errorStatus === 401 || errorStatus === 403) {
           toast({
             title: "⚠️ Toegang geweigerd (401/403)",
             description: "Check of VITE_SUPABASE_ANON_KEY correct is in Netlify environment variables. Gebruiker wordt nu aangemaakt zonder email.",

@@ -87,3 +87,4 @@ Deel:
 3. Krijg je een email als je direct via Supabase Dashboard invite stuurt?
 4. Is de Edge Function gedeployed (check Functions → invite-user)?
 
+

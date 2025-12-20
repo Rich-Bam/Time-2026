@@ -830,23 +830,15 @@ const translations: Record<Language, Record<string, string>> = {
 };
 
 export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [language, setLanguageState] = useState<Language>(() => {
-    // Load from localStorage or default to Dutch
-    const saved = localStorage.getItem('bampro_language');
-    return (saved === 'nl' || saved === 'en' || saved === 'es' || saved === 'el' || saved === 'ro' || saved === 'pl') ? saved : 'nl';
-  });
-
-  useEffect(() => {
-    // Save to localStorage when language changes
-    localStorage.setItem('bampro_language', language);
-  }, [language]);
+  // Always use English, no language switching
+  const language: Language = 'en';
 
   const setLanguage = (lang: Language) => {
-    setLanguageState(lang);
+    // No-op: language is always English
   };
 
   const t = (key: string, params?: Record<string, string | number>): string => {
-    let translation = translations[language][key] || key;
+    let translation = translations['en'][key] || key;
     
     // Replace parameters like {name} with actual values
     if (params) {

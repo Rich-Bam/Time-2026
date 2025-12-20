@@ -34,3 +34,4 @@ CREATE POLICY "Authenticated users can delete screenshots" ON public.screenshots
 CREATE INDEX IF NOT EXISTS idx_screenshots_created_at ON public.screenshots(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_screenshots_user_id ON public.screenshots(user_id);
 
+

@@ -83,3 +83,4 @@ CREATE INDEX IF NOT EXISTS idx_screenshots_user_id ON public.screenshots(user_id
 -- Als je geen errors ziet, is alles goed ingesteld.
 -- ============================================
 
+

@@ -116,3 +116,4 @@ Als het nog steeds niet werkt, deel dan:
 3. Wat er in Supabase Logs staat
 4. De output van de browser console test (Stap 3)
 
+

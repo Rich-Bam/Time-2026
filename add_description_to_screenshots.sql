@@ -2,3 +2,4 @@
 ALTER TABLE public.screenshots 
 ADD COLUMN IF NOT EXISTS description TEXT;
 
+

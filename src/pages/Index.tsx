@@ -13,9 +13,9 @@ import * as XLSX from "xlsx";
 import AdminPanel from "@/components/AdminPanel";
 import ChangePasswordForm from "@/components/ChangePasswordForm";
 import WeeklyCalendarEntry from "@/components/WeeklyCalendarEntry";
+import WeeklyCalendarEntrySimple from "@/components/WeeklyCalendarEntrySimple";
 import ScreenshotButton from "@/components/ScreenshotButton";
 import BugReports from "@/components/BugReports";
-import LanguageSelector from "@/components/LanguageSelector";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -39,6 +39,11 @@ const Index = () => {
   const [selectedUserId, setSelectedUserId] = useState<string>("");
   const [selectedWeekNumber, setSelectedWeekNumber] = useState<string>("");
   const [selectedYear, setSelectedYear] = useState<string>(new Date().getFullYear().toString());
+  const [useSimpleWeeklyView, setUseSimpleWeeklyView] = useState(() => {
+    // Check localStorage for saved preference
+    const saved = localStorage.getItem('bampro_use_simple_weekly_view');
+    return saved === 'true';
+  });
   const { toast } = useToast();
 
   // Check for saved session on page load (14 days persistence)
@@ -622,10 +627,10 @@ const Index = () => {
             </DialogTitle>
           </DialogHeader>
           <div className="py-2 text-base text-gray-700">
-            Je hebt je uren nog niet ingevuld voor <b>week {reminderWeekNum}</b>.<br />
+            You have not yet filled in your hours for <b>week {reminderWeekNum}</b>.<br />
             <br />
-            <strong className="text-orange-700">Ingrid wil graag dat je je uren invult.</strong><br />
-            Vul je timesheet voor vorige week in.
+            <strong className="text-orange-700">Ingrid would like you to fill in your hours.</strong><br />
+            Please fill in your timesheet for last week.
           </div>
           <DialogFooter className="flex gap-2 justify-end">
             <Button variant="outline" onClick={() => setShowReminder(false)}>Dismiss</Button>
@@ -695,7 +700,6 @@ const Index = () => {
               </nav>
             </div>
             <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-6 justify-center md:justify-end">
-              <LanguageSelector />
               <span className="text-gray-700 font-medium text-center sm:text-left">{t('nav.welcome')}, {currentUser?.name || "User"}</span>
               {currentUser?.isAdmin && (
                 <ScreenshotButton currentUser={currentUser} />
@@ -709,8 +713,8 @@ const Index = () => {
                   setIsLoggedIn(false);
                   setCurrentUser(null);
                   toast({
-                    title: "Uitgelogd",
-                    description: "Je bent succesvol uitgelogd.",
+                    title: "Logged Out",
+                    description: "You have been successfully logged out.",
                   });
                 }}
                 className="border-orange-200 text-orange-700 hover:bg-orange-50"
@@ -728,7 +732,33 @@ const Index = () => {
           <TimesheetEntry currentUser={currentUser} />
         )}
         {activeTab === 'weekly' && (
-          <WeeklyCalendarEntry currentUser={currentUser} />
+          <div className="space-y-4">
+            <div className="flex justify-end">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const newValue = !useSimpleWeeklyView;
+                  setUseSimpleWeeklyView(newValue);
+                  localStorage.setItem('bampro_use_simple_weekly_view', String(newValue));
+                  toast({
+                    title: "View Changed",
+                    description: newValue 
+                      ? "You are now using the simple view. You can always switch back using the button above." 
+                      : "You are now using the original view. You can always switch back using the button above.",
+                  });
+                }}
+                className="mb-4"
+              >
+                {useSimpleWeeklyView ? "🔄 Switch to original view" : "🔄 Switch to simple view"}
+              </Button>
+            </div>
+            {useSimpleWeeklyView ? (
+              <WeeklyCalendarEntrySimple currentUser={currentUser} />
+            ) : (
+              <WeeklyCalendarEntry currentUser={currentUser} />
+            )}
+          </div>
         )}
         {activeTab === 'projects' && (
           currentUser?.isAdmin ? (
