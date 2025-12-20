@@ -675,13 +675,19 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
     } else {
       // Immediately update state to lock the week - this will trigger a re-render and hide all editable elements
       const weekKeyDate = weekDates[0].toISOString().split('T')[0];
-      console.log('CONFIRMING WEEK - Setting state to locked:', weekKeyDate);
+      console.log('CONFIRMING WEEK - Setting state to locked:', weekKeyDate, 'isAdmin:', currentUser.isAdmin);
       
-      // Force state update - set it to true immediately for non-admin users
-      const shouldBeLocked = !currentUser.isAdmin; // For non-admin, always lock. For admin, only lock if not approved.
+      // For non-admin users: always lock when confirmed
+      // For admin users: lock if not approved (admin_approved = false)
+      const shouldBeLocked = !currentUser.isAdmin; // Non-admin = always locked, Admin = locked until approved
+      
+      console.log('CONFIRMING WEEK - shouldBeLocked:', shouldBeLocked);
+      
+      // Force state update immediately
       setConfirmedWeeks(prev => {
         const updated = { ...prev, [weekKeyDate]: shouldBeLocked };
         console.log('CONFIRMING WEEK - Updated state:', updated);
+        console.log('CONFIRMING WEEK - New value for weekKey:', updated[weekKeyDate]);
         return updated;
       });
       
@@ -690,11 +696,8 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
         description: "This week has been confirmed and locked. You can no longer make changes.",
       });
       
-      // After a short delay, refresh from database to ensure consistency
-      // Use setTimeout to ensure state update happens first
-      setTimeout(async () => {
-        await fetchConfirmedStatus();
-      }, 100);
+      // DON'T call fetchConfirmedStatus here - it might overwrite our state
+      // The state is already set correctly above
     }
   };
 
