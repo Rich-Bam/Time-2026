@@ -16,6 +16,7 @@ import WeeklyCalendarEntry from "@/components/WeeklyCalendarEntry";
 import WeeklyCalendarEntrySimple from "@/components/WeeklyCalendarEntrySimple";
 import ScreenshotButton from "@/components/ScreenshotButton";
 import BugReports from "@/components/BugReports";
+import InstallPWA from "@/components/InstallPWA";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -159,12 +160,132 @@ const Index = () => {
   }
   const [reminderWeekNum, setReminderWeekNum] = useState("");
 
-  // Helper to download Excel file
-  const downloadExcel = (data, filename = "timesheet.xlsx") => {
-    const ws = XLSX.utils.json_to_sheet(data);
+  // Helper to create formatted Excel file with better readability
+  const createFormattedExcel = (data: any[], filename: string, options?: {
+    userName?: string;
+    dateRange?: { from: string; to: string };
+    period?: string;
+  }) => {
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Timesheet");
+    
+    // Prepare formatted data
+    const formattedData = data.map((entry) => ({
+      Date: formatDateDDMMYY(entry.date),
+      Day: getDayNameNL(entry.date),
+      'Work Type': getWorkTypeLabel(entry.description || ""),
+      Project: entry.projects?.name || entry.project || "",
+      'Start Time': entry.startTime || "",
+      'End Time': entry.endTime || "",
+      Hours: typeof entry.hours === 'number' ? entry.hours : parseFloat(entry.hours || 0),
+      'Hours (HH:MM)': formatHoursHHMM(entry.hours || 0),
+      Notes: entry.notes || "",
+      'User Name': entry.user_name || entry.user_email || "",
+      'User Email': entry.user_email || "",
+    }));
+
+    // Create worksheet
+    const ws = XLSX.utils.json_to_sheet(formattedData);
+
+    // Set column widths for better readability
+    ws['!cols'] = [
+      { wch: 12 }, // Date
+      { wch: 12 }, // Day
+      { wch: 25 }, // Work Type
+      { wch: 25 }, // Project
+      { wch: 10 }, // Start Time
+      { wch: 10 }, // End Time
+      { wch: 10 }, // Hours (decimal)
+      { wch: 12 }, // Hours (HH:MM)
+      { wch: 40 }, // Notes
+      { wch: 25 }, // User Name
+      { wch: 30 }, // User Email
+    ];
+
+    // Add header information if provided
+    if (options?.userName || options?.dateRange) {
+      const headerRows: any[][] = [];
+      
+      if (options.userName) {
+        headerRows.push(['Employee Name:', options.userName]);
+      }
+      
+      if (options.dateRange) {
+        headerRows.push(['Period:', `From: ${formatDateDDMMYY(options.dateRange.from)} To: ${formatDateDDMMYY(options.dateRange.to)}`]);
+      }
+      
+      if (options.period) {
+        headerRows.push(['Period Type:', options.period]);
+      }
+      
+      // Calculate total hours
+      const totalHours = formattedData.reduce((sum, row) => sum + (row.Hours || 0), 0);
+      headerRows.push(['Total Hours:', totalHours.toFixed(2)]);
+      headerRows.push(['Total Hours (HH:MM):', formatHoursHHMM(totalHours)]);
+      headerRows.push([]); // Empty row
+      
+      // Get current sheet data as array of arrays
+      const sheetData = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
+      
+      // Combine headers with data
+      const allRows: any[][] = [...headerRows, ...sheetData];
+      
+      // Create new worksheet with headers
+      const newWs = XLSX.utils.aoa_to_sheet(allRows);
+      
+      // Copy column widths
+      newWs['!cols'] = ws['!cols'];
+      
+      // Style header rows (bold, background color)
+      const headerStyle = {
+        font: { bold: true, color: { rgb: "FFFFFF" } },
+        fill: { fgColor: { rgb: "EA580C" } }, // Orange background
+        alignment: { horizontal: "left", vertical: "center" }
+      };
+      
+      // Apply styles to header rows
+      for (let row = 0; row < headerRows.length; row++) {
+        for (let col = 0; col < 11; col++) {
+          const cellAddress = XLSX.utils.encode_cell({ r: row, c: col });
+          if (!newWs[cellAddress]) continue;
+          newWs[cellAddress].s = headerStyle;
+        }
+      }
+      
+      // Style table header row
+      const tableHeaderRow = headerRows.length;
+      const tableHeaderStyle = {
+        font: { bold: true, color: { rgb: "000000" } },
+        fill: { fgColor: { rgb: "FFF4E6" } }, // Light orange background
+        alignment: { horizontal: "center", vertical: "center" },
+        border: {
+          top: { style: "thin", color: { rgb: "000000" } },
+          bottom: { style: "thin", color: { rgb: "000000" } },
+          left: { style: "thin", color: { rgb: "000000" } },
+          right: { style: "thin", color: { rgb: "000000" } }
+        }
+      };
+      
+      for (let col = 0; col < 11; col++) {
+        const cellAddress = XLSX.utils.encode_cell({ r: tableHeaderRow, c: col });
+        if (newWs[cellAddress]) {
+          newWs[cellAddress].s = tableHeaderStyle;
+        }
+      }
+      
+      // Freeze header row
+      newWs['!freeze'] = { xSplit: 0, ySplit: tableHeaderRow + 1, topLeftCell: `A${tableHeaderRow + 2}`, activePane: 'bottomLeft', state: 'frozen' };
+      
+      XLSX.utils.book_append_sheet(wb, newWs, "Timesheet");
+    } else {
+      XLSX.utils.book_append_sheet(wb, ws, "Timesheet");
+    }
+
     XLSX.writeFile(wb, filename);
+  };
+
+  // Helper to download Excel file (backward compatibility)
+  const downloadExcel = (data: any[], filename = "timesheet.xlsx") => {
+    createFormattedExcel(data, filename);
   };
 
   // Helper to format date as DD/MM/YY
@@ -238,9 +359,14 @@ const Index = () => {
       setExporting(false);
       return;
     }
-    // Flatten project name
-    const rows = (data || []).map((row) => ({ ...row, project: row.projects?.name || "" }));
-    downloadExcel(rows, "timesheet_all.xlsx");
+    // Flatten project name and add user info
+    const rows = (data || []).map((row) => ({ 
+      ...row, 
+      project: row.projects?.name || "",
+      user_name: users.find(u => u.id === row.user_id)?.name || "",
+      user_email: users.find(u => u.id === row.user_id)?.email || ""
+    }));
+    createFormattedExcel(rows, "timesheet_all.xlsx");
     setExporting(false);
     toast({
       title: "Export Successful",
@@ -282,10 +408,19 @@ const Index = () => {
       setExporting(false);
       return;
     }
-    const rows = (data || []).map((row) => ({ ...row, project: row.projects?.name || "" }));
+    const rows = (data || []).map((row) => ({ 
+      ...row, 
+      project: row.projects?.name || "",
+      user_name: users.find(u => u.id === row.user_id)?.name || "",
+      user_email: users.find(u => u.id === row.user_id)?.email || ""
+    }));
     const selectedUser = users.find(u => u.id === selectedUserId);
     const userLabel = selectedUser ? `_${selectedUser.name || selectedUser.email}` : "";
-    downloadExcel(rows, `timesheet${userLabel}_${dateRange.from}_to_${dateRange.to}.xlsx`);
+    createFormattedExcel(rows, `timesheet${userLabel}_${dateRange.from}_to_${dateRange.to}.xlsx`, {
+      userName: selectedUser?.name || selectedUser?.email,
+      dateRange: { from: dateRange.from, to: dateRange.to },
+      period: "Date Range"
+    });
     setExporting(false);
     toast({
       title: "Export Succesvol",
@@ -317,10 +452,18 @@ const Index = () => {
       setExporting(false);
       return;
     }
-    const rows = (data || []).map((row) => ({ ...row, project: row.projects?.name || "" }));
+    const rows = (data || []).map((row) => ({ 
+      ...row, 
+      project: row.projects?.name || "",
+      user_name: selectedUser?.name || selectedUser?.email || "",
+      user_email: selectedUser?.email || ""
+    }));
     const selectedUser = users.find(u => u.id === selectedUserId);
     const userName = selectedUser?.name || selectedUser?.email || "user";
-    downloadExcel(rows, `timesheet_${userName.replace(/[^a-zA-Z0-9]/g, '_')}.xlsx`);
+    createFormattedExcel(rows, `timesheet_${userName.replace(/[^a-zA-Z0-9]/g, '_')}.xlsx`, {
+      userName: userName,
+      period: "All Data"
+    });
     setExporting(false);
     toast({
       title: "Export Succesvol",
@@ -489,62 +632,24 @@ const Index = () => {
       return;
     }
 
-    // Create workbook with formatted data
-    const wb = XLSX.utils.book_new();
-    
-    // Create header rows
-    const headerRows = [
-      ["Naam werknemer:", currentUser.name || currentUser.email || ""],
-      ["Datum:", `Van: ${formatDateDDMMYY(fromDate)} Tot: ${formatDateDDMMYY(toDate)}`],
-      ["Periode:", exportPeriod === "day" ? "Dag" : exportPeriod === "week" ? "Week" : exportPeriod === "month" ? "Maand" : "Jaar"],
-      ["Jaar:", selected.getFullYear().toString()],
-      [""], // Empty row
-    ];
+    // Format data for better Excel export
+    const formattedData = data.map((entry) => ({
+      date: entry.date,
+      description: entry.description || "",
+      projects: entry.projects,
+      project: entry.project || "",
+      startTime: entry.startTime || "",
+      endTime: entry.endTime || "",
+      hours: entry.hours || 0,
+      notes: entry.notes || "",
+    }));
 
-    // Create table headers
-    const tableHeaders = [
-      ["Dag", "Soort werk", "Project", "Werkbon", "Van", "Tot", "Gewerkte uren", "Projectleider", "Km stand auto", "Uitgevoerde werkzaamheden"]
-    ];
-
-    // Format data rows
-    const dataRows = data.map((entry) => [
-      getDayNameNL(entry.date),
-      getWorkTypeLabel(entry.description || ""),
-      entry.projects?.name || entry.project || "",
-      "", // Werkbon - not in database yet
-      entry.startTime || "",
-      entry.endTime || "",
-      formatHoursHHMM(entry.hours || 0),
-      "", // Projectleider - not in database yet
-      "", // Km stand auto - not in database yet
-      entry.notes || "",
-    ]);
-
-    // Combine all rows
-    const allRows = [...headerRows, ...tableHeaders, ...dataRows];
-
-    // Create worksheet from array
-    const ws = XLSX.utils.aoa_to_sheet(allRows);
-
-    // Set column widths
-    ws['!cols'] = [
-      { wch: 12 }, // Dag
-      { wch: 20 }, // Soort werk
-      { wch: 20 }, // Project
-      { wch: 12 }, // Werkbon
-      { wch: 8 },  // Van
-      { wch: 8 },  // Tot
-      { wch: 12 }, // Gewerkte uren
-      { wch: 15 }, // Projectleider
-      { wch: 12 }, // Km stand auto
-      { wch: 30 }, // Uitgevoerde werkzaamheden
-    ];
-
-    // Append worksheet to workbook
-    XLSX.utils.book_append_sheet(wb, ws, "Uren");
-
-    // Generate filename and save
-    XLSX.writeFile(wb, filename);
+    // Create formatted Excel
+    createFormattedExcel(formattedData, filename, {
+      userName: currentUser.name || currentUser.email,
+      dateRange: { from: fromDate, to: toDate },
+      period: exportPeriod === "day" ? "Day" : exportPeriod === "week" ? "Week" : exportPeriod === "month" ? "Month" : "Year"
+    });
 
     setExporting(false);
     toast({
@@ -949,6 +1054,8 @@ const Index = () => {
           <BugReports currentUser={currentUser} />
         )}
       </div>
+      {/* PWA Install Prompt */}
+      <InstallPWA />
     </div>
   );
 };
