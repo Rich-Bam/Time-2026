@@ -195,18 +195,31 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
   const fetchConfirmedStatus = async () => {
     if (!currentUser) return;
     const weekKey = weekDates[0].toISOString().split('T')[0];
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('confirmed_weeks')
       .select('confirmed, admin_approved')
       .eq('user_id', currentUser.id)
       .eq('week_start_date', weekKey)
       .single();
+    
+    // If there's an error or no data, don't update state (keep current state)
+    if (error || !data) {
+      console.log('fetchConfirmedStatus: No data or error, keeping current state', { error, data });
+      return;
+    }
+    
     // Week is locked if confirmed AND (user is not admin OR admin hasn't approved)
     // For non-admin: locked if confirmed = true
     // For admin: locked if confirmed = true AND admin_approved = false
-    const isLocked = !!data?.confirmed && (!currentUser.isAdmin || !data?.admin_approved);
-    console.log('fetchConfirmedStatus:', { weekKey, confirmed: data?.confirmed, isAdmin: currentUser.isAdmin, admin_approved: data?.admin_approved, isLocked });
+    const isLocked = !!data.confirmed && (!currentUser.isAdmin || !data.admin_approved);
+    console.log('fetchConfirmedStatus:', { weekKey, confirmed: data.confirmed, isAdmin: currentUser.isAdmin, admin_approved: data.admin_approved, isLocked });
+    
+    // Only update if the value changed to prevent unnecessary re-renders
     setConfirmedWeeks(prev => {
+      if (prev[weekKey] === isLocked) {
+        console.log('fetchConfirmedStatus: State unchanged, skipping update');
+        return prev;
+      }
       const updated = { ...prev, [weekKey]: isLocked };
       console.log('fetchConfirmedStatus updated state:', updated);
       return updated;
@@ -662,8 +675,13 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
     } else {
       // Immediately update state to lock the week - this will trigger a re-render and hide all editable elements
       const weekKeyDate = weekDates[0].toISOString().split('T')[0];
+      console.log('CONFIRMING WEEK - Setting state to locked:', weekKeyDate);
+      
+      // Force state update - set it to true immediately for non-admin users
+      const shouldBeLocked = !currentUser.isAdmin; // For non-admin, always lock. For admin, only lock if not approved.
       setConfirmedWeeks(prev => {
-        const updated = { ...prev, [weekKeyDate]: true };
+        const updated = { ...prev, [weekKeyDate]: shouldBeLocked };
+        console.log('CONFIRMING WEEK - Updated state:', updated);
         return updated;
       });
       
@@ -672,8 +690,11 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
         description: "This week has been confirmed and locked. You can no longer make changes.",
       });
       
-      // Also refresh confirmed status by fetching from database to ensure consistency
-      await fetchConfirmedStatus();
+      // After a short delay, refresh from database to ensure consistency
+      // Use setTimeout to ensure state update happens first
+      setTimeout(async () => {
+        await fetchConfirmedStatus();
+      }, 100);
     }
   };
 
