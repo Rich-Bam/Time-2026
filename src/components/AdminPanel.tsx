@@ -814,11 +814,11 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
         <div className="mb-4">
           <Label className="text-sm font-semibold mb-2 block">Select Users</Label>
           <div className="max-h-48 overflow-y-auto border rounded-lg p-3 bg-white">
-            {users.filter(u => !u.isAdmin).length === 0 ? (
+            {users.length === 0 ? (
               <p className="text-sm text-gray-500">No users available</p>
             ) : (
               <div className="space-y-2">
-                {users.filter(u => !u.isAdmin).map(user => (
+                {users.map(user => (
                   <div key={user.id} className="flex items-center gap-2">
                     <input
                       type="checkbox"
@@ -828,7 +828,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                       className="h-4 w-4"
                     />
                     <Label htmlFor={`reminder-user-${user.id}`} className="text-sm cursor-pointer">
-                      {user.name || user.email}
+                      {user.name || user.email} {user.isAdmin && <span className="text-xs text-blue-600">(Admin)</span>}
                     </Label>
                   </div>
                 ))}

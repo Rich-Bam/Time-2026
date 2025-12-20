@@ -48,10 +48,10 @@ const Index = () => {
   });
   const { toast } = useToast();
 
-  // Check for unread reminders when user logs in
+  // Check for unread reminders when user logs in (including admins)
   useEffect(() => {
     const checkReminders = async () => {
-      if (!isLoggedIn || !currentUser || currentUser.isAdmin) return;
+      if (!isLoggedIn || !currentUser) return;
       
       const { data: reminders, error } = await supabase
         .from("reminders")
