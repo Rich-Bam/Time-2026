@@ -228,13 +228,8 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
   };
 
   const handleAddEntry = (dayIdx: number) => {
-    console.log('handleAddEntry called, isWeekLocked():', isWeekLocked());
-    if (isWeekLocked()) {
-      toast({
-        title: "Not Allowed",
-        description: "This week is confirmed and cannot be changed anymore.",
-        variant: "destructive",
-      });
+    const weekKeyCheck = weekDates[0].toISOString().split('T')[0];
+    if (confirmedWeeks[weekKeyCheck] && !currentUser?.isAdmin) {
       return;
     }
     
