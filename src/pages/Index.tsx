@@ -1133,8 +1133,62 @@ const Index = () => {
     );
   }
 
+  // Mark reminder as read
+  const handleReminderRead = async () => {
+    if (!userReminder) return;
+    
+    const { error } = await supabase
+      .from("reminders")
+      .update({ read_at: new Date().toISOString() })
+      .eq("id", userReminder.id);
+    
+    if (!error) {
+      setShowReminderDialog(false);
+      setUserReminder(null);
+    }
+  };
+
+  const handleGoToWeeklyFromReminder = () => {
+    if (userReminder) {
+      setActiveTab('weekly');
+      handleReminderRead();
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-orange-100">
+      {/* Reminder Dialog for Users */}
+      <Dialog open={showReminderDialog} onOpenChange={setShowReminderDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-orange-700">
+              <AlertTriangle className="h-6 w-6 text-orange-500" />
+              Timesheet Reminder
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-4 text-base text-gray-700">
+            {userReminder && (
+              <>
+                <p className="mb-3">
+                  You have a reminder to fill in your hours for <strong>week {userReminder.week_number} of {userReminder.year}</strong>.
+                </p>
+                {userReminder.message && (
+                  <p className="mb-3 text-sm text-gray-600">{userReminder.message}</p>
+                )}
+                <p className="text-sm font-semibold text-orange-700">
+                  Please fill in your timesheet for this week.
+                </p>
+              </>
+            )}
+          </div>
+          <DialogFooter className="flex gap-2 justify-end">
+            <Button variant="outline" onClick={handleReminderRead}>Dismiss</Button>
+            <Button variant="default" onClick={handleGoToWeeklyFromReminder} className="bg-orange-600 hover:bg-orange-700">
+              Go to Weekly Entry
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       {/* Header */}
       <header className="bg-white shadow-lg border-b border-orange-100">
         <div className="container mx-auto px-3 sm:px-4 md:px-6 py-3 sm:py-4 md:py-6">
