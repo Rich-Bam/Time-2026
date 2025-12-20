@@ -526,21 +526,6 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
     }
   };
 
-  // Edit an existing entry
-  const handleEditEntry = (entry: Entry, dateStr: string) => {
-    const dayIdx = days.findIndex(d => d.date.toISOString().split('T')[0] === dateStr);
-    if (dayIdx === -1) return;
-    
-    // Add entry to editable entries
-    setDays(days.map((day, i) => 
-      i === dayIdx 
-        ? { ...day, entries: [...day.entries, { ...entry, id: entry.id }] }
-        : day
-    ));
-    
-    setEditingEntry({ id: entry.id!, dateStr });
-  };
-
   const handleDeleteEntry = async (entryId: number, dateStr: string) => {
     const weekKey = weekDates[0].toISOString().split('T')[0];
     const isWeekLocked = confirmedWeeks[weekKey];
