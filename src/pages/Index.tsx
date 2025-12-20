@@ -1277,12 +1277,15 @@ const Index = () => {
               </nav>
             </div>
             <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-3 md:gap-6 justify-center md:justify-end">
-              <button
-                onClick={() => setActiveTab('profile')}
-                className="text-xs sm:text-sm md:text-base text-gray-700 font-medium text-center sm:text-left hover:text-orange-600 transition-colors cursor-pointer"
-              >
-                {t('nav.welcome')}, {currentUser?.name || "User"}
-              </button>
+              {currentUser && (
+                <button
+                  onClick={() => setActiveTab('profile')}
+                  className="text-xs sm:text-sm md:text-base text-gray-700 font-medium text-center sm:text-left hover:text-orange-600 transition-colors cursor-pointer underline decoration-1 hover:decoration-2"
+                  title="Click to view and edit your profile"
+                >
+                  {t('nav.welcome')}, {currentUser?.name || "User"}
+                </button>
+              )}
               {currentUser?.isAdmin && (
                 <ScreenshotButton currentUser={currentUser} />
               )}
