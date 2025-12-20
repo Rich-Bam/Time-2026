@@ -208,10 +208,9 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
       return;
     }
     
-    // Week is locked if confirmed AND (user is not admin OR admin hasn't approved)
-    // For non-admin: locked if confirmed = true
-    // For admin: locked if confirmed = true AND admin_approved = false
-    const isLocked = !!data.confirmed && (!currentUser.isAdmin || !data.admin_approved);
+    // Week is locked if confirmed = true (regardless of admin status)
+    // Admins can unlock via admin panel
+    const isLocked = !!data.confirmed;
     console.log('fetchConfirmedStatus:', { weekKey, confirmed: data.confirmed, isAdmin: currentUser.isAdmin, admin_approved: data.admin_approved, isLocked });
     
     // Only update if the value changed to prevent unnecessary re-renders
@@ -242,7 +241,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
 
   const handleAddEntry = (dayIdx: number) => {
     const weekKeyCheck = weekDates[0].toISOString().split('T')[0];
-    if (confirmedWeeks[weekKeyCheck] && !currentUser?.isAdmin) {
+    if (confirmedWeeks[weekKeyCheck]) {
       return;
     }
     
@@ -255,7 +254,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
 
   const handleRemoveEntry = (dayIdx: number, entryIdx: number) => {
     const weekKeyCheck = weekDates[0].toISOString().split('T')[0];
-    if (confirmedWeeks[weekKeyCheck] && !currentUser?.isAdmin) {
+    if (confirmedWeeks[weekKeyCheck]) {
       return;
     }
     
@@ -269,7 +268,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
   const handleEntryChange = (dayIdx: number, entryIdx: number, field: string, value: any) => {
     // Prevent changes if week is locked
     const weekKeyCheck = weekDates[0].toISOString().split('T')[0];
-    if (confirmedWeeks[weekKeyCheck] && !currentUser?.isAdmin) {
+    if (confirmedWeeks[weekKeyCheck]) {
       return; // Silently ignore changes if week is locked
     }
     
@@ -302,7 +301,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
     if (!currentUser) return;
     
     const weekKeyCheck = weekDates[0].toISOString().split('T')[0];
-    if (confirmedWeeks[weekKeyCheck] && !currentUser?.isAdmin) {
+    if (confirmedWeeks[weekKeyCheck]) {
       return;
     }
     
@@ -441,7 +440,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
   // Edit an existing entry
   const handleEditEntry = (entry: Entry, dateStr: string) => {
     const weekKeyCheck = weekDates[0].toISOString().split('T')[0];
-    if (confirmedWeeks[weekKeyCheck] && !currentUser?.isAdmin) {
+    if (confirmedWeeks[weekKeyCheck]) {
       return;
     }
     
@@ -617,7 +616,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
 
   const handleDeleteEntry = async (entryId: number, dateStr: string) => {
     const weekKeyCheck = weekDates[0].toISOString().split('T')[0];
-    if (confirmedWeeks[weekKeyCheck] && !currentUser?.isAdmin) {
+    if (confirmedWeeks[weekKeyCheck]) {
       return;
     }
     
@@ -677,9 +676,9 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
       const weekKeyDate = weekDates[0].toISOString().split('T')[0];
       console.log('CONFIRMING WEEK - Setting state to locked:', weekKeyDate, 'isAdmin:', currentUser.isAdmin);
       
-      // For non-admin users: always lock when confirmed
-      // For admin users: lock if not approved (admin_approved = false)
-      const shouldBeLocked = !currentUser.isAdmin; // Non-admin = always locked, Admin = locked until approved
+      // Lock the week immediately - both for admins and non-admins
+      // Admins can unlock via admin panel if needed
+      const shouldBeLocked = true;
       
       console.log('CONFIRMING WEEK - shouldBeLocked:', shouldBeLocked);
       
@@ -702,8 +701,11 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
   };
 
   // Calculate isLocked directly from state for rendering
+  // Week is locked if confirmed AND (user is not admin OR admin hasn't approved yet)
+  // For simplicity: if confirmedWeeks[weekKey] is true, the week is locked (regardless of admin status)
+  // Admins will need to use the admin panel to approve/unlock weeks
   const weekKey = weekDates[0].toISOString().split('T')[0];
-  const isLocked = !!confirmedWeeks[weekKey] && !currentUser?.isAdmin;
+  const isLocked = !!confirmedWeeks[weekKey];
   
   // Debug logging
   console.log('RENDER - isLocked calculation:', { 
