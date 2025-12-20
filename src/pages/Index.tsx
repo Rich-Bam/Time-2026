@@ -471,6 +471,53 @@ const Index = () => {
     });
   };
 
+  // Export all data to PDF (admin only)
+  const handleExportAllPDF = async () => {
+    setExporting(true);
+    const { data, error } = await supabase
+      .from("timesheet")
+      .select("*, projects(name)")
+      .order("date", { ascending: true });
+    if (error) {
+      toast({
+        title: "Export Mislukt",
+        description: error.message,
+        variant: "destructive",
+      });
+      setExporting(false);
+      return;
+    }
+    
+    // Format data for PDF
+    const formattedData = (data || []).map((row) => {
+      const user = users.find(u => u.id === row.user_id);
+      return {
+        Date: formatDateDDMMYY(row.date),
+        Day: getDayNameNL(row.date),
+        'Work Type': getWorkTypeLabel(row.description || ""),
+        Project: row.projects?.name || row.project || "",
+        'Start Time': row.startTime || "",
+        'End Time': row.endTime || "",
+        Hours: typeof row.hours === 'number' ? row.hours : parseFloat(row.hours || 0),
+        'Hours (HH:MM)': formatHoursHHMM(row.hours || 0),
+        Notes: row.notes || "",
+        'User Name': user?.name || "",
+        'User Email': user?.email || "",
+      };
+    });
+
+    createPDF({
+      period: "All Data",
+      data: formattedData
+    }, "timesheet_all.pdf");
+
+    setExporting(false);
+    toast({
+      title: "PDF Export Successful",
+      description: "All timesheet data exported to PDF.",
+    });
+  };
+
   // Export by date range (admin only) - can optionally filter by user
   const handleExportRange = async () => {
     if (!dateRange.from || !dateRange.to) {
@@ -539,7 +586,8 @@ const Index = () => {
     const { data, error } = await supabase
       .from("timesheet")
       .select("*, projects(name)")
-      .eq("user_id", selectedUserId);
+      .eq("user_id", selectedUserId)
+      .order("date", { ascending: true });
     if (error) {
       toast({
         title: "Export Mislukt",
@@ -564,6 +612,63 @@ const Index = () => {
     setExporting(false);
     toast({
       title: "Export Succesvol",
+      description: `Alle data geëxporteerd voor ${userName}.`,
+    });
+  };
+
+  // Export by user to PDF (admin only)
+  const handleExportUserPDF = async () => {
+    if (!selectedUserId || selectedUserId === "all") {
+      toast({
+        title: "Geen Gebruiker Geselecteerd",
+        description: "Selecteer een gebruiker om te exporteren.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setExporting(true);
+    const { data, error } = await supabase
+      .from("timesheet")
+      .select("*, projects(name)")
+      .eq("user_id", selectedUserId)
+      .order("date", { ascending: true });
+    if (error) {
+      toast({
+        title: "Export Mislukt",
+        description: error.message,
+        variant: "destructive",
+      });
+      setExporting(false);
+      return;
+    }
+    
+    const selectedUser = users.find(u => u.id === selectedUserId);
+    const userName = selectedUser?.name || selectedUser?.email || "user";
+    
+    // Format data for PDF
+    const formattedData = (data || []).map((row) => {
+      return {
+        Date: formatDateDDMMYY(row.date),
+        Day: getDayNameNL(row.date),
+        'Work Type': getWorkTypeLabel(row.description || ""),
+        Project: row.projects?.name || row.project || "",
+        'Start Time': row.startTime || "",
+        'End Time': row.endTime || "",
+        Hours: typeof row.hours === 'number' ? row.hours : parseFloat(row.hours || 0),
+        'Hours (HH:MM)': formatHoursHHMM(row.hours || 0),
+        Notes: row.notes || "",
+      };
+    });
+
+    createPDF({
+      userName: userName,
+      period: "All Data",
+      data: formattedData
+    }, `timesheet_${userName.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`);
+
+    setExporting(false);
+    toast({
+      title: "PDF Export Succesvol",
       description: `Alle data geëxporteerd voor ${userName}.`,
     });
   };
@@ -634,6 +739,93 @@ const Index = () => {
     setExporting(false);
     toast({
       title: "Export Succesvol",
+      description: `Data geëxporteerd voor week ${weekNum} van ${year}${selectedUser ? ` voor ${selectedUser.name || selectedUser.email}` : ""}.`,
+    });
+  };
+
+  // Export by week number to PDF (admin only)
+  const handleExportWeekNumberPDF = async () => {
+    if (!selectedWeekNumber || !selectedYear) {
+      toast({
+        title: "Ontbrekende Informatie",
+        description: "Selecteer een week nummer en jaar.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    const weekNum = parseInt(selectedWeekNumber);
+    const year = parseInt(selectedYear);
+    
+    if (isNaN(weekNum) || weekNum < 1 || weekNum > 53) {
+      toast({
+        title: "Ongeldig Week Nummer",
+        description: "Week nummer moet tussen 1 en 53 zijn.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    setExporting(true);
+    
+    // Get date range for the week
+    const { from, to } = getWeekDateRange(weekNum, year);
+    
+    // Build query with optional user filter
+    let queryBuilder = supabase
+      .from("timesheet")
+      .select("*, projects(name)")
+      .gte("date", from)
+      .lte("date", to)
+      .order("date", { ascending: true });
+    
+    // If a user is selected, filter by user
+    if (selectedUserId && selectedUserId !== "all") {
+      queryBuilder = queryBuilder.eq("user_id", selectedUserId);
+    }
+    
+    const { data, error } = await queryBuilder;
+    if (error) {
+      toast({
+        title: "Export Mislukt",
+        description: error.message,
+        variant: "destructive",
+      });
+      setExporting(false);
+      return;
+    }
+    
+    const selectedUser = users.find(u => u.id === selectedUserId);
+    const userLabel = selectedUser ? `_${selectedUser.name || selectedUser.email}` : "";
+    
+    // Format data for PDF
+    const formattedData = (data || []).map((row) => {
+      const user = users.find(u => u.id === row.user_id);
+      return {
+        Date: formatDateDDMMYY(row.date),
+        Day: getDayNameNL(row.date),
+        'Work Type': getWorkTypeLabel(row.description || ""),
+        Project: row.projects?.name || row.project || "",
+        'Start Time': row.startTime || "",
+        'End Time': row.endTime || "",
+        Hours: typeof row.hours === 'number' ? row.hours : parseFloat(row.hours || 0),
+        'Hours (HH:MM)': formatHoursHHMM(row.hours || 0),
+        Notes: row.notes || "",
+        'User Name': user?.name || "",
+        'User Email': user?.email || "",
+      };
+    });
+
+    createPDF({
+      userName: selectedUser?.name || selectedUser?.email,
+      dateRange: { from: formatDateDDMMYY(from), to: formatDateDDMMYY(to) },
+      period: `Week ${weekNum}, ${year}`,
+      data: formattedData
+    }, `timesheet_Week${weekNum}_${year}${userLabel}.pdf`);
+
+    setExporting(false);
+    toast({
+      title: "PDF Export Succesvol",
       description: `Data geëxporteerd voor week ${weekNum} van ${year}${selectedUser ? ` voor ${selectedUser.name || selectedUser.email}` : ""}.`,
     });
   };
@@ -1164,11 +1356,7 @@ const Index = () => {
                       </Button>
                       <Button 
                         className="h-20 flex flex-col items-center justify-center bg-red-600 hover:bg-red-700 text-white shadow-lg rounded-lg transition-all" 
-                        onClick={() => {
-                          // PDF export for all data
-                          handleExportAll();
-                          // TODO: Add PDF export for all data
-                        }} 
+                        onClick={handleExportAllPDF} 
                         disabled={exporting}
                       >
                         <FileDown className="h-6 w-6 mb-2" />
@@ -1234,10 +1422,7 @@ const Index = () => {
                         <Button 
                           variant="outline" 
                           className="h-14 w-full flex flex-col items-center justify-center border-red-200 text-red-700 hover:bg-red-50 shadow-lg rounded-lg transition-all" 
-                          onClick={() => {
-                            // TODO: Add PDF export for week number
-                            handleExportWeekNumber();
-                          }} 
+                          onClick={handleExportWeekNumberPDF} 
                           disabled={exporting || !selectedWeekNumber || !selectedYear}
                         >
                           <FileDown className="h-6 w-6 mb-2" />
@@ -1259,10 +1444,7 @@ const Index = () => {
                       <Button 
                         variant="outline" 
                         className="h-20 flex flex-col items-center justify-center border-red-200 text-red-700 hover:bg-red-50 shadow-lg rounded-lg transition-all" 
-                        onClick={() => {
-                          // TODO: Add PDF export for user
-                          handleExportUser();
-                        }} 
+                        onClick={handleExportUserPDF} 
                         disabled={exporting || !selectedUserId || selectedUserId === "all"}
                       >
                         <FileDown className="h-6 w-6 mb-2" />
