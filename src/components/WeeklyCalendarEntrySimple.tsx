@@ -400,37 +400,38 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
     const dayIdx = days.findIndex(d => d.date.toISOString().split('T')[0] === dateStr);
     if (dayIdx === -1) return;
     
-    // Check if this entry is already in the editable entries
     const day = days[dayIdx];
+    // Check if this entry is already in the editable entries
     const existingEntryIndex = day.entries.findIndex(e => e.id === entry.id);
     
     if (existingEntryIndex !== -1) {
       // Entry is already being edited, just update the editingEntry state
       setEditingEntry({ id: entry.id!, dateStr });
-    } else {
-      // Add entry to editable entries (don't delete from database yet)
-      // Only add if there's at least one empty entry, otherwise add a new one
-      const hasEmptyEntry = day.entries.some(e => !e.workType && !e.project && !e.startTime && !e.endTime && !e.id);
-      
-      setDays(days.map((d, i) => {
-        if (i !== dayIdx) return d;
-        
-        if (hasEmptyEntry) {
-          // Replace the first empty entry with the entry being edited
-          const newEntries = [...d.entries];
-          const emptyIndex = newEntries.findIndex(e => !e.workType && !e.project && !e.startTime && !e.endTime && !e.id);
-          if (emptyIndex !== -1) {
-            newEntries[emptyIndex] = { ...entry, id: entry.id };
-            return { ...d, entries: newEntries };
-          }
-        }
-        
-        // If no empty entry found, add the entry to the array
-        return { ...d, entries: [...d.entries, { ...entry, id: entry.id }] };
-      }));
-      
-      setEditingEntry({ id: entry.id!, dateStr });
+      return;
     }
+    
+    // Check if there are any completely empty entries (no data at all)
+    const emptyEntryIndex = day.entries.findIndex(e => 
+      !e.workType && !e.project && !e.startTime && !e.endTime && !e.id
+    );
+    
+    setDays(days.map((d, i) => {
+      if (i !== dayIdx) return d;
+      
+      const newEntries = [...d.entries];
+      
+      if (emptyEntryIndex !== -1) {
+        // Replace the first empty entry with the entry being edited
+        newEntries[emptyEntryIndex] = { ...entry, id: entry.id };
+      } else {
+        // No empty entry found, add the entry to edit (without adding a new empty one)
+        newEntries.push({ ...entry, id: entry.id });
+      }
+      
+      return { ...d, entries: newEntries };
+    }));
+    
+    setEditingEntry({ id: entry.id!, dateStr });
   };
 
   const roundToQuarterHour = (timeStr: string) => {
