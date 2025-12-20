@@ -337,22 +337,73 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
       }
       // No toast notification - silent save
     } else {
-      // Create new entry (only if it doesn't have an id)
-      const { error } = await supabase.from("timesheet").insert([{
-        project: isDayOff ? null : entry.project,
-        user_id: currentUser.id,
-        date: dateStr,
-        hours: hoursToSave,
-        description: entry.workType,
-        startTime: entry.startTime || null,
-        endTime: entry.endTime || null,
-      }]);
+      // Check if a similar entry already exists (to prevent duplicates)
+      const { data: existingEntries } = await supabase
+        .from("timesheet")
+        .select("id")
+        .eq("user_id", currentUser.id)
+        .eq("date", dateStr)
+        .eq("description", entry.workType)
+        .eq("project", isDayOff ? null : entry.project)
+        .eq("startTime", entry.startTime || null)
+        .eq("endTime", entry.endTime || null);
       
-      if (!error) {
-        // Silently refresh submitted entries in background
-        fetchSubmittedEntries(dateStr);
-        // Keep entry in editable entries - don't remove it
-        // Entry stays visible and editable
+      if (existingEntries && existingEntries.length > 0) {
+        // Entry already exists, update it instead
+        const existingId = existingEntries[0].id;
+        const { error } = await supabase
+          .from("timesheet")
+          .update({
+            project: isDayOff ? null : entry.project,
+            hours: hoursToSave,
+            description: entry.workType,
+            startTime: entry.startTime || null,
+            endTime: entry.endTime || null,
+          })
+          .eq("id", existingId);
+        
+        if (!error) {
+          // Update the entry in state with the ID so future saves will update instead of insert
+          setDays(prevDays => prevDays.map((d, i) => {
+            if (i !== dayIdx) return d;
+            return {
+              ...d,
+              entries: d.entries.map((e, j) => {
+                if (j !== entryIdx) return e;
+                return { ...e, id: existingId };
+              })
+            };
+          }));
+          // Silently refresh submitted entries in background
+          fetchSubmittedEntries(dateStr);
+        }
+      } else {
+        // Create new entry (only if it doesn't have an id and doesn't exist)
+        const { data: newEntry, error } = await supabase.from("timesheet").insert([{
+          project: isDayOff ? null : entry.project,
+          user_id: currentUser.id,
+          date: dateStr,
+          hours: hoursToSave,
+          description: entry.workType,
+          startTime: entry.startTime || null,
+          endTime: entry.endTime || null,
+        }]).select("id").single();
+        
+        if (!error && newEntry) {
+          // Update the entry in state with the ID so future saves will update instead of insert
+          setDays(prevDays => prevDays.map((d, i) => {
+            if (i !== dayIdx) return d;
+            return {
+              ...d,
+              entries: d.entries.map((e, j) => {
+                if (j !== entryIdx) return e;
+                return { ...e, id: newEntry.id };
+              })
+            };
+          }));
+          // Silently refresh submitted entries in background
+          fetchSubmittedEntries(dateStr);
+        }
       }
       // No toast notification - silent save
     }
