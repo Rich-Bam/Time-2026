@@ -35,3 +35,6 @@ CREATE INDEX IF NOT EXISTS idx_screenshots_created_at ON public.screenshots(crea
 CREATE INDEX IF NOT EXISTS idx_screenshots_user_id ON public.screenshots(user_id);
 
 
+
+
+

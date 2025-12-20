@@ -21,3 +21,6 @@ GRANT SELECT ON users_public TO authenticated;
 GRANT SELECT ON users_public TO anon;
 GRANT SELECT ON users_public TO service_role;
 
+
+
+

@@ -254,3 +254,6 @@ npx cap open ios
 6. ⏳ Submit voor review
 
 
+
+
+

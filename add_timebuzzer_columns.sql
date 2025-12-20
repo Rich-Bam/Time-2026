@@ -23,3 +23,6 @@ WHERE timebuzzer_activity_id IS NOT NULL;
 
 COMMENT ON COLUMN public.timesheet.timebuzzer_activity_id IS 'Timebuzzer activity ID to prevent duplicate syncing';
 
+
+
+

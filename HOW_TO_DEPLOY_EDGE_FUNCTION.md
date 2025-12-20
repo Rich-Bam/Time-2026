@@ -281,3 +281,6 @@ Als niets werkt, deel met me:
 3. ⚠️ **Functie naam MOET exact zijn**: `timebuzzer-sync`
 4. ⚠️ **Secret naam MOET exact zijn**: `TIMEBUZZER_API_KEY`
 
+
+
+

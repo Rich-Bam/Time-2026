@@ -24,3 +24,6 @@ DROP POLICY IF EXISTS "Admins can delete users" ON users;
 -- This only removes the database view and RLS policies
 -- Passwords will still be hashed when stored, but the view is removed
 
+
+
+

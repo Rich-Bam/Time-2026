@@ -12,3 +12,6 @@ COMMENT ON COLUMN public.projects.user_id IS 'If NULL, project is global (visibl
 CREATE INDEX IF NOT EXISTS idx_projects_user_id ON public.projects(user_id);
 
 
+
+
+

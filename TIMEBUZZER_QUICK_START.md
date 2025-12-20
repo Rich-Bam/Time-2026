@@ -87,3 +87,6 @@ WHERE name = 'Project Name';
 - Only entries for projects that have `timebuzzer_project_id` mapped will be synced.
 - The sync prevents duplicates using `timebuzzer_activity_id`.
 
+
+
+

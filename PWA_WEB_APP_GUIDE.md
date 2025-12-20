@@ -282,3 +282,6 @@ Je hebt nu een **volledig functionele PWA** die:
 
 **Geen extra stappen nodig** - alles werkt al! 🎉
 
+
+
+

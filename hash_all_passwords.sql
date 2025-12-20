@@ -22,3 +22,6 @@ ORDER BY password_status, email;
 --   COUNT(*) FILTER (WHERE password NOT LIKE '$2%') as plaintext_count
 -- FROM users;
 
+
+
+

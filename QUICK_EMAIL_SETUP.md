@@ -82,3 +82,6 @@ Als de Edge Function niet werkt, wordt er automatisch een fallback gebruikt:
 
 **Aanbevolen:** Laat de Edge Function werken voor automatische emails!
 
+
+
+

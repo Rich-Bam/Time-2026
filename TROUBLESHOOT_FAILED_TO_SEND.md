@@ -150,3 +150,6 @@ Als het nog steeds niet werkt, deel dan:
 4. De output van de browser console test (Stap 5 hierboven)
 
 
+
+
+

@@ -165,3 +165,6 @@ Als alle stappen zijn uitgevoerd, kun je de code pushen. De screenshot functiona
 **Vragen?** Check de browser console (F12) voor errors als iets niet werkt.
 
 
+
+
+

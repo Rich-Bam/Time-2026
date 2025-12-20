@@ -34,3 +34,6 @@ Als dit werkt, bestaat de view. Als je een error krijgt, moet je eerst het `hide
 - Het verbergen is alleen visueel - de data blijft bestaan
 - Voor echte beveiliging zou je wachtwoorden moeten hashen (toekomstige verbetering)
 
+
+
+

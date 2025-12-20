@@ -110,3 +110,6 @@ git restore <bestandsnaam>
 
 **Onthoud:** `npm run dev` draait ALLEEN lokaal. Niets gaat naar de live site totdat je zelf `git push` doet!
 
+
+
+

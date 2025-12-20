@@ -105,3 +105,6 @@ Als de Edge Function niet werkt, wordt er automatisch een fallback gebruikt:
 
 Dit is minder veilig, dus probeer de Edge Function te laten werken!
 
+
+
+
