@@ -37,7 +37,7 @@ After creating the bucket, you need to add policies so users can upload and view
 5. Allowed operation: `INSERT`
 6. Policy definition:
 ```sql
-(role() = 'authenticated')
+bucket_id() = 'profile-photos'
 ```
 7. Click **Save**
 
@@ -47,7 +47,7 @@ After creating the bucket, you need to add policies so users can upload and view
 3. Allowed operation: `SELECT`
 4. Policy definition:
 ```sql
-(true)
+true
 ```
 5. Click **Save**
 
@@ -57,7 +57,7 @@ After creating the bucket, you need to add policies so users can upload and view
 3. Allowed operation: `DELETE`
 4. Policy definition:
 ```sql
-(role() = 'authenticated')
+bucket_id() = 'profile-photos'
 ```
 5. Click **Save**
 
