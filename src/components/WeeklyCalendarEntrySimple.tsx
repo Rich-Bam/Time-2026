@@ -365,9 +365,20 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
   };
   
   // Edit an existing entry
-  const handleEditEntry = (entry: Entry, dateStr: string) => {
+  const handleEditEntry = async (entry: Entry, dateStr: string) => {
     const dayIdx = days.findIndex(d => d.date.toISOString().split('T')[0] === dateStr);
     if (dayIdx === -1) return;
+    
+    // Delete the existing entry first (it will be recreated when saved)
+    const { error: deleteError } = await supabase.from('timesheet').delete().eq('id', entry.id!);
+    if (deleteError) {
+      toast({
+        title: "Error",
+        description: "Could not prepare entry for editing.",
+        variant: "destructive",
+      });
+      return;
+    }
     
     // Add entry to editable entries
     setDays(days.map((day, i) => 
@@ -377,6 +388,9 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
     ));
     
     setEditingEntry({ id: entry.id!, dateStr });
+    
+    // Refresh submitted entries to remove the deleted one
+    fetchSubmittedEntries(dateStr);
   };
 
   const roundToQuarterHour = (timeStr: string) => {
