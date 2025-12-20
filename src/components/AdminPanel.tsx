@@ -1074,6 +1074,93 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
           </div>
         </div>
       )}
+      {/* All Confirmed Weeks Section */}
+      <div className="mt-8 sm:mt-12">
+        <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4 text-green-600">✓ All Confirmed Weeks</h3>
+        <div className="space-y-3">
+          {users.map(user => {
+            const userConfirmedWeeks = confirmedWeeks.filter(
+              cw => cw.user_id === user.id && cw.confirmed
+            );
+            
+            if (userConfirmedWeeks.length === 0) {
+              return null;
+            }
+            
+            return (
+              <div key={user.id} className="border rounded-lg p-3 sm:p-4 bg-white shadow">
+                <div className="font-semibold text-base sm:text-lg mb-3">
+                  {user.name || user.email}
+                </div>
+                <div className="space-y-2">
+                  {userConfirmedWeeks.map((cw) => {
+                    const weekStart = new Date(cw.week_start_date);
+                    const weekEnd = new Date(weekStart);
+                    weekEnd.setDate(weekEnd.getDate() + 6);
+                    const weekNum = getISOWeek(cw.week_start_date);
+                    const weekEntries = allEntries.filter(
+                      e => e.user_id === cw.user_id && 
+                      e.date >= cw.week_start_date && 
+                      e.date <= weekEnd.toISOString().split('T')[0]
+                    );
+                    const totalHours = weekEntries.reduce((sum, e) => sum + Number(e.hours || 0), 0);
+                    
+                    return (
+                      <div key={`${cw.user_id}-${cw.week_start_date}`} className="border rounded p-2 bg-gray-50">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                          <div>
+                            <div className="font-medium text-sm sm:text-base">
+                              Week {weekNum} ({weekStart.toLocaleDateString('en-US')} - {weekEnd.toLocaleDateString('en-US')})
+                            </div>
+                            <div className="text-xs sm:text-sm text-gray-600">
+                              Total: {totalHours.toFixed(2)} hours ({weekEntries.length} entries)
+                            </div>
+                            <div className="text-xs sm:text-sm mt-1">
+                              Status: {cw.admin_approved ? (
+                                <span className="text-green-600 font-semibold">✓ Approved</span>
+                              ) : cw.admin_reviewed ? (
+                                <span className="text-red-600 font-semibold">✗ Rejected</span>
+                              ) : (
+                                <span className="text-orange-600 font-semibold">⏳ Pending Review</span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex gap-2">
+                            {!cw.admin_approved && (
+                              <Button
+                                size="sm"
+                                variant="default"
+                                className="bg-green-600 hover:bg-green-700 h-8"
+                                onClick={() => handleApproveWeek(cw.user_id, cw.week_start_date)}
+                              >
+                                ✓ Approve
+                              </Button>
+                            )}
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="border-orange-600 text-orange-600 hover:bg-orange-100 h-8"
+                              onClick={() => handleUnlockWeek(cw.user_id, cw.week_start_date)}
+                            >
+                              🔓 Unlock
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+          {confirmedWeeks.filter(cw => cw.confirmed).length === 0 && (
+            <div className="text-gray-400 text-center italic p-6 border rounded-lg bg-gray-50">
+              No confirmed weeks yet.
+            </div>
+          )}
+        </div>
+      </div>
+      
       {/* Below user table: User Weekly Entries Accordion */}
       <div className="mt-8 sm:mt-12">
         <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4">View User Weekly Entries</h3>

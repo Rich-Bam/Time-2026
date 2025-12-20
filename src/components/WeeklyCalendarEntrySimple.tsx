@@ -589,6 +589,59 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
     return workType ? workType.label : desc;
   };
 
+  // Handle week confirmation
+  const handleConfirmWeek = async () => {
+    if (!currentUser) return;
+    
+    const weekKey = weekDates[0].toISOString().split('T')[0];
+    
+    // Check if week already has confirmed status
+    const { data: existing } = await supabase
+      .from('confirmed_weeks')
+      .select('*')
+      .eq('user_id', currentUser.id)
+      .eq('week_start_date', weekKey)
+      .single();
+    
+    if (existing?.confirmed) {
+      toast({
+        title: "Already Confirmed",
+        description: "This week is already confirmed.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // Insert or update confirmed_weeks
+    const { error } = await supabase
+      .from('confirmed_weeks')
+      .upsert({
+        user_id: currentUser.id,
+        week_start_date: weekKey,
+        confirmed: true,
+        admin_approved: false,
+        admin_reviewed: false,
+      }, {
+        onConflict: 'user_id,week_start_date'
+      });
+    
+    if (error) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to confirm week.",
+        variant: "destructive",
+      });
+    } else {
+      toast({
+        title: "Week Confirmed",
+        description: "This week has been confirmed and locked. You can no longer make changes.",
+      });
+      // Refresh confirmed status
+      const weekKeyDate = weekDates[0].toISOString().split('T')[0];
+      setConfirmedWeeks(prev => ({ ...prev, [weekKeyDate]: true }));
+    }
+  };
+
   const isLocked = confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin;
 
   return (
@@ -1080,6 +1133,37 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
           </div>
         </CardContent>
       </Card>
+      
+      {/* Confirm Week Button */}
+      {!isLocked && (
+        <Card className="mt-4 bg-orange-50 border-orange-200">
+          <CardContent className="p-4">
+            <div className="flex flex-col gap-3">
+              <div className="text-sm text-orange-800">
+                <strong>Note:</strong> Once you confirm this week, you will no longer be able to make changes. Please make sure all entries are correct before confirming.
+              </div>
+              <Button 
+                className="w-full bg-orange-600 hover:bg-orange-700 text-white" 
+                variant="default" 
+                onClick={handleConfirmWeek}
+              >
+                Confirm Week
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+      
+      {/* Week Confirmed Message */}
+      {isLocked && (
+        <Card className="mt-4 bg-blue-50 border-blue-200">
+          <CardContent className="p-4">
+            <div className="text-blue-800 font-semibold">
+              ✓ This week has been confirmed and locked. Contact an admin if you need to make changes.
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 };
