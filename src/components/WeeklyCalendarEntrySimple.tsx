@@ -97,13 +97,15 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
   const [customProjectInputs, setCustomProjectInputs] = useState<Record<string, string>>({});
   const [editingEntry, setEditingEntry] = useState<{ id: number; dateStr: string } | null>(null);
   
+  const weekDates = getWeekDates(weekStart);
+  
   // Helper function to check if week is locked
   const isWeekLocked = (): boolean => {
     const weekKey = weekDates[0].toISOString().split('T')[0];
-    return confirmedWeeks[weekKey] && !currentUser?.isAdmin;
+    const isLocked = !!confirmedWeeks[weekKey] && !currentUser?.isAdmin;
+    console.log('isWeekLocked check:', { weekKey, confirmedWeeksValue: confirmedWeeks[weekKey], confirmedWeeks: confirmedWeeks, isAdmin: currentUser?.isAdmin, isLocked });
+    return isLocked;
   };
-
-  const weekDates = getWeekDates(weekStart);
   const weekNumber = getISOWeekNumber(weekDates[0]);
   const totalDaysOff = 25;
   const daysOffLeft = (totalDaysOff - dbDaysOff).toFixed(1);
@@ -207,8 +209,16 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
       .eq('user_id', currentUser.id)
       .eq('week_start_date', weekKey)
       .single();
+    // Week is locked if confirmed AND (user is not admin OR admin hasn't approved)
+    // For non-admin: locked if confirmed = true
+    // For admin: locked if confirmed = true AND admin_approved = false
     const isLocked = !!data?.confirmed && (!currentUser.isAdmin || !data?.admin_approved);
-    setConfirmedWeeks(prev => ({ ...prev, [weekKey]: isLocked }));
+    console.log('fetchConfirmedStatus:', { weekKey, confirmed: data?.confirmed, isAdmin: currentUser.isAdmin, admin_approved: data?.admin_approved, isLocked });
+    setConfirmedWeeks(prev => {
+      const updated = { ...prev, [weekKey]: isLocked };
+      console.log('fetchConfirmedStatus updated state:', updated);
+      return updated;
+    });
   };
 
   useEffect(() => {
@@ -226,6 +236,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
   };
 
   const handleAddEntry = (dayIdx: number) => {
+    console.log('handleAddEntry called, isWeekLocked():', isWeekLocked());
     if (isWeekLocked()) {
       toast({
         title: "Not Allowed",
@@ -683,7 +694,12 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
       });
       // Immediately set locked state, then refresh from database to be sure
       const weekKeyDate = weekDates[0].toISOString().split('T')[0];
-      setConfirmedWeeks(prev => ({ ...prev, [weekKeyDate]: true }));
+      console.log('Confirming week, setting locked:', weekKeyDate);
+      setConfirmedWeeks(prev => {
+        const updated = { ...prev, [weekKeyDate]: true };
+        console.log('Updated confirmedWeeks state:', updated);
+        return updated;
+      });
       // Also refresh confirmed status by fetching from database
       await fetchConfirmedStatus();
     }
