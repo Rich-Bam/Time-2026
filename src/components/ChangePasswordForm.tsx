@@ -22,8 +22,8 @@ const ChangePasswordForm = ({ currentUser, setCurrentUser }: ChangePasswordFormP
     
     if (!password) {
       toast({ 
-        title: "Fout", 
-        description: "Voer een wachtwoord in", 
+        title: "Error", 
+        description: "Please enter a password", 
         variant: "destructive" 
       });
       return;
@@ -31,8 +31,8 @@ const ChangePasswordForm = ({ currentUser, setCurrentUser }: ChangePasswordFormP
     
     if (password.length < 6) {
       toast({ 
-        title: "Wachtwoord te kort", 
-        description: "Wachtwoord moet minimaal 6 tekens lang zijn.", 
+        title: "Password too short", 
+        description: "Password must be at least 6 characters long.", 
         variant: "destructive" 
       });
       return;
@@ -40,8 +40,8 @@ const ChangePasswordForm = ({ currentUser, setCurrentUser }: ChangePasswordFormP
     
     if (password !== confirm) {
       toast({ 
-        title: "Fout", 
-        description: "Wachtwoorden komen niet overeen", 
+        title: "Error", 
+        description: "Passwords do not match", 
         variant: "destructive" 
       });
       return;
@@ -57,14 +57,14 @@ const ChangePasswordForm = ({ currentUser, setCurrentUser }: ChangePasswordFormP
     setLoading(false);
     if (error) {
       toast({ 
-        title: "Fout", 
+        title: "Error", 
         description: error.message, 
         variant: "destructive" 
       });
     } else {
       toast({ 
-        title: "Wachtwoord gewijzigd", 
-        description: "Je kunt nu je nieuwe wachtwoord gebruiken." 
+        title: "Password changed", 
+        description: "You can now use your new password." 
       });
       setCurrentUser({ ...currentUser, must_change_password: false });
       setPassword("");
@@ -73,37 +73,37 @@ const ChangePasswordForm = ({ currentUser, setCurrentUser }: ChangePasswordFormP
   };
 
   return (
-    <div className="bg-white p-8 rounded shadow w-full max-w-md">
-      <h2 className="text-xl font-bold mb-4">Wachtwoord Wijzigen</h2>
+    <div className="space-y-4">
+      <h3 className="text-lg font-semibold">Change Password</h3>
       <form onSubmit={handleChangePassword} className="space-y-4">
         <div>
-          <Label htmlFor="new-password">Nieuw Wachtwoord</Label>
+          <Label htmlFor="new-password">New Password</Label>
           <Input
             id="new-password"
             type="password"
-            placeholder="Minimaal 6 tekens"
+            placeholder="Minimum 6 characters"
             value={password}
             onChange={e => setPassword(e.target.value)}
             required
             minLength={6}
           />
           {password && password.length > 0 && password.length < 6 && (
-            <p className="text-xs text-red-500 mt-1">Wachtwoord moet minimaal 6 tekens lang zijn.</p>
+            <p className="text-xs text-red-500 mt-1">Password must be at least 6 characters long.</p>
           )}
         </div>
         <div>
-          <Label htmlFor="confirm-password">Bevestig Wachtwoord</Label>
+          <Label htmlFor="confirm-password">Confirm Password</Label>
           <Input
             id="confirm-password"
             type="password"
-            placeholder="Bevestig je wachtwoord"
+            placeholder="Confirm your password"
             value={confirm}
             onChange={e => setConfirm(e.target.value)}
             required
             minLength={6}
           />
           {confirm && password !== confirm && (
-            <p className="text-xs text-red-500 mt-1">Wachtwoorden komen niet overeen.</p>
+            <p className="text-xs text-red-500 mt-1">Passwords do not match.</p>
           )}
         </div>
         <Button 
@@ -111,7 +111,7 @@ const ChangePasswordForm = ({ currentUser, setCurrentUser }: ChangePasswordFormP
           className="w-full" 
           disabled={loading || !password || !confirm || password.length < 6 || password !== confirm}
         >
-          {loading ? "Opslaan..." : "Wachtwoord Wijzigen"}
+          {loading ? "Saving..." : "Change Password"}
         </Button>
       </form>
     </div>

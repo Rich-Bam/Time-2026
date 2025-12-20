@@ -17,6 +17,7 @@ import WeeklyCalendarEntrySimple from "@/components/WeeklyCalendarEntrySimple";
 import ScreenshotButton from "@/components/ScreenshotButton";
 import BugReports from "@/components/BugReports";
 import InstallPWA from "@/components/InstallPWA";
+import Profile from "@/components/Profile";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -1276,7 +1277,12 @@ const Index = () => {
               </nav>
             </div>
             <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-3 md:gap-6 justify-center md:justify-end">
-              <span className="text-xs sm:text-sm md:text-base text-gray-700 font-medium text-center sm:text-left">{t('nav.welcome')}, {currentUser?.name || "User"}</span>
+              <button
+                onClick={() => setActiveTab('profile')}
+                className="text-xs sm:text-sm md:text-base text-gray-700 font-medium text-center sm:text-left hover:text-orange-600 transition-colors cursor-pointer"
+              >
+                {t('nav.welcome')}, {currentUser?.name || "User"}
+              </button>
               {currentUser?.isAdmin && (
                 <ScreenshotButton currentUser={currentUser} />
               )}
@@ -1555,6 +1561,9 @@ const Index = () => {
               </div>
             </CardContent>
           </Card>
+        )}
+        {activeTab === 'profile' && (
+          <Profile currentUser={currentUser} setCurrentUser={setCurrentUser} />
         )}
         {activeTab === 'admin' && currentUser?.isAdmin && (
           <AdminPanel currentUser={currentUser} />
