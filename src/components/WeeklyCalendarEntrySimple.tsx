@@ -653,12 +653,9 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                         const isNewEntry = !entry.id;
                         const isEditing = entry.id && editingEntry?.id === entry.id;
                         return (
-                        <div key={`edit-${dayIdx}-${entryIdx}`} className={`rounded-lg border p-3 space-y-3 ${isNewEntry ? 'bg-blue-50 border-blue-200' : isEditing ? 'bg-yellow-50 border-yellow-200' : 'bg-white'}`}>
+                        <div key={`edit-${dayIdx}-${entryIdx}`} className={`rounded-lg border p-3 space-y-3 ${isEditing ? 'bg-yellow-50 border-yellow-200' : 'bg-white'}`}>
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                              {isNewEntry && (
-                                <span className="text-xs bg-blue-500 text-white px-2 py-0.5 rounded font-semibold">NEW ENTRY</span>
-                              )}
                               {isEditing && (
                                 <span className="text-xs bg-yellow-500 text-white px-2 py-0.5 rounded font-semibold">EDITING</span>
                               )}
@@ -845,13 +842,10 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                             const isNewEntry = !entry.id;
                             const isEditing = entry.id && editingEntry?.id === entry.id;
                             return (
-                            <tr key={`edit-${dayIdx}-${entryIdx}`} className={`border-t hover:bg-white/50 ${isNewEntry ? 'bg-blue-50/50' : isEditing ? 'bg-yellow-50/50' : 'bg-white/30'}`}>
+                            <tr key={`edit-${dayIdx}-${entryIdx}`} className={`border-t hover:bg-white/50 ${isEditing ? 'bg-yellow-50/50' : 'bg-white/30'}`}>
                               <td className="border p-2">
                                 <div className="flex flex-col gap-2">
                                   <div className="flex items-center gap-2">
-                                    {isNewEntry && (
-                                      <span className="text-xs bg-blue-500 text-white px-2 py-0.5 rounded font-semibold">NEW</span>
-                                    )}
                                     {isEditing && (
                                       <span className="text-xs bg-yellow-500 text-white px-2 py-0.5 rounded font-semibold">EDITING</span>
                                     )}
