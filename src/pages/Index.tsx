@@ -33,8 +33,6 @@ const Index = () => {
   const [exporting, setExporting] = useState(false);
   const [activeTab, setActiveTab] = useState("weekly");
   const [weeklySubTab, setWeeklySubTab] = useState('daylist');
-  const [showReminder, setShowReminder] = useState(false);
-  const [reminderWeek, setReminderWeek] = useState("");
   const [exportPeriod, setExportPeriod] = useState<"day" | "week" | "month" | "year">("week");
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [users, setUsers] = useState<any[]>([]);
@@ -159,7 +157,6 @@ const Index = () => {
       };
     }
   }
-  const [reminderWeekNum, setReminderWeekNum] = useState("");
 
   // Helper to create formatted Excel file with better readability
   const createFormattedExcel = (data: any[], filename: string, options?: {
@@ -1082,38 +1079,6 @@ const Index = () => {
     });
   };
 
-  // Reminder logic: check if previous week is missing entries after login
-  // Skip reminder for admins
-  useEffect(() => {
-    const checkPreviousWeek = async () => {
-      if (!isLoggedIn || !currentUser) return;
-      // Don't show reminder to admins
-      if (currentUser.isAdmin) return;
-      // Get previous week (Monday-Sunday)
-      const now = new Date();
-      const day = now.getDay();
-      const lastMonday = new Date(now);
-      lastMonday.setDate(now.getDate() - day - 6); // last week's Monday
-      lastMonday.setHours(0, 0, 0, 0);
-      const lastSunday = new Date(lastMonday);
-      lastSunday.setDate(lastMonday.getDate() + 6);
-      // Format dates as YYYY-MM-DD
-      const fromDate = lastMonday.toISOString().split('T')[0];
-      const toDate = lastSunday.toISOString().split('T')[0];
-      // Query timesheet for this user for last week
-      const { data, error } = await supabase
-        .from("timesheet")
-        .select("id")
-        .eq("user_id", currentUser.id)
-        .gte("date", fromDate)
-        .lte("date", toDate);
-      if (!error && (!data || data.length === 0)) {
-        setShowReminder(true);
-        setReminderWeekNum(`${getISOWeekNumber(lastMonday)}`);
-      }
-    };
-    checkPreviousWeek();
-  }, [isLoggedIn, currentUser]);
 
   if (!isLoggedIn) {
     return (
@@ -1144,35 +1109,8 @@ const Index = () => {
     );
   }
 
-  // Reminder popup/modal
-  const handleGoToWeekly = () => {
-    setActiveTab('weekly');
-    setShowReminder(false);
-  };
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-orange-100">
-      {/* Reminder Dialog */}
-      <Dialog open={showReminder} onOpenChange={setShowReminder}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-orange-700">
-              <AlertTriangle className="h-6 w-6 text-orange-500" />
-              Timesheet Reminder
-            </DialogTitle>
-          </DialogHeader>
-          <div className="py-2 text-base text-gray-700">
-            You have not yet filled in your hours for <b>week {reminderWeekNum}</b>.<br />
-            <br />
-            <strong className="text-orange-700">Ingrid would like you to fill in your hours.</strong><br />
-            Please fill in your timesheet for last week.
-          </div>
-          <DialogFooter className="flex gap-2 justify-end">
-            <Button variant="outline" onClick={() => setShowReminder(false)}>Dismiss</Button>
-            <Button variant="default" onClick={handleGoToWeekly}>Go to Weekly Entry</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
       {/* Header */}
       <header className="bg-white shadow-lg border-b border-orange-100">
         <div className="container mx-auto px-3 sm:px-4 md:px-6 py-3 sm:py-4 md:py-6">

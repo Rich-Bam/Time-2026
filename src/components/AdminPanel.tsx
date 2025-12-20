@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { User, Calendar } from "lucide-react";
 import { hashPassword } from "@/utils/password";
 
@@ -33,6 +34,9 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
   const [projectsMap, setProjectsMap] = useState<Record<string, string>>({});
   const [confirmedWeeks, setConfirmedWeeks] = useState<any[]>([]);
   const [usersMap, setUsersMap] = useState<Record<string, any>>({});
+  const [reminderUserId, setReminderUserId] = useState<string>("");
+  const [reminderWeekNumber, setReminderWeekNumber] = useState<string>("");
+  const [reminderYear, setReminderYear] = useState<string>(new Date().getFullYear().toString());
 
   // Fetch users
   const fetchUsers = async () => {
@@ -568,6 +572,109 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
     );
   }
 
+  // Helper to get week date range from week number and year
+  function getWeekDateRange(weekNumber: number, year: number) {
+    try {
+      const jan4 = new Date(year, 0, 4);
+      const jan4Day = jan4.getDay() || 7;
+      const daysToMonday = jan4Day === 1 ? 0 : 1 - jan4Day;
+      const week1Monday = new Date(year, 0, 4 + daysToMonday);
+      const weekMonday = new Date(week1Monday);
+      weekMonday.setDate(week1Monday.getDate() + (weekNumber - 1) * 7);
+      const weekSunday = new Date(weekMonday);
+      weekSunday.setDate(weekMonday.getDate() + 6);
+      return {
+        from: weekMonday.toISOString().split('T')[0],
+        to: weekSunday.toISOString().split('T')[0]
+      };
+    } catch (error) {
+      console.error("Error calculating week date range:", error);
+      const today = new Date();
+      const dayOfWeek = today.getDay();
+      const diff = today.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
+      const monday = new Date(today.setDate(diff));
+      const sunday = new Date(monday);
+      sunday.setDate(monday.getDate() + 6);
+      return {
+        from: monday.toISOString().split('T')[0],
+        to: sunday.toISOString().split('T')[0]
+      };
+    }
+  }
+
+  // Send reminder to user
+  const handleSendReminder = async () => {
+    if (!reminderUserId || !reminderWeekNumber || !reminderYear) {
+      toast({
+        title: "Missing Information",
+        description: "Please select a user, week number, and year",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const weekNum = parseInt(reminderWeekNumber);
+    const year = parseInt(reminderYear);
+    
+    if (isNaN(weekNum) || weekNum < 1 || weekNum > 53) {
+      toast({
+        title: "Invalid Week Number",
+        description: "Week number must be between 1 and 53",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (isNaN(year) || year < 2020 || year > 2100) {
+      toast({
+        title: "Invalid Year",
+        description: "Please enter a valid year",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Get week date range
+    const weekRange = getWeekDateRange(weekNum, year);
+    
+    // Check if user has entries for this week
+    const { data: entries, error } = await supabase
+      .from("timesheet")
+      .select("id")
+      .eq("user_id", reminderUserId)
+      .gte("date", weekRange.from)
+      .lte("date", weekRange.to);
+
+    if (error) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const user = users.find(u => u.id.toString() === reminderUserId);
+    const userName = user?.name || user?.email || "User";
+
+    if (!entries || entries.length === 0) {
+      toast({
+        title: "Reminder Sent",
+        description: `Reminder sent to ${userName} for week ${weekNum} of ${year}. They have not yet filled in their hours for this week.`,
+      });
+    } else {
+      toast({
+        title: "Reminder Sent",
+        description: `Reminder sent to ${userName} for week ${weekNum} of ${year}. They have ${entries.length} entry/entries for this week.`,
+      });
+    }
+
+    // Reset form
+    setReminderUserId("");
+    setReminderWeekNumber("");
+    setReminderYear(new Date().getFullYear().toString());
+  };
+
   // Handle admin actions on confirmed weeks
   const handleApproveWeek = async (userId: string, weekStartDate: string) => {
     const { error } = await supabase
@@ -686,6 +793,62 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
           <Button type="submit" className={`${isMobile ? 'w-full' : ''} h-10 sm:h-9`} size={isMobile ? "lg" : "default"}>Add User</Button>
         </form>
       </div>
+      
+      {/* Send Reminder Section */}
+      <div className="mb-6 sm:mb-8 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+        <h3 className="text-base sm:text-lg font-semibold mb-3 text-blue-800">Send Timesheet Reminder</h3>
+        <p className="text-xs sm:text-sm text-blue-700 mb-4">Send a reminder to a user to fill in their hours for a specific week.</p>
+        <div className={`flex ${isMobile ? 'flex-col' : 'flex-row flex-wrap'} gap-3 sm:gap-4 ${isMobile ? '' : 'items-end'} w-full`}>
+          <div className={isMobile ? 'w-full' : 'flex-1 min-w-[200px]'}>
+            <Label className="text-sm">User</Label>
+            <Select value={reminderUserId} onValueChange={setReminderUserId}>
+              <SelectTrigger className="h-10 sm:h-9">
+                <SelectValue placeholder="Select user" />
+              </SelectTrigger>
+              <SelectContent>
+                {users.filter(u => !u.isAdmin).map(user => (
+                  <SelectItem key={user.id} value={user.id.toString()}>
+                    {user.name || user.email}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className={isMobile ? 'w-full' : ''}>
+            <Label className="text-sm">Week Number</Label>
+            <Input 
+              type="number" 
+              value={reminderWeekNumber} 
+              onChange={e => setReminderWeekNumber(e.target.value)} 
+              placeholder="e.g. 51"
+              min="1"
+              max="53"
+              className="h-10 sm:h-9"
+            />
+          </div>
+          <div className={isMobile ? 'w-full' : ''}>
+            <Label className="text-sm">Year</Label>
+            <Input 
+              type="number" 
+              value={reminderYear} 
+              onChange={e => setReminderYear(e.target.value)} 
+              placeholder="2025"
+              min="2020"
+              max="2100"
+              className="h-10 sm:h-9"
+            />
+          </div>
+          <Button 
+            onClick={handleSendReminder}
+            className={`${isMobile ? 'w-full' : ''} h-10 sm:h-9 bg-blue-600 hover:bg-blue-700`}
+            size={isMobile ? "lg" : "default"}
+            disabled={!reminderUserId || !reminderWeekNumber || !reminderYear}
+          >
+            Send Reminder
+          </Button>
+        </div>
+      </div>
+      
       {/* Pending Users Section */}
       {users.filter(u => u.approved === false).length > 0 && (
         <div className="mb-6 sm:mb-8">
