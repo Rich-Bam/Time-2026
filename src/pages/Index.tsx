@@ -168,26 +168,40 @@ const Index = () => {
   }) => {
     const wb = XLSX.utils.book_new();
     
-    // Prepare formatted data
-    const formattedData = data.map((entry) => ({
-      Date: formatDateDDMMYY(entry.date),
-      Day: getDayNameNL(entry.date),
-      'Work Type': getWorkTypeLabel(entry.description || ""),
-      Project: entry.projects?.name || entry.project || "",
-      'Start Time': entry.startTime || "",
-      'End Time': entry.endTime || "",
-      Hours: typeof entry.hours === 'number' ? entry.hours : parseFloat(entry.hours || 0),
-      'Hours (HH:MM)': formatHoursHHMM(entry.hours || 0),
-      Notes: entry.notes || "",
-      'User Name': entry.user_name || entry.user_email || "",
-      'User Email': entry.user_email || "",
-    }));
+    // Prepare formatted data - only include user columns if user info exists
+    const formattedData = data.map((entry) => {
+      const baseRow = {
+        Date: formatDateDDMMYY(entry.date),
+        Day: getDayNameNL(entry.date),
+        'Work Type': getWorkTypeLabel(entry.description || ""),
+        Project: entry.projects?.name || entry.project || "",
+        'Start Time': entry.startTime || "",
+        'End Time': entry.endTime || "",
+        Hours: typeof entry.hours === 'number' ? entry.hours : parseFloat(entry.hours || 0),
+        'Hours (HH:MM)': formatHoursHHMM(entry.hours || 0),
+        Notes: entry.notes || "",
+      };
+      
+      // Only add user columns if user info exists (for admin exports)
+      if (entry.user_name || entry.user_email) {
+        return {
+          ...baseRow,
+          'User Name': entry.user_name || "",
+          'User Email': entry.user_email || "",
+        };
+      }
+      
+      return baseRow;
+    });
 
+    // Check if user columns exist to determine column count
+    const hasUserColumns = formattedData.length > 0 && (formattedData[0] as any)['User Name'] !== undefined;
+    
     // Create worksheet
     const ws = XLSX.utils.json_to_sheet(formattedData);
 
     // Set column widths for better readability
-    ws['!cols'] = [
+    const baseCols = [
       { wch: 12 }, // Date
       { wch: 12 }, // Day
       { wch: 25 }, // Work Type
@@ -197,9 +211,17 @@ const Index = () => {
       { wch: 10 }, // Hours (decimal)
       { wch: 12 }, // Hours (HH:MM)
       { wch: 40 }, // Notes
-      { wch: 25 }, // User Name
-      { wch: 30 }, // User Email
     ];
+    
+    if (hasUserColumns) {
+      ws['!cols'] = [
+        ...baseCols,
+        { wch: 25 }, // User Name
+        { wch: 30 }, // User Email
+      ];
+    } else {
+      ws['!cols'] = baseCols;
+    }
 
     // Add header information if provided
     if (options?.userName || options?.dateRange) {
@@ -242,9 +264,12 @@ const Index = () => {
         alignment: { horizontal: "left", vertical: "center" }
       };
       
+      // Determine column count based on whether user columns exist
+      const colCount = hasUserColumns ? 11 : 9;
+      
       // Apply styles to header rows
       for (let row = 0; row < headerRows.length; row++) {
-        for (let col = 0; col < 11; col++) {
+        for (let col = 0; col < colCount; col++) {
           const cellAddress = XLSX.utils.encode_cell({ r: row, c: col });
           if (!newWs[cellAddress]) continue;
           newWs[cellAddress].s = headerStyle;
@@ -265,7 +290,7 @@ const Index = () => {
         }
       };
       
-      for (let col = 0; col < 11; col++) {
+      for (let col = 0; col < colCount; col++) {
         const cellAddress = XLSX.utils.encode_cell({ r: tableHeaderRow, c: col });
         if (newWs[cellAddress]) {
           newWs[cellAddress].s = tableHeaderStyle;
@@ -366,7 +391,9 @@ const Index = () => {
       user_name: users.find(u => u.id === row.user_id)?.name || "",
       user_email: users.find(u => u.id === row.user_id)?.email || ""
     }));
-    createFormattedExcel(rows, "timesheet_all.xlsx");
+    createFormattedExcel(rows, "timesheet_all.xlsx", {
+      period: "All Data"
+    });
     setExporting(false);
     toast({
       title: "Export Successful",
@@ -452,13 +479,13 @@ const Index = () => {
       setExporting(false);
       return;
     }
+    const selectedUser = users.find(u => u.id === selectedUserId);
     const rows = (data || []).map((row) => ({ 
       ...row, 
       project: row.projects?.name || "",
       user_name: selectedUser?.name || selectedUser?.email || "",
       user_email: selectedUser?.email || ""
     }));
-    const selectedUser = users.find(u => u.id === selectedUserId);
     const userName = selectedUser?.name || selectedUser?.email || "user";
     createFormattedExcel(rows, `timesheet_${userName.replace(/[^a-zA-Z0-9]/g, '_')}.xlsx`, {
       userName: userName,
@@ -521,10 +548,19 @@ const Index = () => {
       setExporting(false);
       return;
     }
-    const rows = (data || []).map((row) => ({ ...row, project: row.projects?.name || "" }));
+    const rows = (data || []).map((row) => ({ 
+      ...row, 
+      project: row.projects?.name || "",
+      user_name: users.find(u => u.id === row.user_id)?.name || "",
+      user_email: users.find(u => u.id === row.user_id)?.email || ""
+    }));
     const selectedUser = users.find(u => u.id === selectedUserId);
     const userLabel = selectedUser ? `_${selectedUser.name || selectedUser.email}` : "";
-    downloadExcel(rows, `timesheet_Week${weekNum}_${year}${userLabel}.xlsx`);
+    createFormattedExcel(rows, `timesheet_Week${weekNum}_${year}${userLabel}.xlsx`, {
+      userName: selectedUser?.name || selectedUser?.email,
+      dateRange: { from, to },
+      period: `Week ${weekNum}, ${year}`
+    });
     setExporting(false);
     toast({
       title: "Export Succesvol",
