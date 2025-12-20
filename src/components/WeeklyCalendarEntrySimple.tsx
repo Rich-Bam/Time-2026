@@ -610,16 +610,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
           <div className="space-y-3 sm:space-y-4">
             {days.map((day, dayIdx) => {
               const dateStr = day.date.toISOString().split('T')[0];
-              const allSubmitted = submittedEntries[dateStr] || [];
-              // Filter out entries that are currently being edited
-              const submitted = allSubmitted.filter(entry => {
-                // Don't show submitted entry if it's being edited
-                if (editingEntry && editingEntry.id === entry.id && editingEntry.dateStr === dateStr) {
-                  return false;
-                }
-                // Don't show submitted entry if it exists in editable entries (being edited)
-                return !day.entries.some(e => e.id === entry.id);
-              });
+              const submitted = submittedEntries[dateStr] || [];
               const isDayLocked = confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin;
               const dayName = day.date.toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long' });
               const dayShort = day.date.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short' });
@@ -863,7 +854,8 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                                   {isEditing && (
                                     <span className="text-xs bg-yellow-500 text-white px-2 py-0.5 rounded font-semibold">EDITING</span>
                                   )}
-                                  <Select
+                                </div>
+                              </td>
                               <td className="border p-2">
                                 <Select 
                                   value={entry.workType || ""} 
