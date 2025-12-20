@@ -400,14 +400,37 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
     const dayIdx = days.findIndex(d => d.date.toISOString().split('T')[0] === dateStr);
     if (dayIdx === -1) return;
     
-    // Add entry to editable entries (don't delete from database yet)
-    setDays(days.map((day, i) => 
-      i === dayIdx 
-        ? { ...day, entries: [...day.entries, { ...entry, id: entry.id }] }
-        : day
-    ));
+    // Check if this entry is already in the editable entries
+    const day = days[dayIdx];
+    const existingEntryIndex = day.entries.findIndex(e => e.id === entry.id);
     
-    setEditingEntry({ id: entry.id!, dateStr });
+    if (existingEntryIndex !== -1) {
+      // Entry is already being edited, just update the editingEntry state
+      setEditingEntry({ id: entry.id!, dateStr });
+    } else {
+      // Add entry to editable entries (don't delete from database yet)
+      // Only add if there's at least one empty entry, otherwise add a new one
+      const hasEmptyEntry = day.entries.some(e => !e.workType && !e.project && !e.startTime && !e.endTime && !e.id);
+      
+      setDays(days.map((d, i) => {
+        if (i !== dayIdx) return d;
+        
+        if (hasEmptyEntry) {
+          // Replace the first empty entry with the entry being edited
+          const newEntries = [...d.entries];
+          const emptyIndex = newEntries.findIndex(e => !e.workType && !e.project && !e.startTime && !e.endTime && !e.id);
+          if (emptyIndex !== -1) {
+            newEntries[emptyIndex] = { ...entry, id: entry.id };
+            return { ...d, entries: newEntries };
+          }
+        }
+        
+        // If no empty entry found, add the entry to the array
+        return { ...d, entries: [...d.entries, { ...entry, id: entry.id }] };
+      }));
+      
+      setEditingEntry({ id: entry.id!, dateStr });
+    }
   };
 
   const roundToQuarterHour = (timeStr: string) => {
