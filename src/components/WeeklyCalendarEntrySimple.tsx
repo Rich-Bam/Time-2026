@@ -631,9 +631,19 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
               const dateStr = day.date.toISOString().split('T')[0];
               const submitted = (submittedEntries[dateStr] || []).sort((a, b) => {
                 // Sort by startTime (ascending)
-                const timeA = a.startTime || "00:00";
-                const timeB = b.startTime || "00:00";
-                return timeA.localeCompare(timeB);
+                const timeA = (a.startTime || "00:00").trim();
+                const timeB = (b.startTime || "00:00").trim();
+                
+                // Convert time strings to comparable numbers (HH:MM -> minutes since midnight)
+                const parseTime = (timeStr: string): number => {
+                  const parts = timeStr.split(':');
+                  if (parts.length !== 2) return 0;
+                  const hours = parseInt(parts[0], 10) || 0;
+                  const minutes = parseInt(parts[1], 10) || 0;
+                  return hours * 60 + minutes;
+                };
+                
+                return parseTime(timeA) - parseTime(timeB);
               });
               const isDayLocked = confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin;
               const dayName = day.date.toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long' });
