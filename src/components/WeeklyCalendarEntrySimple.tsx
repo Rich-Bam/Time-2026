@@ -1039,19 +1039,6 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
               );
             })}
           </div>
-          
-          {!isLocked && (
-            <div className="mt-4 flex justify-end">
-              <Button 
-                variant="default" 
-                onClick={handleSubmitAll}
-                className="bg-orange-600 hover:bg-orange-700 w-full sm:w-auto"
-                size={isMobile ? "lg" : "default"}
-              >
-                Save All Entries
-              </Button>
-            </div>
-          )}
         </CardContent>
       </Card>
     </div>
