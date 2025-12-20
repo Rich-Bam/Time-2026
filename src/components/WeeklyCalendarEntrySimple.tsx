@@ -331,8 +331,8 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
       
       if (!error) {
         // Refresh submitted entries to show updated data
-        fetchSubmittedEntries(dateStr);
-        // Remove from editable entries
+        await fetchSubmittedEntries(dateStr);
+        // Remove from editable entries after refresh
         setDays(prevDays => prevDays.map((d, i) => 
           i === dayIdx 
             ? { ...d, entries: d.entries.filter((_, j) => j !== entryIdx) }
@@ -363,9 +363,9 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
       }]);
       
       if (!error) {
-        // Refresh submitted entries
-        fetchSubmittedEntries(dateStr);
-        // Remove from editable entries
+        // Refresh submitted entries first
+        await fetchSubmittedEntries(dateStr);
+        // Remove from editable entries after refresh
         setDays(prevDays => prevDays.map((d, i) => 
           i === dayIdx 
             ? { ...d, entries: d.entries.filter((_, j) => j !== entryIdx) }
