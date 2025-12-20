@@ -53,17 +53,33 @@ const Index = () => {
     const checkReminders = async () => {
       if (!isLoggedIn || !currentUser) return;
       
-      const { data: reminders, error } = await supabase
-        .from("reminders")
-        .select("*")
-        .eq("user_id", currentUser.id)
-        .is("read_at", null)
-        .order("created_at", { ascending: false })
-        .limit(1);
-      
-      if (!error && reminders && reminders.length > 0) {
-        setUserReminder(reminders[0]);
-        setShowReminderDialog(true);
+      try {
+        const { data: reminders, error } = await supabase
+          .from("reminders")
+          .select("*")
+          .eq("user_id", currentUser.id)
+          .is("read_at", null)
+          .order("created_at", { ascending: false })
+          .limit(1);
+        
+        // If table doesn't exist, just ignore (table will be created later)
+        if (error) {
+          // Check if it's a "table doesn't exist" error
+          if (error.message?.includes("does not exist") || error.message?.includes("relation") || error.code === "42P01") {
+            console.log("Reminders table not found - skipping reminder check");
+            return;
+          }
+          console.error("Error checking reminders:", error);
+          return;
+        }
+        
+        if (reminders && reminders.length > 0) {
+          setUserReminder(reminders[0]);
+          setShowReminderDialog(true);
+        }
+      } catch (err) {
+        console.error("Error in reminder check:", err);
+        // Don't block page rendering if reminder check fails
       }
     };
     
