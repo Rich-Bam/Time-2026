@@ -494,7 +494,6 @@ const translations: Record<Language, Record<string, string>> = {
     'weekly.confirmWeek': 'Επιβεβαίωση Εβδομάδας',
     'weekly.type': 'Τύπος',
     'weekly.projectPlaceholder': 'Έργο',
-    'weekly.confirmWeek': 'Επιβεβαίωση Εβδομάδας',
     'weekly.confirmWeekText': 'Είστε βέβαιοι ότι θέλετε να επιβεβαιώσετε αυτή την εβδομάδα; Μετά την επιβεβαίωση, δεν θα μπορείτε να κάνετε αλλαγές ως μη διαχειριστής.',
     'weekly.weekConfirmed': 'Εβδομάδα Επιβεβαιώθηκε',
     'weekly.weekConfirmedText': 'Αυτή η εβδομάδα έχει επιβεβαιωθεί και δεν μπορεί να αλλάξει πλέον.',
