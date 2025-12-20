@@ -265,10 +265,10 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
         clearTimeout(autoSaveTimeouts[entryKey]);
       }
       
-      // Set new timeout for auto-save
+      // Set new timeout for auto-save (4 seconds delay)
       const timeout = setTimeout(() => {
         autoSaveEntry(dayIdx, entryIdx, updatedDays);
-      }, 2000);
+      }, 4000);
       
       setAutoSaveTimeouts(prev => ({ ...prev, [entryKey]: timeout }));
       
