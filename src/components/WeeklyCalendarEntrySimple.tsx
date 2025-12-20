@@ -716,7 +716,9 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
     }
   };
 
-  const isLocked = isWeekLocked();
+  // Calculate isLocked directly from state (not ref) for rendering
+  const weekKey = weekDates[0].toISOString().split('T')[0];
+  const isLocked = !!confirmedWeeks[weekKey] && !currentUser?.isAdmin;
 
   return (
     <div className="flex flex-col gap-3 sm:gap-4">
