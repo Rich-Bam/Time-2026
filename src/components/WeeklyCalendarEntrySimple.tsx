@@ -847,32 +847,32 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                             return (
                             <tr key={`edit-${dayIdx}-${entryIdx}`} className={`border-t hover:bg-white/50 ${isNewEntry ? 'bg-blue-50/50' : isEditing ? 'bg-yellow-50/50' : 'bg-white/30'}`}>
                               <td className="border p-2">
-                                <div className="flex items-center gap-2">
-                                  {isNewEntry && (
-                                    <span className="text-xs bg-blue-500 text-white px-2 py-0.5 rounded font-semibold">NEW</span>
-                                  )}
-                                  {isEditing && (
-                                    <span className="text-xs bg-yellow-500 text-white px-2 py-0.5 rounded font-semibold">EDITING</span>
-                                  )}
+                                <div className="flex flex-col gap-2">
+                                  <div className="flex items-center gap-2">
+                                    {isNewEntry && (
+                                      <span className="text-xs bg-blue-500 text-white px-2 py-0.5 rounded font-semibold">NEW</span>
+                                    )}
+                                    {isEditing && (
+                                      <span className="text-xs bg-yellow-500 text-white px-2 py-0.5 rounded font-semibold">EDITING</span>
+                                    )}
+                                  </div>
+                                  <Select 
+                                    value={entry.workType || ""} 
+                                    onValueChange={val => handleEntryChange(dayIdx, entryIdx, "workType", val)}
+                                    disabled={isLocked}
+                                  >
+                                    <SelectTrigger className="h-9 text-sm bg-white">
+                                      <SelectValue placeholder="Type" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {workTypes.map(type => (
+                                        <SelectItem key={type.value} value={String(type.value)}>
+                                          {type.value} - {type.label}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
                                 </div>
-                              </td>
-                              <td className="border p-2">
-                                <Select 
-                                  value={entry.workType || ""} 
-                                  onValueChange={val => handleEntryChange(dayIdx, entryIdx, "workType", val)}
-                                  disabled={isLocked}
-                                >
-                                  <SelectTrigger className="h-9 text-sm bg-white">
-                                    <SelectValue placeholder="Type" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {workTypes.map(type => (
-                                      <SelectItem key={type.value} value={String(type.value)}>
-                                        {type.value} - {type.label}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
                               </td>
                               <td className="border p-2">
                                 <div className="space-y-1">
