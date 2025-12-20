@@ -95,6 +95,8 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
   const [confirmedWeeks, setConfirmedWeeks] = useState<Record<string, boolean>>({});
   const [dbDaysOff, setDbDaysOff] = useState(0);
   const [customProjectInputs, setCustomProjectInputs] = useState<Record<string, string>>({});
+  const [autoSaveTimeouts, setAutoSaveTimeouts] = useState<Record<string, NodeJS.Timeout>>({});
+  const [editingEntry, setEditingEntry] = useState<{ id: number; dateStr: string } | null>(null);
 
   const weekDates = getWeekDates(weekStart);
   const weekNumber = getISOWeekNumber(weekDates[0]);
@@ -252,6 +254,129 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
         })
       };
     }));
+    
+    // Auto-save after 2 seconds of inactivity
+    const dateStr = days[dayIdx].date.toISOString().split('T')[0];
+    const entryKey = `${dateStr}-${entryIdx}`;
+    
+    // Clear existing timeout
+    if (autoSaveTimeouts[entryKey]) {
+      clearTimeout(autoSaveTimeouts[entryKey]);
+    }
+    
+    // Set new timeout for auto-save
+    const timeout = setTimeout(() => {
+      autoSaveEntry(dayIdx, entryIdx);
+    }, 2000);
+    
+    setAutoSaveTimeouts(prev => ({ ...prev, [entryKey]: timeout }));
+  };
+  
+  // Auto-save a single entry
+  const autoSaveEntry = async (dayIdx: number, entryIdx: number) => {
+    if (!currentUser) return;
+    
+    const day = days[dayIdx];
+    const entry = day.entries[entryIdx];
+    const dateStr = day.date.toISOString().split('T')[0];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const entryDate = new Date(day.date);
+    entryDate.setHours(0, 0, 0, 0);
+    
+    // Don't save future dates
+    if (entryDate > today) return;
+    
+    // Don't save if required fields are missing
+    const isDayOff = entry.workType === "31";
+    if (!isDayOff && (!entry.workType || (!entry.project && !isDayOff) || (!entry.startTime && !entry.endTime))) {
+      return;
+    }
+    
+    // Calculate hours
+    let hoursToSave = 0;
+    if (entry.startTime && entry.endTime) {
+      const calculated = calculateHours(entry.startTime, entry.endTime);
+      hoursToSave = parseFloat(calculated) || 0;
+    } else if (entry.hours) {
+      hoursToSave = Number(entry.hours);
+    }
+    
+    if (hoursToSave <= 0 && !isDayOff) {
+      return;
+    }
+    
+    // Check if this entry is being edited
+    if (editingEntry && editingEntry.id && editingEntry.dateStr === dateStr && entry.id === editingEntry.id) {
+      // Update existing entry
+      const { error } = await supabase
+        .from("timesheet")
+        .update({
+          project: isDayOff ? null : entry.project,
+          hours: hoursToSave,
+          description: entry.workType,
+          startTime: entry.startTime || null,
+          endTime: entry.endTime || null,
+        })
+        .eq("id", editingEntry.id);
+      
+      if (!error) {
+        // Refresh submitted entries
+        fetchSubmittedEntries(dateStr);
+        // Remove from editable entries
+        setDays(days.map((d, i) => 
+          i === dayIdx 
+            ? { ...d, entries: d.entries.filter((_, j) => j !== entryIdx) }
+            : d
+        ));
+        setEditingEntry(null);
+        toast({
+          title: "Entry Updated",
+          description: "Your entry has been automatically saved.",
+        });
+      }
+    } else if (!entry.id) {
+      // Create new entry (only if it doesn't have an id)
+      const { error } = await supabase.from("timesheet").insert([{
+        project: isDayOff ? null : entry.project,
+        user_id: currentUser.id,
+        date: dateStr,
+        hours: hoursToSave,
+        description: entry.workType,
+        startTime: entry.startTime || null,
+        endTime: entry.endTime || null,
+      }]);
+      
+      if (!error) {
+        // Refresh submitted entries
+        fetchSubmittedEntries(dateStr);
+        // Remove from editable entries
+        setDays(days.map((d, i) => 
+          i === dayIdx 
+            ? { ...d, entries: d.entries.filter((_, j) => j !== entryIdx) }
+            : d
+        ));
+        toast({
+          title: "Entry Saved",
+          description: "Your entry has been automatically saved.",
+        });
+      }
+    }
+  };
+  
+  // Edit an existing entry
+  const handleEditEntry = (entry: Entry, dateStr: string) => {
+    const dayIdx = days.findIndex(d => d.date.toISOString().split('T')[0] === dateStr);
+    if (dayIdx === -1) return;
+    
+    // Add entry to editable entries
+    setDays(days.map((day, i) => 
+      i === dayIdx 
+        ? { ...day, entries: [...day.entries, { ...entry, id: entry.id }] }
+        : day
+    ));
+    
+    setEditingEntry({ id: entry.id!, dateStr });
   };
 
   const roundToQuarterHour = (timeStr: string) => {
@@ -385,6 +510,21 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
         entries: [{ workType: "", project: "", hours: "", startTime: "", endTime: "" }] 
       })));
     }
+  };
+
+  // Edit an existing entry
+  const handleEditEntry = (entry: Entry, dateStr: string) => {
+    const dayIdx = days.findIndex(d => d.date.toISOString().split('T')[0] === dateStr);
+    if (dayIdx === -1) return;
+    
+    // Add entry to editable entries
+    setDays(days.map((day, i) => 
+      i === dayIdx 
+        ? { ...day, entries: [...day.entries, { ...entry, id: entry.id }] }
+        : day
+    ));
+    
+    setEditingEntry({ id: entry.id!, dateStr });
   };
 
   const handleDeleteEntry = async (entryId: number, dateStr: string) => {
@@ -602,20 +742,34 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                         </div>
                       ))}
                       
-                      {/* Submitted entries (read-only) */}
+                      {/* Submitted entries (read-only with edit option) */}
                       {submitted.map((submittedEntry, subIdx) => (
                         <div key={`submitted-${dayIdx}-${subIdx}`} className="bg-gray-100 rounded-lg border p-3 space-y-2">
                           <div className="flex items-center justify-between">
                             <span className="text-sm font-semibold">{getWorkTypeLabel(submittedEntry.workType || "")}</span>
                             {!isLocked && (
-                              <Button 
-                                size="icon" 
-                                variant="ghost" 
-                                className="h-8 w-8"
-                                onClick={() => handleDeleteEntry(submittedEntry.id!, dateStr)}
-                              >
-                                <Trash2 className="h-4 w-4 text-red-500" />
-                              </Button>
+                              <div className="flex gap-1">
+                                <Button 
+                                  size="icon" 
+                                  variant="ghost" 
+                                  className="h-8 w-8"
+                                  onClick={() => handleEditEntry(submittedEntry, dateStr)}
+                                  title="Edit entry"
+                                >
+                                  <svg className="h-4 w-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                  </svg>
+                                </Button>
+                                <Button 
+                                  size="icon" 
+                                  variant="ghost" 
+                                  className="h-8 w-8"
+                                  onClick={() => handleDeleteEntry(submittedEntry.id!, dateStr)}
+                                  title="Delete entry"
+                                >
+                                  <Trash2 className="h-4 w-4 text-red-500" />
+                                </Button>
+                              </div>
                             )}
                           </div>
                           <div className="text-xs text-gray-600">
@@ -750,7 +904,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                             </tr>
                           ))}
                           
-                          {/* Submitted entries (read-only) */}
+                          {/* Submitted entries (read-only with edit option) */}
                           {submitted.map((submittedEntry, subIdx) => (
                             <tr key={`submitted-${dayIdx}-${subIdx}`} className="border-t bg-gray-100/50">
                               <td className="border p-2">
@@ -770,14 +924,28 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                               </td>
                               <td className="border p-2 text-center">
                                 {!isLocked && (
-                                  <Button 
-                                    size="icon" 
-                                    variant="ghost" 
-                                    className="h-8 w-8"
-                                    onClick={() => handleDeleteEntry(submittedEntry.id!, dateStr)}
-                                  >
-                                    <Trash2 className="h-4 w-4 text-red-500" />
-                                  </Button>
+                                  <div className="flex justify-center gap-1">
+                                    <Button 
+                                      size="icon" 
+                                      variant="ghost" 
+                                      className="h-8 w-8"
+                                      onClick={() => handleEditEntry(submittedEntry, dateStr)}
+                                      title="Edit entry"
+                                    >
+                                      <svg className="h-4 w-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                      </svg>
+                                    </Button>
+                                    <Button 
+                                      size="icon" 
+                                      variant="ghost" 
+                                      className="h-8 w-8"
+                                      onClick={() => handleDeleteEntry(submittedEntry.id!, dateStr)}
+                                      title="Delete entry"
+                                    >
+                                      <Trash2 className="h-4 w-4 text-red-500" />
+                                    </Button>
+                                  </div>
                                 )}
                               </td>
                             </tr>
