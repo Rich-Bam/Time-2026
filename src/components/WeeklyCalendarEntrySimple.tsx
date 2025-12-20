@@ -315,9 +315,9 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
       return;
     }
     
-    // Check if this entry is being edited
-    if (editingEntry && editingEntry.id && editingEntry.dateStr === dateStr && entry.id === editingEntry.id) {
-      // Update existing entry
+    // Check if this entry is being edited (has an id)
+    if (entry.id) {
+      // Update existing entry in database
       const { error } = await supabase
         .from("timesheet")
         .update({
@@ -327,10 +327,10 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
           startTime: entry.startTime || null,
           endTime: entry.endTime || null,
         })
-        .eq("id", editingEntry.id);
+        .eq("id", entry.id);
       
       if (!error) {
-        // Refresh submitted entries
+        // Refresh submitted entries to show updated data
         fetchSubmittedEntries(dateStr);
         // Remove from editable entries
         setDays(prevDays => prevDays.map((d, i) => 
@@ -343,8 +343,14 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
           title: "Entry Updated",
           description: "Your entry has been automatically saved.",
         });
+      } else {
+        toast({
+          title: "Error",
+          description: error.message,
+          variant: "destructive",
+        });
       }
-    } else if (!entry.id) {
+    } else {
       // Create new entry (only if it doesn't have an id)
       const { error } = await supabase.from("timesheet").insert([{
         project: isDayOff ? null : entry.project,
@@ -374,22 +380,11 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
   };
   
   // Edit an existing entry
-  const handleEditEntry = async (entry: Entry, dateStr: string) => {
+  const handleEditEntry = (entry: Entry, dateStr: string) => {
     const dayIdx = days.findIndex(d => d.date.toISOString().split('T')[0] === dateStr);
     if (dayIdx === -1) return;
     
-    // Delete the existing entry first (it will be recreated when saved)
-    const { error: deleteError } = await supabase.from('timesheet').delete().eq('id', entry.id!);
-    if (deleteError) {
-      toast({
-        title: "Error",
-        description: "Could not prepare entry for editing.",
-        variant: "destructive",
-      });
-      return;
-    }
-    
-    // Add entry to editable entries
+    // Add entry to editable entries (don't delete from database yet)
     setDays(days.map((day, i) => 
       i === dayIdx 
         ? { ...day, entries: [...day.entries, { ...entry, id: entry.id }] }
@@ -397,9 +392,6 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
     ));
     
     setEditingEntry({ id: entry.id!, dateStr });
-    
-    // Refresh submitted entries to remove the deleted one
-    fetchSubmittedEntries(dateStr);
   };
 
   const roundToQuarterHour = (timeStr: string) => {
