@@ -91,20 +91,21 @@ const Profile = ({ currentUser, setCurrentUser }: ProfileProps) => {
           const urlParts = photoUrl.split('/');
           const pathIndex = urlParts.findIndex(part => part === 'profile-photos');
           if (pathIndex !== -1 && pathIndex < urlParts.length - 1) {
-            const oldPath = urlParts.slice(pathIndex).join('/');
+            // Get the path after 'profile-photos'
+            const pathAfterBucket = urlParts.slice(pathIndex + 1).join('/');
             await supabase.storage
               .from("profile-photos")
-              .remove([oldPath]);
+              .remove([pathAfterBucket]);
           }
         } catch (err) {
           console.log("Could not delete old photo:", err);
         }
       }
 
-      // Generate unique filename
+      // Generate unique filename with user ID prefix to ensure it's user-specific
       const fileExt = file.name.split('.').pop();
-      const fileName = `${currentUser.id}-${Date.now()}.${fileExt}`;
-      const filePath = `profile-photos/${fileName}`;
+      const fileName = `${currentUser.id}-${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+      const filePath = `${currentUser.id}/${fileName}`;
 
       // Upload to Supabase Storage
       const { data: uploadData, error: uploadError } = await supabase.storage
@@ -173,10 +174,11 @@ const Profile = ({ currentUser, setCurrentUser }: ProfileProps) => {
       const urlParts = photoUrl.split('/');
       const pathIndex = urlParts.findIndex(part => part === 'profile-photos');
       if (pathIndex !== -1 && pathIndex < urlParts.length - 1) {
-        const oldPath = urlParts.slice(pathIndex).join('/');
+        // Get the path after 'profile-photos'
+        const pathAfterBucket = urlParts.slice(pathIndex + 1).join('/');
         await supabase.storage
           .from("profile-photos")
-          .remove([oldPath]);
+          .remove([pathAfterBucket]);
       }
 
       // Update user record

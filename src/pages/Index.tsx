@@ -111,7 +111,7 @@ const Index = () => {
           const verifyUser = async () => {
             const { data: user, error } = await supabase
               .from("users")
-              .select("*")
+              .select("id, email, name, isAdmin, must_change_password, approved, created_at, photo_url, phone_number")
               .eq("email", sessionData.user.email)
               .single();
             

@@ -39,7 +39,7 @@ const AuthSection = ({ onLogin, setCurrentUser }: AuthSectionProps) => {
     // Note: We need password for login verification, so we select it explicitly
     const { data: user, error } = await supabase
       .from("users")
-      .select("id, email, name, password, isAdmin, must_change_password, approved, created_at")
+      .select("id, email, name, password, isAdmin, must_change_password, approved, created_at, photo_url, phone_number")
       .eq("email", loginData.email)
       .single();
     if (error || !user) {
@@ -95,6 +95,8 @@ const AuthSection = ({ onLogin, setCurrentUser }: AuthSectionProps) => {
         isAdmin: user.isAdmin,
         approved: user.approved,
         must_change_password: user.must_change_password,
+        photo_url: user.photo_url || null,
+        phone_number: user.phone_number || null,
       },
       loginTime: new Date().toISOString(),
     };
