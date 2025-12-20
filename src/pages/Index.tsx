@@ -29,6 +29,8 @@ const Index = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
   const SUPER_ADMIN_EMAIL = "r.blance@bampro.nl";
+  const [showReminderDialog, setShowReminderDialog] = useState(false);
+  const [userReminder, setUserReminder] = useState<any>(null);
   const [dateRange, setDateRange] = useState({ from: "", to: "" });
   const [exporting, setExporting] = useState(false);
   const [activeTab, setActiveTab] = useState("weekly");
@@ -45,6 +47,28 @@ const Index = () => {
     return saved === 'true';
   });
   const { toast } = useToast();
+
+  // Check for unread reminders when user logs in
+  useEffect(() => {
+    const checkReminders = async () => {
+      if (!isLoggedIn || !currentUser || currentUser.isAdmin) return;
+      
+      const { data: reminders, error } = await supabase
+        .from("reminders")
+        .select("*")
+        .eq("user_id", currentUser.id)
+        .is("read_at", null)
+        .order("created_at", { ascending: false })
+        .limit(1);
+      
+      if (!error && reminders && reminders.length > 0) {
+        setUserReminder(reminders[0]);
+        setShowReminderDialog(true);
+      }
+    };
+    
+    checkReminders();
+  }, [isLoggedIn, currentUser]);
 
   // Check for saved session on page load (14 days persistence)
   useEffect(() => {

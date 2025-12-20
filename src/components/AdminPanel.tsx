@@ -34,7 +34,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
   const [projectsMap, setProjectsMap] = useState<Record<string, string>>({});
   const [confirmedWeeks, setConfirmedWeeks] = useState<any[]>([]);
   const [usersMap, setUsersMap] = useState<Record<string, any>>({});
-  const [reminderUserId, setReminderUserId] = useState<string>("");
+  const [reminderUserIds, setReminderUserIds] = useState<string[]>([]);
   const [reminderWeekNumber, setReminderWeekNumber] = useState<string>("");
   const [reminderYear, setReminderYear] = useState<string>(new Date().getFullYear().toString());
 
@@ -602,12 +602,23 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
     }
   }
 
-  // Send reminder to user
+  // Toggle user selection for reminders
+  const toggleReminderUser = (userId: string) => {
+    setReminderUserIds(prev => {
+      if (prev.includes(userId)) {
+        return prev.filter(id => id !== userId);
+      } else {
+        return [...prev, userId];
+      }
+    });
+  };
+
+  // Send reminder to selected users
   const handleSendReminder = async () => {
-    if (!reminderUserId || !reminderWeekNumber || !reminderYear) {
+    if (reminderUserIds.length === 0 || !reminderWeekNumber || !reminderYear) {
       toast({
         title: "Missing Information",
-        description: "Please select a user, week number, and year",
+        description: "Please select at least one user, week number, and year",
         variant: "destructive",
       });
       return;
@@ -634,16 +645,23 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
       return;
     }
 
-    // Get week date range
-    const weekRange = getWeekDateRange(weekNum, year);
-    
-    // Check if user has entries for this week
-    const { data: entries, error } = await supabase
-      .from("timesheet")
-      .select("id")
-      .eq("user_id", reminderUserId)
-      .gte("date", weekRange.from)
-      .lte("date", weekRange.to);
+    // Create reminders for all selected users
+    const remindersToInsert = reminderUserIds.map(userId => {
+      const user = users.find(u => u.id.toString() === userId);
+      const userName = user?.name || user?.email || "User";
+      return {
+        user_id: userId,
+        week_number: weekNum,
+        year: year,
+        message: `Please fill in your hours for week ${weekNum} of ${year}.`,
+        created_by: currentUser?.id || null,
+      };
+    });
+
+    // Insert reminders into database
+    const { error } = await supabase
+      .from("reminders")
+      .insert(remindersToInsert);
 
     if (error) {
       toast({
@@ -654,23 +672,18 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
       return;
     }
 
-    const user = users.find(u => u.id.toString() === reminderUserId);
-    const userName = user?.name || user?.email || "User";
+    const userNames = reminderUserIds.map(userId => {
+      const user = users.find(u => u.id.toString() === userId);
+      return user?.name || user?.email || "User";
+    }).join(", ");
 
-    if (!entries || entries.length === 0) {
-      toast({
-        title: "Reminder Sent",
-        description: `Reminder sent to ${userName} for week ${weekNum} of ${year}. They have not yet filled in their hours for this week.`,
-      });
-    } else {
-      toast({
-        title: "Reminder Sent",
-        description: `Reminder sent to ${userName} for week ${weekNum} of ${year}. They have ${entries.length} entry/entries for this week.`,
-      });
-    }
+    toast({
+      title: "Reminders Sent",
+      description: `Reminders sent to ${reminderUserIds.length} user(s): ${userNames} for week ${weekNum} of ${year}.`,
+    });
 
     // Reset form
-    setReminderUserId("");
+    setReminderUserIds([]);
     setReminderWeekNumber("");
     setReminderYear(new Date().getFullYear().toString());
   };
@@ -797,23 +810,36 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
       {/* Send Reminder Section */}
       <div className="mb-6 sm:mb-8 p-4 bg-blue-50 border border-blue-200 rounded-lg">
         <h3 className="text-base sm:text-lg font-semibold mb-3 text-blue-800">Send Timesheet Reminder</h3>
-        <p className="text-xs sm:text-sm text-blue-700 mb-4">Send a reminder to a user to fill in their hours for a specific week.</p>
-        <div className={`flex ${isMobile ? 'flex-col' : 'flex-row flex-wrap'} gap-3 sm:gap-4 ${isMobile ? '' : 'items-end'} w-full`}>
-          <div className={isMobile ? 'w-full' : 'flex-1 min-w-[200px]'}>
-            <Label className="text-sm">User</Label>
-            <Select value={reminderUserId} onValueChange={setReminderUserId}>
-              <SelectTrigger className="h-10 sm:h-9">
-                <SelectValue placeholder="Select user" />
-              </SelectTrigger>
-              <SelectContent>
+        <p className="text-xs sm:text-sm text-blue-700 mb-4">Select one or more users to send a reminder to fill in their hours for a specific week.</p>
+        <div className="mb-4">
+          <Label className="text-sm font-semibold mb-2 block">Select Users</Label>
+          <div className="max-h-48 overflow-y-auto border rounded-lg p-3 bg-white">
+            {users.filter(u => !u.isAdmin).length === 0 ? (
+              <p className="text-sm text-gray-500">No users available</p>
+            ) : (
+              <div className="space-y-2">
                 {users.filter(u => !u.isAdmin).map(user => (
-                  <SelectItem key={user.id} value={user.id.toString()}>
-                    {user.name || user.email}
-                  </SelectItem>
+                  <div key={user.id} className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id={`reminder-user-${user.id}`}
+                      checked={reminderUserIds.includes(user.id.toString())}
+                      onChange={() => toggleReminderUser(user.id.toString())}
+                      className="h-4 w-4"
+                    />
+                    <Label htmlFor={`reminder-user-${user.id}`} className="text-sm cursor-pointer">
+                      {user.name || user.email}
+                    </Label>
+                  </div>
                 ))}
-              </SelectContent>
-            </Select>
+              </div>
+            )}
           </div>
+          {reminderUserIds.length > 0 && (
+            <p className="text-xs text-blue-600 mt-2">{reminderUserIds.length} user(s) selected</p>
+          )}
+        </div>
+        <div className={`flex ${isMobile ? 'flex-col' : 'flex-row flex-wrap'} gap-3 sm:gap-4 ${isMobile ? '' : 'items-end'} w-full`}>
           <div className={isMobile ? 'w-full' : ''}>
             <Label className="text-sm">Week Number</Label>
             <Input 
@@ -842,9 +868,9 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
             onClick={handleSendReminder}
             className={`${isMobile ? 'w-full' : ''} h-10 sm:h-9 bg-blue-600 hover:bg-blue-700`}
             size={isMobile ? "lg" : "default"}
-            disabled={!reminderUserId || !reminderWeekNumber || !reminderYear}
+            disabled={reminderUserIds.length === 0 || !reminderWeekNumber || !reminderYear}
           >
-            Send Reminder
+            Send Reminder{reminderUserIds.length > 0 ? ` (${reminderUserIds.length})` : ''}
           </Button>
         </div>
       </div>
