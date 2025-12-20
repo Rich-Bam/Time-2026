@@ -219,6 +219,18 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
   };
 
   const handleAddEntry = (dayIdx: number) => {
+    const weekKey = weekDates[0].toISOString().split('T')[0];
+    const isWeekLocked = confirmedWeeks[weekKey];
+    
+    if (isWeekLocked && !currentUser?.isAdmin) {
+      toast({
+        title: "Not Allowed",
+        description: "This week is confirmed and cannot be changed anymore.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     setDays(days.map((day, i) =>
       i === dayIdx 
         ? { ...day, entries: [...day.entries, { workType: "", project: "", hours: "", startTime: "", endTime: "" }] }
@@ -227,6 +239,18 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
   };
 
   const handleRemoveEntry = (dayIdx: number, entryIdx: number) => {
+    const weekKey = weekDates[0].toISOString().split('T')[0];
+    const isWeekLocked = confirmedWeeks[weekKey];
+    
+    if (isWeekLocked && !currentUser?.isAdmin) {
+      toast({
+        title: "Not Allowed",
+        description: "This week is confirmed and cannot be changed anymore.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     setDays(days.map((day, i) =>
       i === dayIdx 
         ? { ...day, entries: day.entries.filter((_, j) => j !== entryIdx) }
@@ -235,6 +259,13 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
   };
 
   const handleEntryChange = (dayIdx: number, entryIdx: number, field: string, value: any) => {
+    // Prevent changes if week is locked
+    const weekKey = weekDates[0].toISOString().split('T')[0];
+    const isWeekLocked = confirmedWeeks[weekKey];
+    if (isWeekLocked && !currentUser?.isAdmin) {
+      return; // Silently ignore changes if week is locked
+    }
+    
     setDays(prevDays => {
       const updatedDays = prevDays.map((day, i) => {
         if (i !== dayIdx) return day;
