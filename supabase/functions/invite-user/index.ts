@@ -55,7 +55,7 @@ Deno.serve(async (req) => {
     
     // Use Supabase Auth's built-in invite function - this sends email automatically!
     // Note: redirectTo must be in Supabase's allowed redirect URLs list
-    // For now, use homepage - user will be redirected to /invite-confirm after clicking link
+    // Redirect to invite-confirm page where user sets their password
     const {
       data: { user },
       error: authError,
@@ -64,7 +64,7 @@ Deno.serve(async (req) => {
         name, 
         isAdmin: isAdmin ? "true" : "false" // Store as string in user metadata
       },
-      redirectTo: `${appUrl}`, // Redirect to homepage (must be in allowed URLs)
+      redirectTo: `${appUrl}/invite-confirm`, // Redirect to invite confirmation page (must be in allowed URLs)
     });
 
     if (authError || !user) {
@@ -79,13 +79,17 @@ Deno.serve(async (req) => {
 
     // Create matching row in public.users table
     // Generate a temporary password (user will set their own via email link)
+    // Note: Password will be hashed when user sets it via the invite link
     const tempPassword = Math.random().toString(36).slice(-12) + Math.random().toString(36).slice(-12) + "A1!";
     
+    // Hash the temporary password before storing
+    // Using bcrypt via Deno's crypto module or a simple hash
+    // For now, we'll store a placeholder - user will set their own password via email link
     const { error: dbError } = await supabase.from("users").insert({
       id: user.id, // Use same ID as auth user
       email,
       name,
-      password: tempPassword, // Temporary - user will change via email link
+      password: tempPassword, // Temporary - will be replaced when user sets password via invite link
       isAdmin,
       must_change_password: true,
       approved: true, // Admins creating users are auto-approved

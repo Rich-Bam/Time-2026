@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { Clock, Calendar, Plus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -25,6 +26,7 @@ const TimesheetEntry = ({ currentUser }: TimesheetEntryProps) => {
   const [lunchBreak, setLunchBreak] = useState(false);
 
   const { toast } = useToast();
+  const isMobile = useIsMobile();
 
   // Fetch projects from Supabase (id and name) - only active projects
   const [projects, setProjects] = useState<{ id: number; name: string }[]>([]);
@@ -164,68 +166,72 @@ const TimesheetEntry = ({ currentUser }: TimesheetEntryProps) => {
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
       {/* Time Entry Form */}
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center">
-            <Plus className="h-5 w-5 mr-2" />
+        <CardHeader className="p-4 sm:p-6">
+          <CardTitle className="flex items-center text-lg sm:text-xl">
+            <Plus className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
             Log Time Entry
           </CardTitle>
-          <CardDescription>
+          <CardDescription className="text-sm">
             Record your work hours for projects
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-4 sm:p-6">
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className={`grid ${isMobile ? 'grid-cols-1' : 'grid-cols-2'} gap-4`}>
               <div className="space-y-2">
-                <Label htmlFor="date">Date</Label>
+                <Label htmlFor="date" className="text-sm font-semibold">Date</Label>
                 <Input
                   id="date"
                   type="date"
                   value={entry.date}
                   onChange={(e) => setEntry({ ...entry, date: e.target.value })}
                   required
+                  className="h-10 sm:h-9"
                 />
               </div>
               {/* Project select is hidden if Day Off is selected */}
               {!isDayOff && (
                 <div className="space-y-2">
-                  <Label htmlFor="project">Project</Label>
+                  <Label htmlFor="project" className="text-sm font-semibold">Project</Label>
                   <Input
                     value={entry.project}
                     onChange={e => setEntry({ ...entry, project: e.target.value })}
                     placeholder="Project"
                     disabled={isDayOff}
+                    className="h-10 sm:h-9"
                   />
                 </div>
               )}
             </div>
 
-            <div className="grid grid-cols-3 gap-4">
+            <div className={`grid ${isMobile ? 'grid-cols-1' : 'grid-cols-3'} gap-4`}>
               <div className="space-y-2">
-                <Label htmlFor="startTime">Start Time</Label>
+                <Label htmlFor="startTime" className="text-sm font-semibold">Start Time</Label>
                 <Input
                   id="startTime"
                   type="time"
                   value={entry.startTime}
                   onChange={(e) => setEntry({ ...entry, startTime: e.target.value })}
                   onBlur={calculateHours}
+                  className="h-10 sm:h-9"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="endTime">End Time</Label>
+                <Label htmlFor="endTime" className="text-sm font-semibold">End Time</Label>
                 <Input
                   id="endTime"
                   type="time"
                   value={entry.endTime}
                   onChange={(e) => setEntry({ ...entry, endTime: e.target.value })}
                   onBlur={calculateHours}
+                  className="h-10 sm:h-9"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="hours">Hours</Label>
+                <Label htmlFor="hours" className="text-sm font-semibold">Hours</Label>
                 <Input
                   id="hours"
                   type="number"
@@ -234,6 +240,7 @@ const TimesheetEntry = ({ currentUser }: TimesheetEntryProps) => {
                   value={entry.hours}
                   onChange={(e) => setEntry({ ...entry, hours: e.target.value })}
                   required
+                  className="h-10 sm:h-9"
                 />
               </div>
             </div>
@@ -246,18 +253,19 @@ const TimesheetEntry = ({ currentUser }: TimesheetEntryProps) => {
                   type="checkbox"
                   checked={lunchBreak}
                   onChange={(e) => setLunchBreak(e.target.checked)}
+                  className="h-4 w-4"
                 />
-                <Label htmlFor="lunchBreak">Lunch break </Label>
+                <Label htmlFor="lunchBreak" className="text-sm">Lunch break</Label>
               </div>
             )}
 
             <div className="space-y-2">
-              <Label htmlFor="workType">Work Type</Label>
+              <Label htmlFor="workType" className="text-sm font-semibold">Work Type</Label>
               <Select
                 value={entry.description}
                 onValueChange={(value) => setEntry({ ...entry, description: value })}
               >
-                <SelectTrigger>
+                <SelectTrigger className="h-10 sm:h-9">
                   <SelectValue placeholder="Select work type" />
                 </SelectTrigger>
                 <SelectContent>
@@ -270,7 +278,7 @@ const TimesheetEntry = ({ currentUser }: TimesheetEntryProps) => {
               </Select>
             </div>
 
-            <Button type="submit" className="w-full">
+            <Button type="submit" className="w-full h-10 sm:h-9" size={isMobile ? "lg" : "default"}>
               <Clock className="h-4 w-4 mr-2" />
               Log Time Entry
             </Button>
@@ -279,41 +287,41 @@ const TimesheetEntry = ({ currentUser }: TimesheetEntryProps) => {
       </Card>
 
       {/* Days Off Banner */}
-      <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-4 sm:gap-6">
         <Card className="bg-blue-50 border-blue-200">
-          <CardHeader>
-            <CardTitle className="text-blue-900 text-lg">Days Off Remaining</CardTitle>
+          <CardHeader className="p-4 sm:p-6">
+            <CardTitle className="text-blue-900 text-base sm:text-lg">Days Off Remaining</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-blue-700">{daysOffLeft} / {totalDaysOff}</div>
-            <div className="text-sm text-blue-600 mt-2">You have {daysOffLeft} days off left this year.</div>
+          <CardContent className="p-4 sm:p-6 pt-0">
+            <div className="text-2xl sm:text-3xl font-bold text-blue-700">{daysOffLeft} / {totalDaysOff}</div>
+            <div className="text-xs sm:text-sm text-blue-600 mt-2">You have {daysOffLeft} days off left this year.</div>
           </CardContent>
         </Card>
         {/* Recent Entries */}
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center">
-              <Calendar className="h-5 w-5 mr-2" />
+          <CardHeader className="p-4 sm:p-6">
+            <CardTitle className="flex items-center text-lg sm:text-xl">
+              <Calendar className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
               Recent Entries
             </CardTitle>
-            <CardDescription>
+            <CardDescription className="text-sm">
               Your latest time entries
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
+          <CardContent className="p-4 sm:p-6 pt-0">
+            <div className="space-y-3 sm:space-y-4">
               {recentEntries.length === 0 ? (
-                <div className="text-gray-500">No recent entries.</div>
+                <div className="text-sm text-gray-500">No recent entries.</div>
               ) : (
                 recentEntries.map((entry, index) => (
-                  <div key={index} className="border-l-4 border-orange-500 pl-4 py-2">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <h4 className="font-medium text-gray-900">{entry.projects?.name || "Unknown Project"}</h4>
-                        <p className="text-sm text-gray-600">{entry.description ? entry.description : "No description provided."}</p>
+                  <div key={index} className="border-l-4 border-orange-500 pl-3 sm:pl-4 py-2">
+                    <div className={`flex ${isMobile ? 'flex-col' : 'justify-between items-start'} gap-2`}>
+                      <div className="flex-1">
+                        <h4 className="font-medium text-sm sm:text-base text-gray-900">{entry.projects?.name || "Unknown Project"}</h4>
+                        <p className="text-xs sm:text-sm text-gray-600">{entry.description ? entry.description : "No description provided."}</p>
                       </div>
-                      <div className="text-right">
-                        <div className="font-medium text-orange-600">{entry.hours}h</div>
+                      <div className={`text-${isMobile ? 'left' : 'right'}`}>
+                        <div className="font-medium text-sm sm:text-base text-orange-600">{entry.hours}h</div>
                         <div className="text-xs text-gray-500">{entry.date}</div>
                       </div>
                     </div>
@@ -322,7 +330,7 @@ const TimesheetEntry = ({ currentUser }: TimesheetEntryProps) => {
               )}
             </div>
             
-            <div className="mt-4 p-3 bg-gray-50 rounded-lg text-sm text-gray-600">
+            <div className="mt-4 p-3 bg-gray-50 rounded-lg text-xs sm:text-sm text-gray-600">
               Connect to Supabase to save and retrieve your time entries permanently.
             </div>
           </CardContent>

@@ -7,6 +7,7 @@ import { User } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { hashPassword, verifyPassword, isPasswordHashed } from "@/utils/password";
 
 interface AuthSectionProps {
   onLogin: (status: boolean) => void;
@@ -35,9 +36,10 @@ const AuthSection = ({ onLogin, setCurrentUser }: AuthSectionProps) => {
       return;
     }
     // Query Supabase users table for a user with this email
+    // Note: We need password for login verification, so we select it explicitly
     const { data: user, error } = await supabase
       .from("users")
-      .select("*")
+      .select("id, email, name, password, isAdmin, must_change_password, approved, created_at")
       .eq("email", loginData.email)
       .single();
     if (error || !user) {
@@ -57,11 +59,28 @@ const AuthSection = ({ onLogin, setCurrentUser }: AuthSectionProps) => {
       });
       return;
     }
-    // Check password (plaintext for now)
-    if (user.password !== loginData.password) {
+    // Check password (supports both hashed and plaintext for migration)
+    let passwordValid = false;
+    if (isPasswordHashed(user.password)) {
+      // Password is hashed, verify using bcrypt
+      passwordValid = await verifyPassword(loginData.password, user.password);
+    } else {
+      // Password is plaintext (legacy), compare directly and hash it for next time
+      passwordValid = user.password === loginData.password;
+      if (passwordValid) {
+        // Hash the password and update it in the database
+        const hashedPassword = await hashPassword(loginData.password);
+        await supabase
+          .from("users")
+          .update({ password: hashedPassword })
+          .eq("id", user.id);
+      }
+    }
+    
+    if (!passwordValid) {
       toast({
-        title: "Login Mislukt",
-        description: "Onjuist wachtwoord",
+        title: "Login Failed",
+        description: "Incorrect password",
         variant: "destructive",
       });
       return;
@@ -123,11 +142,13 @@ const AuthSection = ({ onLogin, setCurrentUser }: AuthSectionProps) => {
     }
     
     setRegisterLoading(true);
+    // Hash password before storing
+    const hashedPassword = await hashPassword(registerData.password);
     const { error } = await supabase.from("users").insert([
       {
         email: registerData.email,
         name: registerData.name,
-        password: registerData.password,
+        password: hashedPassword, // Store hashed password
         // These fields are used elsewhere in the app (Admin panel / password change)
         isAdmin: false,
         must_change_password: false,

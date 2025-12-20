@@ -398,7 +398,13 @@ const Index = () => {
           .select("id, email, name")
           .eq("approved", true)
           .order("name");
-        if (!error && data) {
+        if (error) {
+          toast({
+            title: "Error",
+            description: error.message,
+            variant: "destructive",
+          });
+        } else {
           setUsers(data || []);
         }
       };
@@ -640,44 +646,44 @@ const Index = () => {
       </Dialog>
       {/* Header */}
       <header className="bg-white shadow-lg border-b border-orange-100">
-        <div className="container mx-auto px-4 sm:px-6 py-4 sm:py-6">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-12">
+        <div className="container mx-auto px-3 sm:px-4 md:px-6 py-3 sm:py-4 md:py-6">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 sm:gap-4">
+            <div className="flex flex-col md:flex-row md:items-center gap-2 sm:gap-3 md:gap-12">
               <button
                 onClick={() => setActiveTab('weekly')}
-                className="cursor-pointer hover:opacity-80 transition-opacity"
-                title="Ga naar homepage"
+                className="cursor-pointer hover:opacity-80 transition-opacity self-center md:self-auto"
+                title="Go to homepage"
               >
                 <img 
                   src="/bampro-marine-logo.jpg" 
                   alt="BAMPRO MARINE" 
-                  className="h-12 sm:h-14 md:h-16 object-contain"
+                  className="h-10 sm:h-12 md:h-14 lg:h-16 object-contain"
                 />
               </button>
-              <nav className="flex flex-wrap md:flex-nowrap items-center gap-2 md:gap-8 justify-center md:justify-start">
+              <nav className="flex flex-wrap md:flex-nowrap items-center gap-1.5 sm:gap-2 md:gap-4 lg:gap-8 justify-center md:justify-start">
                 <button
-                  className={`text-base sm:text-lg font-medium px-3 py-1 rounded transition-colors ${activeTab === 'weekly' ? 'bg-orange-600 text-white' : 'text-orange-700 hover:bg-orange-50'}`}
+                  className={`text-sm sm:text-base md:text-lg font-medium px-2 sm:px-3 py-1.5 sm:py-1 rounded transition-colors ${activeTab === 'weekly' ? 'bg-orange-600 text-white' : 'text-orange-700 hover:bg-orange-50'}`}
                   onClick={() => setActiveTab('weekly')}
                 >
                   {t('nav.weekly')}
                 </button>
                 {currentUser?.isAdmin && (
                   <button
-                    className={`text-base sm:text-lg font-medium px-3 py-1 rounded transition-colors ${activeTab === 'projects' ? 'bg-orange-600 text-white' : 'text-orange-700 hover:bg-orange-50'}`}
+                    className={`text-sm sm:text-base md:text-lg font-medium px-2 sm:px-3 py-1.5 sm:py-1 rounded transition-colors ${activeTab === 'projects' ? 'bg-orange-600 text-white' : 'text-orange-700 hover:bg-orange-50'}`}
                     onClick={() => setActiveTab('projects')}
                   >
                     {t('nav.projects')}
                   </button>
                 )}
                 <button
-                  className={`text-base sm:text-lg font-medium px-3 py-1 rounded transition-colors ${activeTab === 'export' ? 'bg-orange-600 text-white' : 'text-orange-700 hover:bg-orange-50'}`}
+                  className={`text-sm sm:text-base md:text-lg font-medium px-2 sm:px-3 py-1.5 sm:py-1 rounded transition-colors ${activeTab === 'export' ? 'bg-orange-600 text-white' : 'text-orange-700 hover:bg-orange-50'}`}
                   onClick={() => setActiveTab('export')}
                 >
                   {t('nav.export')}
                 </button>
                 {currentUser?.isAdmin && (
                   <button
-                    className={`text-base sm:text-lg font-medium px-3 py-1 rounded transition-colors ${activeTab === 'admin' ? 'bg-orange-600 text-white' : 'text-orange-700 hover:bg-orange-50'}`}
+                    className={`text-sm sm:text-base md:text-lg font-medium px-2 sm:px-3 py-1.5 sm:py-1 rounded transition-colors ${activeTab === 'admin' ? 'bg-orange-600 text-white' : 'text-orange-700 hover:bg-orange-50'}`}
                     onClick={() => setActiveTab('admin')}
                   >
                     {t('nav.admin')}
@@ -685,22 +691,22 @@ const Index = () => {
                 )}
                 {currentUser?.email === SUPER_ADMIN_EMAIL && (
                   <button
-                    className={`text-base sm:text-lg font-medium px-3 py-1 rounded transition-colors ${activeTab === 'bugreports' ? 'bg-orange-600 text-white' : 'text-orange-700 hover:bg-orange-50'}`}
+                    className={`text-sm sm:text-base md:text-lg font-medium px-2 sm:px-3 py-1.5 sm:py-1 rounded transition-colors ${activeTab === 'bugreports' ? 'bg-orange-600 text-white' : 'text-orange-700 hover:bg-orange-50'}`}
                     onClick={() => setActiveTab('bugreports')}
                   >
                     {t('nav.reportBug')}
                   </button>
                 )}
                 <button
-                  className={`text-base sm:text-lg font-medium px-3 py-1 rounded transition-colors ${activeTab === 'overview' ? 'bg-orange-600 text-white' : 'text-orange-700 hover:bg-orange-50'}`}
+                  className={`text-sm sm:text-base md:text-lg font-medium px-2 sm:px-3 py-1.5 sm:py-1 rounded transition-colors ${activeTab === 'overview' ? 'bg-orange-600 text-white' : 'text-orange-700 hover:bg-orange-50'}`}
                   onClick={() => setActiveTab('overview')}
                 >
                   {t('nav.overview')}
                 </button>
               </nav>
             </div>
-            <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-6 justify-center md:justify-end">
-              <span className="text-gray-700 font-medium text-center sm:text-left">{t('nav.welcome')}, {currentUser?.name || "User"}</span>
+            <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-3 md:gap-6 justify-center md:justify-end">
+              <span className="text-xs sm:text-sm md:text-base text-gray-700 font-medium text-center sm:text-left">{t('nav.welcome')}, {currentUser?.name || "User"}</span>
               {currentUser?.isAdmin && (
                 <ScreenshotButton currentUser={currentUser} />
               )}
@@ -717,7 +723,7 @@ const Index = () => {
                     description: "You have been successfully logged out.",
                   });
                 }}
-                className="border-orange-200 text-orange-700 hover:bg-orange-50"
+                className="border-orange-200 text-orange-700 hover:bg-orange-50 h-9 sm:h-8 text-xs sm:text-sm w-full sm:w-auto"
               >
                 {t('nav.logout')}
               </Button>
@@ -727,7 +733,7 @@ const Index = () => {
       </header>
 
       {/* Main Content */}
-      <div className="container mx-auto px-2 sm:px-6 py-4 sm:py-8">
+      <div className="container mx-auto px-3 sm:px-4 md:px-6 py-3 sm:py-4 md:py-8">
         {activeTab === 'timesheet' && (
           <TimesheetEntry currentUser={currentUser} />
         )}

@@ -4,8 +4,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
 import { User, Calendar } from "lucide-react";
+import { hashPassword } from "@/utils/password";
 
 interface AdminPanelProps {
   currentUser: any;
@@ -13,6 +15,7 @@ interface AdminPanelProps {
 
 const AdminPanel = ({ currentUser }: AdminPanelProps) => {
   const { toast } = useToast();
+  const isMobile = useIsMobile();
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
@@ -337,7 +340,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
             description: "De 'invite-user' function is NIET gedeployed in Supabase. Open Supabase Dashboard → Edge Functions → Functions → Create 'invite-user' function. Gebruiker wordt nu aangemaakt zonder email.",
             variant: "destructive",
           });
-        } else if (errorMsg.includes("401") || image.pngerrorMsg.includes("403") || errorMsg.includes("unauthorized") || errorStatus === 401 || errorStatus === 403) {
+        } else if (errorMsg.includes("401") || errorMsg.includes("403") || errorMsg.includes("unauthorized") || errorStatus === 401 || errorStatus === 403) {
           toast({
             title: "⚠️ Toegang geweigerd (401/403)",
             description: "Check of VITE_SUPABASE_ANON_KEY correct is in Netlify environment variables. Gebruiker wordt nu aangemaakt zonder email.",
@@ -395,11 +398,13 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
     }
     
     // Fallback: create user directly (no email sent)
+    // Hash password before storing
+    const hashedPassword = await hashPassword(form.password);
     const { error: insertError } = await supabase.from("users").insert([
       {
         email: form.email,
         name: form.name || form.email,
-        password: form.password,
+        password: hashedPassword, // Store hashed password
         isAdmin: form.isAdmin,
         must_change_password: form.must_change_password,
         approved: true, // Admins can create users directly, so they're auto-approved
@@ -429,7 +434,9 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
       toast({ title: "Missing password", description: "Enter a new password", variant: "destructive" });
       return;
     }
-    const { error } = await supabase.from("users").update({ password: resetPassword, must_change_password: true }).eq("id", userId);
+    // Hash password before storing
+    const hashedPassword = await hashPassword(resetPassword);
+    const { error } = await supabase.from("users").update({ password: hashedPassword, must_change_password: true }).eq("id", userId);
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
@@ -626,101 +633,221 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
   };
 
   return (
-    <div className="p-4 sm:p-8 bg-white rounded shadow w-full max-w-full">
-      <h2 className="text-2xl font-bold mb-4">Admin Panel</h2>
+    <div className="p-3 sm:p-4 md:p-8 bg-white rounded shadow w-full max-w-full">
+      <h2 className="text-xl sm:text-2xl font-bold mb-3 sm:mb-4">Admin Panel</h2>
       
       {/* Debug: Test Edge Function */}
       <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded">
-        <div className="flex items-center justify-between">
+        <div className={`flex ${isMobile ? 'flex-col' : 'items-center justify-between'} gap-3`}>
           <div>
-            <p className="text-sm font-semibold text-yellow-800">🔍 Edge Function Test</p>
-            <p className="text-xs text-yellow-700">Test of de invite-user function werkt zonder een user aan te maken</p>
+            <p className="text-xs sm:text-sm font-semibold text-yellow-800">🔍 Edge Function Test</p>
+            <p className="text-xs text-yellow-700">Test if the invite-user function works without creating a user</p>
           </div>
-          <Button onClick={testEdgeFunction} variant="outline" size="sm">
+          <Button onClick={testEdgeFunction} variant="outline" size={isMobile ? "sm" : "sm"} className={`${isMobile ? 'w-full' : ''} h-9 sm:h-8`}>
             Test Edge Function
           </Button>
         </div>
       </div>
       
-      <div className="mb-8">
-        <h3 className="text-lg font-semibold mb-2">Add User</h3>
-        <form onSubmit={handleAddUser} className="flex flex-col sm:flex-row flex-wrap gap-2 sm:gap-4 items-end w-full">
-          <div>
-            <Label>Email</Label>
-            <Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} required />
+      <div className="mb-6 sm:mb-8">
+        <h3 className="text-base sm:text-lg font-semibold mb-2">Add User</h3>
+        <form onSubmit={handleAddUser} className={`flex ${isMobile ? 'flex-col' : 'flex-row flex-wrap'} gap-3 sm:gap-4 ${isMobile ? '' : 'items-end'} w-full`}>
+          <div className={isMobile ? 'w-full' : ''}>
+            <Label className="text-sm">Email</Label>
+            <Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} required className="h-10 sm:h-9" />
           </div>
-          <div>
-            <Label>Name</Label>
-            <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+          <div className={isMobile ? 'w-full' : ''}>
+            <Label className="text-sm">Name</Label>
+            <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className="h-10 sm:h-9" />
           </div>
-          <div>
-            <Label>Wachtwoord</Label>
+          <div className={isMobile ? 'w-full' : ''}>
+            <Label className="text-sm">Password</Label>
             <Input 
               type="password" 
               value={form.password} 
               onChange={e => setForm(f => ({ ...f, password: e.target.value }))} 
               required 
               minLength={6}
-              placeholder="Minimaal 6 tekens"
+              placeholder="Min. 6 characters"
+              className="h-10 sm:h-9"
             />
             {form.password && form.password.length > 0 && form.password.length < 6 && (
-              <p className="text-xs text-red-500 mt-1">Wachtwoord moet minimaal 6 tekens lang zijn.</p>
+              <p className="text-xs text-red-500 mt-1">Password must be at least 6 characters.</p>
             )}
           </div>
-          <div className="flex items-center gap-2">
-            <input type="checkbox" id="isAdmin" checked={form.isAdmin} onChange={e => setForm(f => ({ ...f, isAdmin: e.target.checked }))} />
-            <Label htmlFor="isAdmin">Admin</Label>
+          <div className={`flex items-center gap-2 ${isMobile ? 'w-full' : ''}`}>
+            <input type="checkbox" id="isAdmin" checked={form.isAdmin} onChange={e => setForm(f => ({ ...f, isAdmin: e.target.checked }))} className="h-4 w-4" />
+            <Label htmlFor="isAdmin" className="text-sm">Admin</Label>
           </div>
-          <div className="flex items-center gap-2">
-            <input type="checkbox" id="must_change_password" checked={form.must_change_password} onChange={e => setForm(f => ({ ...f, must_change_password: e.target.checked }))} />
-            <Label htmlFor="must_change_password">Must change password</Label>
+          <div className={`flex items-center gap-2 ${isMobile ? 'w-full' : ''}`}>
+            <input type="checkbox" id="must_change_password" checked={form.must_change_password} onChange={e => setForm(f => ({ ...f, must_change_password: e.target.checked }))} className="h-4 w-4" />
+            <Label htmlFor="must_change_password" className="text-sm">Must change password</Label>
           </div>
-          <Button type="submit">Add User</Button>
+          <Button type="submit" className={`${isMobile ? 'w-full' : ''} h-10 sm:h-9`} size={isMobile ? "lg" : "default"}>Add User</Button>
         </form>
       </div>
       {/* Pending Users Section */}
       {users.filter(u => u.approved === false).length > 0 && (
-        <div className="mb-8">
-          <h3 className="text-lg font-semibold mb-2 text-orange-600">Pending Approval</h3>
-          <div className="overflow-x-auto w-full">
-            <table className="min-w-full border mt-2 text-sm">
-              <thead>
-                <tr className="bg-orange-100">
-                  <th className="p-2 text-left">Email</th>
-                  <th className="p-2 text-left">Name</th>
-                  <th className="p-2 text-left">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.filter(u => u.approved === false).map(user => (
-                  <tr key={user.id} className="border-t">
-                    <td className="p-2">{user.email}</td>
-                    <td className="p-2">{user.name || "-"}</td>
-                    <td className="p-2">
-                      <Button size="sm" variant="default" onClick={() => handleApproveUser(user.id, user.email)}>
-                        Approve
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        className="ml-2"
-                        onClick={() => handleDeleteUser(user.id, user.email)}
-                      >
-                        Reject
-                      </Button>
-                    </td>
+        <div className="mb-6 sm:mb-8">
+          <h3 className="text-base sm:text-lg font-semibold mb-2 text-orange-600">Pending Approval</h3>
+          {isMobile ? (
+            <div className="space-y-3">
+              {users.filter(u => u.approved === false).map(user => (
+                <div key={user.id} className="border rounded-lg p-3 bg-orange-50">
+                  <div className="mb-2">
+                    <div className="font-semibold text-sm">{user.email}</div>
+                    <div className="text-xs text-gray-600">{user.name || "-"}</div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="default" onClick={() => handleApproveUser(user.id, user.email)} className="flex-1 h-9">
+                      Approve
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => handleDeleteUser(user.id, user.email)}
+                      className="flex-1 h-9"
+                    >
+                      Reject
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="overflow-x-auto w-full">
+              <table className="min-w-full border mt-2 text-sm">
+                <thead>
+                  <tr className="bg-orange-100">
+                    <th className="p-2 text-left">Email</th>
+                    <th className="p-2 text-left">Name</th>
+                    <th className="p-2 text-left">Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {users.filter(u => u.approved === false).map(user => (
+                    <tr key={user.id} className="border-t">
+                      <td className="p-2">{user.email}</td>
+                      <td className="p-2">{user.name || "-"}</td>
+                      <td className="p-2">
+                        <Button size="sm" variant="default" onClick={() => handleApproveUser(user.id, user.email)}>
+                          Approve
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          className="ml-2"
+                          onClick={() => handleDeleteUser(user.id, user.email)}
+                        >
+                          Reject
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
       <div>
-        <h3 className="text-lg font-semibold mb-2">Existing Users</h3>
+        <h3 className="text-base sm:text-lg font-semibold mb-2">Existing Users</h3>
         {loading ? (
-          <div>Loading...</div>
+          <div className="text-sm">Loading...</div>
+        ) : isMobile ? (
+          /* Mobile: Card Layout */
+          <div className="space-y-3">
+            {users.filter(u => u.approved !== false).map(user => (
+              <div key={user.id} className="border rounded-lg p-3 bg-gray-50">
+                <div className="mb-3">
+                  <div className="font-semibold text-sm mb-1">
+                    {user.email}
+                    {user.email === SUPER_ADMIN_EMAIL && <span className="ml-2 px-2 py-0.5 text-xs bg-orange-200 text-orange-800 rounded">Super Admin</span>}
+                  </div>
+                  <div className="text-xs text-gray-600">{user.name}</div>
+                </div>
+                <div className="space-y-2 text-xs">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Admin:</span>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={!!user.isAdmin}
+                        disabled={user.email === SUPER_ADMIN_EMAIL}
+                        onChange={(e) => handleToggleAdmin(user.id, user.email, e.target.checked)}
+                        className="h-3 w-3"
+                      />
+                      <span>{user.isAdmin ? "Yes" : "No"}</span>
+                    </div>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Approved:</span>
+                    <span>{user.approved !== false ? "Yes" : "No"}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Must Change Password:</span>
+                    <span>{user.must_change_password ? "Yes" : "No"}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Days Off Left:</span>
+                    <span className="font-semibold">{(totalDaysOff - ((daysOffMap[user.id] || 0) / 8)).toFixed(2)} / {totalDaysOff}</span>
+                  </div>
+                </div>
+                <div className="mt-3 space-y-2">
+                  {resetUserId === user.id ? (
+                    <div className="space-y-2">
+                      <Input
+                        type="text"
+                        placeholder="New password"
+                        value={resetPassword}
+                        onChange={e => setResetPassword(e.target.value)}
+                        className="h-9 text-sm"
+                      />
+                      <div className="flex gap-2">
+                        <Button size="sm" onClick={() => handleResetPassword(user.id)} className="flex-1 h-9">Save</Button>
+                        <Button size="sm" variant="outline" onClick={() => { setResetUserId(null); setResetPassword(""); }} className="flex-1 h-9">Cancel</Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="outline" onClick={() => setResetUserId(user.id)} className="flex-1 h-9 text-xs">Reset Password</Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => handleDeleteUser(user.id, user.email)}
+                        disabled={user.id === currentUser.id || user.email === SUPER_ADMIN_EMAIL}
+                        className="flex-1 h-9 text-xs"
+                      >
+                        Delete
+                      </Button>
+                    </div>
+                  )}
+                  <div className="space-y-2">
+                    <Input
+                      type="number"
+                      min="0.25"
+                      step="0.25"
+                      placeholder="Hours"
+                      value={daysOffInput[user.id] || ""}
+                      onChange={e => setDaysOffInput(prev => ({ ...prev, [user.id]: e.target.value }))}
+                      className="h-9 text-sm"
+                    />
+                    <div className="flex gap-2">
+                      <Button size="sm" onClick={() => handleAddOrDeductDaysOff(user.id, -Math.abs(parseFloat(daysOffInput[user.id] || "0")))} className="flex-1 h-9 text-xs">
+                        Add
+                      </Button>
+                      <Button size="sm" variant="destructive" onClick={() => handleAddOrDeductDaysOff(user.id, Math.abs(parseFloat(daysOffInput[user.id] || "0")))} className="flex-1 h-9 text-xs">
+                        Deduct
+                      </Button>
+                    </div>
+                    <span className="text-xs text-gray-500">(1 day = 8 hours)</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         ) : (
+          /* Desktop: Table Layout */
           <div className="overflow-x-auto w-full">
             <table className="min-w-full border mt-2 text-sm">
               <thead>
@@ -761,6 +888,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                             placeholder="New password"
                             value={resetPassword}
                             onChange={e => setResetPassword(e.target.value)}
+                            className="h-8"
                           />
                           <Button size="sm" onClick={() => handleResetPassword(user.id)}>Save</Button>
                           <Button size="sm" variant="outline" onClick={() => { setResetUserId(null); setResetPassword(""); }}>Cancel</Button>
@@ -789,6 +917,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                           value={daysOffInput[user.id] || ""}
                           onChange={e => setDaysOffInput(prev => ({ ...prev, [user.id]: e.target.value }))}
                           style={{ width: 70 }}
+                          className="h-8"
                         />
                         <Button size="sm" onClick={() => handleAddOrDeductDaysOff(user.id, -Math.abs(parseFloat(daysOffInput[user.id] || "0")))}>
                           Add
@@ -808,8 +937,8 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
       </div>
       {/* Pending Week Confirmations Section */}
       {confirmedWeeks.filter(cw => !cw.admin_reviewed || !cw.admin_approved).length > 0 && (
-        <div className="mt-8 mb-8">
-          <h3 className="text-lg font-semibold mb-4 text-orange-600">⚠️ Te Controleren Weken</h3>
+        <div className="mt-6 sm:mt-8 mb-6 sm:mb-8">
+          <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4 text-orange-600">⚠️ Weeks to Review</h3>
           <div className="space-y-4">
             {confirmedWeeks
               .filter(cw => !cw.admin_reviewed || !cw.admin_approved)
@@ -827,42 +956,43 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                 const totalHours = weekEntries.reduce((sum, e) => sum + Number(e.hours || 0), 0);
                 
                 return (
-                  <div key={`${cw.user_id}-${cw.week_start_date}`} className="border rounded-lg p-4 bg-orange-50 shadow">
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+                  <div key={`${cw.user_id}-${cw.week_start_date}`} className="border rounded-lg p-3 sm:p-4 bg-orange-50 shadow">
+                    <div className={`flex ${isMobile ? 'flex-col' : 'flex-row sm:items-center sm:justify-between'} gap-3 sm:gap-4 mb-3 sm:mb-4`}>
                       <div>
-                        <div className="font-semibold text-lg">
-                          {user?.name || user?.email || 'Onbekende gebruiker'} - Week {weekNum}
+                        <div className="font-semibold text-base sm:text-lg">
+                          {user?.name || user?.email || 'Unknown user'} - Week {weekNum}
                         </div>
-                        <div className="text-sm text-gray-600">
-                          {weekStart.toLocaleDateString('nl-NL')} - {weekEnd.toLocaleDateString('nl-NL')}
+                        <div className="text-xs sm:text-sm text-gray-600">
+                          {weekStart.toLocaleDateString('en-US')} - {weekEnd.toLocaleDateString('en-US')}
                         </div>
-                        <div className="text-sm font-medium mt-1">
-                          Totaal: {totalHours.toFixed(2)} uur ({weekEntries.length} entries)
+                        <div className="text-xs sm:text-sm font-medium mt-1">
+                          Total: {totalHours.toFixed(2)} hours ({weekEntries.length} entries)
                         </div>
                       </div>
-                      <div className="flex flex-wrap gap-2">
+                      <div className={`flex ${isMobile ? 'flex-col' : 'flex-wrap'} gap-2`}>
                         <Button
-                          size="sm"
+                          size={isMobile ? "sm" : "sm"}
                           variant="default"
-                          className="bg-green-600 hover:bg-green-700"
+                          className={`${isMobile ? 'w-full' : ''} bg-green-600 hover:bg-green-700 h-9 sm:h-8`}
                           onClick={() => handleApproveWeek(cw.user_id, cw.week_start_date)}
                         >
-                          ✓ Goedkeuren
+                          ✓ Approve
                         </Button>
                         <Button
-                          size="sm"
+                          size={isMobile ? "sm" : "sm"}
                           variant="destructive"
+                          className={`${isMobile ? 'w-full' : ''} h-9 sm:h-8`}
                           onClick={() => handleRejectWeek(cw.user_id, cw.week_start_date)}
                         >
-                          ✗ Afkeuren
+                          ✗ Reject
                         </Button>
                         <Button
-                          size="sm"
+                          size={isMobile ? "sm" : "sm"}
                           variant="outline"
-                          className="border-orange-600 text-orange-600 hover:bg-orange-100"
+                          className={`${isMobile ? 'w-full' : ''} border-orange-600 text-orange-600 hover:bg-orange-100 h-9 sm:h-8`}
                           onClick={() => handleUnlockWeek(cw.user_id, cw.week_start_date)}
                         >
-                          🔓 Terugzetten (Unlock)
+                          🔓 Unlock
                         </Button>
                       </div>
                     </div>
@@ -897,8 +1027,8 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
         </div>
       )}
       {/* Below user table: User Weekly Entries Accordion */}
-      <div className="mt-12">
-        <h3 className="text-lg font-semibold mb-4">View User Weekly Entries</h3>
+      <div className="mt-8 sm:mt-12">
+        <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4">View User Weekly Entries</h3>
         <Accordion type="multiple" className="w-full">
           {users.map(user => {
             // Group this user's entries by week

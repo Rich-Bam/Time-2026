@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
+import { hashPassword } from "@/utils/password";
 
 interface ChangePasswordFormProps {
   currentUser: any;
@@ -47,9 +48,11 @@ const ChangePasswordForm = ({ currentUser, setCurrentUser }: ChangePasswordFormP
     }
     
     setLoading(true);
+    // Hash password before storing
+    const hashedPassword = await hashPassword(password);
     const { error } = await supabase
       .from("users")
-      .update({ password, must_change_password: false })
+      .update({ password: hashedPassword, must_change_password: false })
       .eq("id", currentUser.id);
     setLoading(false);
     if (error) {

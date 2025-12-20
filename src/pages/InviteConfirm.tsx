@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { hashPassword } from "@/utils/password";
 
 const InviteConfirm = () => {
   const [searchParams] = useSearchParams();
@@ -78,10 +79,12 @@ const InviteConfirm = () => {
       
       // Also update password in custom users table if user exists
       if (sessionData?.user?.email) {
+        // Hash password before storing
+        const hashedPassword = await hashPassword(newPassword);
         const { error: dbError } = await supabase
           .from("users")
           .update({ 
-            password: newPassword,
+            password: hashedPassword, // Store hashed password
             must_change_password: false 
           })
           .eq("email", sessionData.user.email);
