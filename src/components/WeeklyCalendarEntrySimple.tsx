@@ -97,13 +97,21 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
   const [customProjectInputs, setCustomProjectInputs] = useState<Record<string, string>>({});
   const [editingEntry, setEditingEntry] = useState<{ id: number; dateStr: string } | null>(null);
   
+  // Use ref to track lock status immediately (sync) as well as state (for UI re-renders)
+  const confirmedWeeksRef = useRef<Record<string, boolean>>({});
+  
   const weekDates = getWeekDates(weekStart);
   
-  // Helper function to check if week is locked
+  // Sync ref with state whenever state changes
+  useEffect(() => {
+    confirmedWeeksRef.current = confirmedWeeks;
+  }, [confirmedWeeks]);
+  
+  // Helper function to check if week is locked (uses ref for immediate access)
   const isWeekLocked = (): boolean => {
     const weekKey = weekDates[0].toISOString().split('T')[0];
-    const isLocked = !!confirmedWeeks[weekKey] && !currentUser?.isAdmin;
-    console.log('isWeekLocked check:', { weekKey, confirmedWeeksValue: confirmedWeeks[weekKey], confirmedWeeks: confirmedWeeks, isAdmin: currentUser?.isAdmin, isLocked });
+    const isLocked = !!confirmedWeeksRef.current[weekKey] && !currentUser?.isAdmin;
+    console.log('isWeekLocked check:', { weekKey, confirmedWeeksValue: confirmedWeeksRef.current[weekKey], confirmedWeeksRef: confirmedWeeksRef.current, stateValue: confirmedWeeks[weekKey], isAdmin: currentUser?.isAdmin, isLocked });
     return isLocked;
   };
   const weekNumber = getISOWeekNumber(weekDates[0]);
@@ -692,9 +700,12 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
         title: "Week Confirmed",
         description: "This week has been confirmed and locked. You can no longer make changes.",
       });
-      // Immediately set locked state, then refresh from database to be sure
+      // Immediately set locked state (both ref and state), then refresh from database to be sure
       const weekKeyDate = weekDates[0].toISOString().split('T')[0];
       console.log('Confirming week, setting locked:', weekKeyDate);
+      // Update ref immediately (synchronous)
+      confirmedWeeksRef.current = { ...confirmedWeeksRef.current, [weekKeyDate]: true };
+      // Update state for UI re-render
       setConfirmedWeeks(prev => {
         const updated = { ...prev, [weekKeyDate]: true };
         console.log('Updated confirmedWeeks state:', updated);
