@@ -636,9 +636,16 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
         title: "Week Confirmed",
         description: "This week has been confirmed and locked. You can no longer make changes.",
       });
-      // Refresh confirmed status
+      // Refresh confirmed status by fetching from database
       const weekKeyDate = weekDates[0].toISOString().split('T')[0];
-      setConfirmedWeeks(prev => ({ ...prev, [weekKeyDate]: true }));
+      const { data: refreshed } = await supabase
+        .from('confirmed_weeks')
+        .select('confirmed, admin_approved')
+        .eq('user_id', currentUser.id)
+        .eq('week_start_date', weekKeyDate)
+        .single();
+      const refreshedIsLocked = !!refreshed?.confirmed && (!currentUser.isAdmin || !refreshed?.admin_approved);
+      setConfirmedWeeks(prev => ({ ...prev, [weekKeyDate]: refreshedIsLocked }));
     }
   };
 
