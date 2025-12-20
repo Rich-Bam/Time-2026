@@ -187,8 +187,8 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
           });
         } else if (errorMsg.includes("Failed to send") || errorMsg.includes("network") || errorMsg.includes("fetch")) {
           toast({
-            title: "❌ Netwerkfout",
-            description: `Kon Edge Function niet bereiken: ${errorMsg}\n\nCheck:\n1. Supabase Dashboard → Edge Functions → Functions → invite-user bestaat\n2. Supabase Dashboard → Edge Functions → Logs voor errors\n3. Browser Console (F12) voor meer details`,
+            title: "❌ Network Error",
+            description: `Could not reach Edge Function: ${errorMsg}\n\nCheck:\n1. Supabase Dashboard → Edge Functions → Functions → invite-user exists\n2. Supabase Dashboard → Edge Functions → Logs for errors\n3. Browser Console (F12) for more details`,
             variant: "destructive",
             duration: 15000,
           });
@@ -196,15 +196,15 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
           // Check if it's a 404 even if status is unknown (network errors can hide the real status)
           if (errorMsg.includes("non-2xx") || errorMsg.includes("status code") || errorStatus === undefined) {
             toast({
-              title: "❌ Edge Function niet gevonden (404)",
-              description: "De 'invite-user' function bestaat NIET of is NIET gedeployed in Supabase.\n\nVolg deze stappen:\n1. Ga naar Supabase Dashboard → Edge Functions → Functions\n2. Check of 'invite-user' in de lijst staat\n3. Als die er NIET is: Create new edge function → Name: 'invite-user' → Kopieer code uit supabase/functions/invite-user/index.ts → Deploy\n4. Als die er WEL is: Klik erop → Deploy function opnieuw\n\nZie STEP_BY_STEP_DEPLOY_EDGE_FUNCTION.md voor details.",
+              title: "❌ Edge Function Not Found (404)",
+              description: "The 'invite-user' function does NOT exist or is NOT deployed in Supabase.\n\nFollow these steps:\n1. Go to Supabase Dashboard → Edge Functions → Functions\n2. Check if 'invite-user' is in the list\n3. If it's NOT there: Create new edge function → Name: 'invite-user' → Copy code from supabase/functions/invite-user/index.ts → Deploy\n4. If it IS there: Click on it → Deploy function again\n\nSee STEP_BY_STEP_DEPLOY_EDGE_FUNCTION.md for details.",
               variant: "destructive",
               duration: 20000,
             });
           } else {
             toast({
               title: "❌ Edge Function Error",
-              description: `${errorMsg}\n\nStatus: ${errorStatus || "unknown"}\n\nDruk F12 → Console voor volledige error details.`,
+              description: `${errorMsg}\n\nStatus: ${errorStatus || "unknown"}\n\nPress F12 → Console for full error details.`,
               variant: "destructive",
               duration: 15000,
             });

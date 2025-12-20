@@ -59,7 +59,7 @@ export const createPDF = (options: PDFExportOptions, filename: string) => {
   
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
-  doc.text('Urenregistratie Systeem', 15, 28);
+  doc.text('Hours Registration System', 15, 28);
 
   yPos = 40;
 

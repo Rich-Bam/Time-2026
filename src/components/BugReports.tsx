@@ -48,8 +48,8 @@ const BugReports = ({ currentUser }: BugReportsProps) => {
       console.error("Error details:", JSON.stringify(error, null, 2));
       if (!error.message.includes("does not exist")) {
         toast({ 
-          title: "Error bij Ophalen Screenshots", 
-          description: error.message || "Kon screenshots niet ophalen. Check browser console (F12) voor details.",
+          title: "Error Fetching Screenshots", 
+          description: error.message || "Could not fetch screenshots. Check browser console (F12) for details.",
           variant: "destructive" 
         });
       }
@@ -59,8 +59,8 @@ const BugReports = ({ currentUser }: BugReportsProps) => {
       setScreenshots(data || []);
       if (data && data.length > 0) {
         toast({
-          title: "Screenshots Geladen",
-          description: `${data.length} bug report(s) gevonden.`,
+          title: "Screenshots Loaded",
+          description: `${data.length} bug report(s) found.`,
         });
       }
     }
@@ -80,7 +80,7 @@ const BugReports = ({ currentUser }: BugReportsProps) => {
   if (!isSuperAdmin) {
     return (
       <div className="p-8 text-center text-red-600 font-semibold">
-        Je hebt geen toegang tot deze pagina. Alleen de super admin kan bug reports bekijken.
+        You do not have access to this page. Only the super admin can view bug reports.
       </div>
     );
   }
@@ -94,7 +94,7 @@ const BugReports = ({ currentUser }: BugReportsProps) => {
             Bug Reports
           </h2>
           <p className="text-gray-600 mt-2">
-            Screenshots die door admins zijn gemaakt om bugs te rapporteren.
+            Screenshots made by admins to report bugs.
           </p>
         </div>
         <Button
@@ -105,17 +105,17 @@ const BugReports = ({ currentUser }: BugReportsProps) => {
           className="flex items-center gap-2"
         >
           <RefreshCw className={`h-4 w-4 ${loadingScreenshots ? 'animate-spin' : ''}`} />
-          {loadingScreenshots ? "Laden..." : "Verversen"}
+          {loadingScreenshots ? "Loading..." : "Refresh"}
         </Button>
       </div>
 
       {loadingScreenshots ? (
-        <div className="text-center py-8 text-gray-500">Laden...</div>
+        <div className="text-center py-8 text-gray-500">Loading...</div>
       ) : screenshots.length === 0 ? (
         <div className="text-center py-8 text-gray-500 border rounded-lg bg-gray-50">
           <ImageIcon className="h-12 w-12 mx-auto mb-2 text-gray-400" />
-          <p className="font-semibold">Nog geen bug reports ontvangen.</p>
-          <p className="text-sm mt-1">Admins kunnen bug reports maken met de "Report Bug" knop in de header.</p>
+          <p className="font-semibold">No bug reports received yet.</p>
+          <p className="text-sm mt-1">Admins can create bug reports using the "Report Bug" button in the header.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -126,12 +126,12 @@ const BugReports = ({ currentUser }: BugReportsProps) => {
                   {screenshot.user_name || screenshot.user_email}
                 </div>
                 <div className="text-xs text-gray-500">
-                  {new Date(screenshot.created_at).toLocaleString('nl-NL')}
+                  {new Date(screenshot.created_at).toLocaleString('en-US')}
                 </div>
               </div>
               {screenshot.description && (
                 <div className="mb-3 p-3 bg-orange-50 border border-orange-200 rounded text-sm text-gray-700">
-                  <div className="font-semibold text-orange-800 mb-1">Beschrijving:</div>
+                  <div className="font-semibold text-orange-800 mb-1">Description:</div>
                   <div className="text-gray-700 whitespace-pre-wrap">{screenshot.description}</div>
                 </div>
               )}
@@ -144,7 +144,7 @@ const BugReports = ({ currentUser }: BugReportsProps) => {
                 >
                   <img
                     src={screenshot.url}
-                    alt={`Screenshot van ${screenshot.user_name || screenshot.user_email}`}
+                    alt={`Screenshot from ${screenshot.user_name || screenshot.user_email}`}
                     className="w-full h-auto rounded border cursor-pointer hover:opacity-90 transition-opacity"
                     loading="lazy"
                   />
@@ -157,13 +157,13 @@ const BugReports = ({ currentUser }: BugReportsProps) => {
                   onClick={() => window.open(screenshot.url, '_blank')}
                   className="flex-1"
                 >
-                  Open Volledig
+                  Open Full
                 </Button>
                 <Button
                   size="sm"
                   variant="destructive"
                   onClick={async () => {
-                    if (confirm(`Weet je zeker dat je deze bug report wilt verwijderen?`)) {
+                    if (confirm(`Are you sure you want to delete this bug report?`)) {
                       // Delete from storage
                       const { error: storageError } = await supabase.storage
                         .from("screenshots")
@@ -178,11 +178,11 @@ const BugReports = ({ currentUser }: BugReportsProps) => {
                       if (storageError || dbError) {
                         toast({
                           title: "Error",
-                          description: storageError?.message || dbError?.message || "Kon bug report niet verwijderen",
+                          description: storageError?.message || dbError?.message || "Could not delete bug report",
                           variant: "destructive",
                         });
                       } else {
-                        toast({ title: "Bug Report Verwijderd" });
+                        toast({ title: "Bug Report Deleted" });
                         fetchScreenshots();
                       }
                     }

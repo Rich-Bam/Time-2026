@@ -432,10 +432,10 @@ const Index = () => {
     return workType ? workType.label : desc;
   };
 
-  // Helper to get day name in Dutch
+  // Helper to get day name in English
   const getDayNameNL = (dateStr: string) => {
     const date = new Date(dateStr);
-    const days = ['Zondag', 'Maandag', 'Dinsdag', 'Woensdag', 'Donderdag', 'Vrijdag', 'Zaterdag'];
+    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     return days[date.getDay()];
   };
 
@@ -480,7 +480,7 @@ const Index = () => {
       .order("date", { ascending: true });
     if (error) {
       toast({
-        title: "Export Mislukt",
+        title: "Export Failed",
         description: error.message,
         variant: "destructive",
       });
@@ -522,8 +522,8 @@ const Index = () => {
   const handleExportRange = async () => {
     if (!dateRange.from || !dateRange.to) {
       toast({
-        title: "Ontbrekende Datums",
-        description: "Selecteer een datumbereik.",
+        title: "Missing Dates",
+        description: "Please select a date range.",
         variant: "destructive",
       });
       return;
@@ -545,7 +545,7 @@ const Index = () => {
     const { data, error } = await queryBuilder;
     if (error) {
       toast({
-        title: "Export Mislukt",
+        title: "Export Failed",
         description: error.message,
         variant: "destructive",
       });
@@ -567,8 +567,8 @@ const Index = () => {
     });
     setExporting(false);
     toast({
-      title: "Export Succesvol",
-      description: `Data geëxporteerd van ${dateRange.from} tot ${dateRange.to}${selectedUser ? ` voor ${selectedUser.name || selectedUser.email}` : ""}.`,
+      title: "Export Successful",
+      description: `Data exported from ${dateRange.from} to ${dateRange.to}${selectedUser ? ` for ${selectedUser.name || selectedUser.email}` : ""}.`,
     });
   };
 
@@ -576,8 +576,8 @@ const Index = () => {
   const handleExportUser = async () => {
     if (!selectedUserId || selectedUserId === "all") {
       toast({
-        title: "Geen Gebruiker Geselecteerd",
-        description: "Selecteer een gebruiker om te exporteren.",
+        title: "No User Selected",
+        description: "Please select a user to export.",
         variant: "destructive",
       });
       return;
@@ -590,7 +590,7 @@ const Index = () => {
       .order("date", { ascending: true });
     if (error) {
       toast({
-        title: "Export Mislukt",
+        title: "Export Failed",
         description: error.message,
         variant: "destructive",
       });
@@ -611,8 +611,8 @@ const Index = () => {
     });
     setExporting(false);
     toast({
-      title: "Export Succesvol",
-      description: `Alle data geëxporteerd voor ${userName}.`,
+      title: "Export Successful",
+      description: `All data exported for ${userName}.`,
     });
   };
 
@@ -620,8 +620,8 @@ const Index = () => {
   const handleExportUserPDF = async () => {
     if (!selectedUserId || selectedUserId === "all") {
       toast({
-        title: "Geen Gebruiker Geselecteerd",
-        description: "Selecteer een gebruiker om te exporteren.",
+        title: "No User Selected",
+        description: "Please select a user to export.",
         variant: "destructive",
       });
       return;
@@ -634,7 +634,7 @@ const Index = () => {
       .order("date", { ascending: true });
     if (error) {
       toast({
-        title: "Export Mislukt",
+        title: "Export Failed",
         description: error.message,
         variant: "destructive",
       });
@@ -668,8 +668,8 @@ const Index = () => {
 
     setExporting(false);
     toast({
-      title: "PDF Export Succesvol",
-      description: `Alle data geëxporteerd voor ${userName}.`,
+      title: "PDF Export Successful",
+      description: `All data exported for ${userName}.`,
     });
   };
 
@@ -677,8 +677,8 @@ const Index = () => {
   const handleExportWeekNumber = async () => {
     if (!selectedWeekNumber || !selectedYear) {
       toast({
-        title: "Ontbrekende Informatie",
-        description: "Selecteer een week nummer en jaar.",
+        title: "Missing Information",
+        description: "Please select a week number and year.",
         variant: "destructive",
       });
       return;
@@ -689,8 +689,8 @@ const Index = () => {
     
     if (isNaN(weekNum) || weekNum < 1 || weekNum > 53) {
       toast({
-        title: "Ongeldig Week Nummer",
-        description: "Week nummer moet tussen 1 en 53 zijn.",
+        title: "Invalid Week Number",
+        description: "Week number must be between 1 and 53.",
         variant: "destructive",
       });
       return;
@@ -716,7 +716,7 @@ const Index = () => {
     const { data, error } = await queryBuilder;
     if (error) {
       toast({
-        title: "Export Mislukt",
+        title: "Export Failed",
         description: error.message,
         variant: "destructive",
       });
@@ -738,8 +738,8 @@ const Index = () => {
     });
     setExporting(false);
     toast({
-      title: "Export Succesvol",
-      description: `Data geëxporteerd voor week ${weekNum} van ${year}${selectedUser ? ` voor ${selectedUser.name || selectedUser.email}` : ""}.`,
+      title: "Export Successful",
+      description: `Data exported for week ${weekNum} of ${year}${selectedUser ? ` for ${selectedUser.name || selectedUser.email}` : ""}.`,
     });
   };
 
@@ -747,8 +747,8 @@ const Index = () => {
   const handleExportWeekNumberPDF = async () => {
     if (!selectedWeekNumber || !selectedYear) {
       toast({
-        title: "Ontbrekende Informatie",
-        description: "Selecteer een week nummer en jaar.",
+        title: "Missing Information",
+        description: "Please select a week number and year.",
         variant: "destructive",
       });
       return;
@@ -759,8 +759,8 @@ const Index = () => {
     
     if (isNaN(weekNum) || weekNum < 1 || weekNum > 53) {
       toast({
-        title: "Ongeldig Week Nummer",
-        description: "Week nummer moet tussen 1 en 53 zijn.",
+        title: "Invalid Week Number",
+        description: "Week number must be between 1 and 53.",
         variant: "destructive",
       });
       return;
@@ -787,7 +787,7 @@ const Index = () => {
     const { data, error } = await queryBuilder;
     if (error) {
       toast({
-        title: "Export Mislukt",
+        title: "Export Failed",
         description: error.message,
         variant: "destructive",
       });
@@ -825,8 +825,8 @@ const Index = () => {
 
     setExporting(false);
     toast({
-      title: "PDF Export Succesvol",
-      description: `Data geëxporteerd voor week ${weekNum} van ${year}${selectedUser ? ` voor ${selectedUser.name || selectedUser.email}` : ""}.`,
+      title: "PDF Export Successful",
+      description: `Data exported for week ${weekNum} of ${year}${selectedUser ? ` for ${selectedUser.name || selectedUser.email}` : ""}.`,
     });
   };
 
@@ -923,7 +923,7 @@ const Index = () => {
     if (!data || data.length === 0) {
       toast({
         title: "No Data",
-        description: "Geen uren gevonden voor de geselecteerde periode.",
+        description: "No hours found for the selected period.",
         variant: "destructive",
       });
       setExporting(false);
@@ -969,8 +969,8 @@ const Index = () => {
 
     setExporting(false);
     toast({
-      title: "Export Succesvol",
-      description: `${data.length} entries geëxporteerd naar ${filename}`,
+      title: "Export Successful",
+      description: `${data.length} entries exported to ${filename}`,
     });
   };
 
@@ -1043,7 +1043,7 @@ const Index = () => {
     if (!data || data.length === 0) {
       toast({
         title: "No Data",
-        description: "Geen uren gevonden voor de geselecteerde periode.",
+        description: "No hours found for the selected period.",
         variant: "destructive",
       });
       setExporting(false);
@@ -1077,8 +1077,8 @@ const Index = () => {
 
     setExporting(false);
     toast({
-      title: "PDF Export Succesvol",
-      description: `${data.length} entries geëxporteerd naar ${filename}`,
+      title: "PDF Export Successful",
+      description: `${data.length} entries exported to ${filename}`,
     });
   };
 
