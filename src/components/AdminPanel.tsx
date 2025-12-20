@@ -1282,6 +1282,48 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
           })}
         </Accordion>
       </div>
+
+      {/* Timebuzzer Sync Section */}
+      <div className="mb-6 sm:mb-8 p-4 bg-green-50 border border-green-200 rounded-lg">
+        <h3 className="text-base sm:text-lg font-semibold mb-3 text-green-800">Timebuzzer Integration</h3>
+        <p className="text-xs sm:text-sm text-green-700 mb-4">
+          Sync time entries from Timebuzzer to your timesheet. Make sure users and projects are mapped in the database first.
+        </p>
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <Label className="text-sm font-semibold mb-2 block">Start Date</Label>
+              <Input
+                type="date"
+                value={timebuzzerSyncStartDate}
+                onChange={(e) => setTimebuzzerSyncStartDate(e.target.value)}
+                className="h-10 sm:h-9"
+                disabled={timebuzzerSyncing}
+              />
+            </div>
+            <div>
+              <Label className="text-sm font-semibold mb-2 block">End Date</Label>
+              <Input
+                type="date"
+                value={timebuzzerSyncEndDate}
+                onChange={(e) => setTimebuzzerSyncEndDate(e.target.value)}
+                className="h-10 sm:h-9"
+                disabled={timebuzzerSyncing}
+              />
+            </div>
+          </div>
+          <Button
+            onClick={handleTimebuzzerSync}
+            disabled={timebuzzerSyncing || !timebuzzerSyncStartDate || !timebuzzerSyncEndDate}
+            className="w-full sm:w-auto bg-green-600 hover:bg-green-700"
+          >
+            {timebuzzerSyncing ? "Syncing..." : "Sync from Timebuzzer"}
+          </Button>
+          <p className="text-xs text-green-600">
+            Note: Users and projects must be mapped with Timebuzzer IDs in the database before syncing.
+          </p>
+        </div>
+      </div>
     </div>
   );
 };
