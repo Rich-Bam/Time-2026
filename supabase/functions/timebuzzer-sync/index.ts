@@ -32,7 +32,16 @@ serve(async (req) => {
 
     if (action === 'fetch-activities') {
       // Fetch activities from Timebuzzer
-      const response = await fetch(`${TIMEBUZZER_API_URL}/activities`, {
+      const queryParams = new URLSearchParams()
+      if (startDate) queryParams.append('start_date', startDate)
+      if (endDate) queryParams.append('end_date', endDate)
+      if (userId) queryParams.append('user_id', userId)
+
+      const activitiesUrl = `${TIMEBUZZER_API_URL}/activities${queryParams.toString() ? '?' + queryParams.toString() : ''}`
+      
+      console.log('Fetching activities from:', activitiesUrl)
+      
+      const response = await fetch(activitiesUrl, {
         method: 'GET',
         headers: {
           'Authorization': `APIKey ${TIMEBUZZER_API_KEY}`,
@@ -42,15 +51,55 @@ serve(async (req) => {
 
       if (!response.ok) {
         const errorText = await response.text()
+        console.error('Timebuzzer API error:', response.status, errorText)
         throw new Error(`Timebuzzer API error: ${response.status} - ${errorText}`)
       }
 
       const activities = await response.json()
+      console.log('Timebuzzer API response:', JSON.stringify(activities, null, 2))
 
       return new Response(
         JSON.stringify({ success: true, data: activities }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 },
       )
+    }
+
+    if (action === 'test-api') {
+      // Test endpoint to see what the API returns
+      try {
+        const response = await fetch(`${TIMEBUZZER_API_URL}/activities?limit=10`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `APIKey ${TIMEBUZZER_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+        })
+
+        const responseText = await response.text()
+        let activities
+        try {
+          activities = JSON.parse(responseText)
+        } catch (e) {
+          activities = responseText
+        }
+
+        return new Response(
+          JSON.stringify({ 
+            success: true, 
+            status: response.status,
+            statusText: response.statusText,
+            headers: Object.fromEntries(response.headers.entries()),
+            data: activities,
+            rawResponse: responseText.substring(0, 1000), // First 1000 chars
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 },
+        )
+      } catch (error: any) {
+        return new Response(
+          JSON.stringify({ success: false, error: error.message, stack: error.stack }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 },
+        )
+      }
     }
 
     if (action === 'sync-to-timesheet') {

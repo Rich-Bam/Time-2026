@@ -1312,13 +1312,44 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
               />
             </div>
           </div>
-          <Button
-            onClick={handleTimebuzzerSync}
-            disabled={timebuzzerSyncing || !timebuzzerSyncStartDate || !timebuzzerSyncEndDate}
-            className="w-full sm:w-auto bg-green-600 hover:bg-green-700"
-          >
-            {timebuzzerSyncing ? "Syncing..." : "Sync from Timebuzzer"}
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              onClick={handleTimebuzzerSync}
+              disabled={timebuzzerSyncing || !timebuzzerSyncStartDate || !timebuzzerSyncEndDate}
+              className="w-full sm:w-auto bg-green-600 hover:bg-green-700"
+            >
+              {timebuzzerSyncing ? "Syncing..." : "Sync from Timebuzzer"}
+            </Button>
+            <Button
+              onClick={async () => {
+                setTimebuzzerSyncing(true);
+                try {
+                  const { data, error } = await supabase.functions.invoke('timebuzzer-sync', {
+                    body: { action: 'test-api' },
+                  });
+                  if (error) throw error;
+                  console.log('Timebuzzer API Test Response:', data);
+                  toast({
+                    title: "API Test",
+                    description: `Check console for API response. Status: ${data.status}`,
+                  });
+                } catch (error: any) {
+                  toast({
+                    title: "Test Error",
+                    description: error.message,
+                    variant: "destructive",
+                  });
+                } finally {
+                  setTimebuzzerSyncing(false);
+                }
+              }}
+              disabled={timebuzzerSyncing}
+              variant="outline"
+              className="w-full sm:w-auto"
+            >
+              Test API
+            </Button>
+          </div>
           <p className="text-xs text-green-600">
             Note: Users and projects must be mapped with Timebuzzer IDs in the database before syncing.
           </p>
