@@ -317,7 +317,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
     
     // Check if this entry is being edited (has an id)
     if (entry.id) {
-      // Update existing entry in database
+      // Update existing entry in database (silent background save)
       const { error } = await supabase
         .from("timesheet")
         .update({
@@ -330,26 +330,12 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
         .eq("id", entry.id);
       
       if (!error) {
-        // Refresh submitted entries to show updated data
-        await fetchSubmittedEntries(dateStr);
-        // Remove from editable entries after refresh
-        setDays(prevDays => prevDays.map((d, i) => 
-          i === dayIdx 
-            ? { ...d, entries: d.entries.filter((_, j) => j !== entryIdx) }
-            : d
-        ));
-        setEditingEntry(null);
-        toast({
-          title: "Entry Updated",
-          description: "Your entry has been automatically saved.",
-        });
-      } else {
-        toast({
-          title: "Error",
-          description: error.message,
-          variant: "destructive",
-        });
+        // Silently refresh submitted entries in background
+        fetchSubmittedEntries(dateStr);
+        // Keep entry in editable entries - don't remove it
+        // Entry stays visible and editable
       }
+      // No toast notification - silent save
     } else {
       // Create new entry (only if it doesn't have an id)
       const { error } = await supabase.from("timesheet").insert([{
@@ -363,19 +349,12 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
       }]);
       
       if (!error) {
-        // Refresh submitted entries first
-        await fetchSubmittedEntries(dateStr);
-        // Remove from editable entries after refresh
-        setDays(prevDays => prevDays.map((d, i) => 
-          i === dayIdx 
-            ? { ...d, entries: d.entries.filter((_, j) => j !== entryIdx) }
-            : d
-        ));
-        toast({
-          title: "Entry Saved",
-          description: "Your entry has been automatically saved.",
-        });
+        // Silently refresh submitted entries in background
+        fetchSubmittedEntries(dateStr);
+        // Keep entry in editable entries - don't remove it
+        // Entry stays visible and editable
       }
+      // No toast notification - silent save
     }
   };
   
