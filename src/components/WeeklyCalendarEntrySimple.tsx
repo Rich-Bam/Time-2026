@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -97,23 +97,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
   const [customProjectInputs, setCustomProjectInputs] = useState<Record<string, string>>({});
   const [editingEntry, setEditingEntry] = useState<{ id: number; dateStr: string } | null>(null);
   
-  // Use ref to track lock status immediately (sync) as well as state (for UI re-renders)
-  const confirmedWeeksRef = useRef<Record<string, boolean>>({});
-  
   const weekDates = getWeekDates(weekStart);
-  
-  // Sync ref with state whenever state changes
-  useEffect(() => {
-    confirmedWeeksRef.current = confirmedWeeks;
-  }, [confirmedWeeks]);
-  
-  // Helper function to check if week is locked (uses ref for immediate access)
-  const isWeekLocked = (): boolean => {
-    const weekKey = weekDates[0].toISOString().split('T')[0];
-    const isLocked = !!confirmedWeeksRef.current[weekKey] && !currentUser?.isAdmin;
-    console.log('isWeekLocked check:', { weekKey, confirmedWeeksValue: confirmedWeeksRef.current[weekKey], confirmedWeeksRef: confirmedWeeksRef.current, stateValue: confirmedWeeks[weekKey], isAdmin: currentUser?.isAdmin, isLocked });
-    return isLocked;
-  };
   const weekNumber = getISOWeekNumber(weekDates[0]);
   const totalDaysOff = 25;
   const daysOffLeft = (totalDaysOff - dbDaysOff).toFixed(1);
@@ -262,12 +246,8 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
   };
 
   const handleRemoveEntry = (dayIdx: number, entryIdx: number) => {
-    if (isWeekLocked()) {
-      toast({
-        title: "Not Allowed",
-        description: "This week is confirmed and cannot be changed anymore.",
-        variant: "destructive",
-      });
+    const weekKeyCheck = weekDates[0].toISOString().split('T')[0];
+    if (confirmedWeeks[weekKeyCheck] && !currentUser?.isAdmin) {
       return;
     }
     
@@ -280,7 +260,8 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
 
   const handleEntryChange = (dayIdx: number, entryIdx: number, field: string, value: any) => {
     // Prevent changes if week is locked
-    if (isWeekLocked()) {
+    const weekKeyCheck = weekDates[0].toISOString().split('T')[0];
+    if (confirmedWeeks[weekKeyCheck] && !currentUser?.isAdmin) {
       return; // Silently ignore changes if week is locked
     }
     
@@ -312,12 +293,8 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
   const handleSaveEntry = async (dayIdx: number, entryIdx: number) => {
     if (!currentUser) return;
     
-    if (isWeekLocked()) {
-      toast({
-        title: "Not Allowed",
-        description: "This week is confirmed and cannot be changed anymore.",
-        variant: "destructive",
-      });
+    const weekKeyCheck = weekDates[0].toISOString().split('T')[0];
+    if (confirmedWeeks[weekKeyCheck] && !currentUser?.isAdmin) {
       return;
     }
     
@@ -455,12 +432,8 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
   
   // Edit an existing entry
   const handleEditEntry = (entry: Entry, dateStr: string) => {
-    if (isWeekLocked()) {
-      toast({
-        title: "Not Allowed",
-        description: "This week is confirmed and cannot be changed anymore.",
-        variant: "destructive",
-      });
+    const weekKeyCheck = weekDates[0].toISOString().split('T')[0];
+    if (confirmedWeeks[weekKeyCheck] && !currentUser?.isAdmin) {
       return;
     }
     
@@ -635,12 +608,8 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
   };
 
   const handleDeleteEntry = async (entryId: number, dateStr: string) => {
-    if (isWeekLocked()) {
-      toast({
-        title: "Not Allowed",
-        description: "This week is confirmed and cannot be changed anymore.",
-        variant: "destructive",
-      });
+    const weekKeyCheck = weekDates[0].toISOString().split('T')[0];
+    if (confirmedWeeks[weekKeyCheck] && !currentUser?.isAdmin) {
       return;
     }
     
@@ -696,22 +665,19 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
         variant: "destructive",
       });
     } else {
+      // Immediately update state to lock the week - this will trigger a re-render and hide all editable elements
+      const weekKeyDate = weekDates[0].toISOString().split('T')[0];
+      setConfirmedWeeks(prev => {
+        const updated = { ...prev, [weekKeyDate]: true };
+        return updated;
+      });
+      
       toast({
         title: "Week Confirmed",
         description: "This week has been confirmed and locked. You can no longer make changes.",
       });
-      // Immediately set locked state (both ref and state), then refresh from database to be sure
-      const weekKeyDate = weekDates[0].toISOString().split('T')[0];
-      console.log('Confirming week, setting locked:', weekKeyDate);
-      // Update ref immediately (synchronous)
-      confirmedWeeksRef.current = { ...confirmedWeeksRef.current, [weekKeyDate]: true };
-      // Update state for UI re-render
-      setConfirmedWeeks(prev => {
-        const updated = { ...prev, [weekKeyDate]: true };
-        console.log('Updated confirmedWeeks state:', updated);
-        return updated;
-      });
-      // Also refresh confirmed status by fetching from database
+      
+      // Also refresh confirmed status by fetching from database to ensure consistency
       await fetchConfirmedStatus();
     }
   };
