@@ -794,23 +794,24 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                       <h3 className="font-bold text-base sm:text-lg text-gray-800">{isMobile ? dayShort : dayName}</h3>
                       {!isMobile && <span className="text-sm text-gray-600">({dayShort})</span>}
                     </div>
-                    <Button 
-                      variant="outline" 
-                      size={isMobile ? "sm" : "sm"}
-                      className={`${isMobile ? 'h-8 text-xs w-full' : 'h-7 text-xs'}`}
-                      onClick={() => handleAddEntry(dayIdx)}
-                      disabled={isLocked}
-                    >
-                      <Plus className="h-3 w-3 mr-1" />
-                      Add Entry
-                    </Button>
+                    {!isLocked && (
+                      <Button 
+                        variant="outline" 
+                        size={isMobile ? "sm" : "sm"}
+                        className={`${isMobile ? 'h-8 text-xs w-full' : 'h-7 text-xs'}`}
+                        onClick={() => handleAddEntry(dayIdx)}
+                      >
+                        <Plus className="h-3 w-3 mr-1" />
+                        Add Entry
+                      </Button>
+                    )}
                   </div>
                   
                   {/* Mobile: Card Layout, Desktop: Table Layout */}
                   {isMobile ? (
                     <div className="p-2 sm:p-4 space-y-3">
-                      {/* Editable entries */}
-                      {day.entries.map((entry, entryIdx) => {
+                      {/* Editable entries - only show if week is not locked */}
+                      {!isLocked && day.entries.map((entry, entryIdx) => {
                         const isNewEntry = !entry.id;
                         const isEditing = entry.id && editingEntry?.id === entry.id;
                         return (
@@ -961,30 +962,6 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                         <div key={`submitted-${dayIdx}-${subIdx}`} className="bg-gray-100 rounded-lg border p-3 space-y-2">
                           <div className="flex items-center justify-between">
                             <span className="text-sm font-semibold">{getWorkTypeLabel(submittedEntry.workType || "")}</span>
-                            {!isDayLocked && (
-                              <div className="flex gap-1">
-                                <Button 
-                                  size="icon" 
-                                  variant="ghost" 
-                                  className="h-8 w-8"
-                                  onClick={() => handleEditEntry(submittedEntry, dateStr)}
-                                  title="Edit entry"
-                                >
-                                  <svg className="h-4 w-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                  </svg>
-                                </Button>
-                                <Button 
-                                  size="icon" 
-                                  variant="ghost" 
-                                  className="h-8 w-8"
-                                  onClick={() => handleDeleteEntry(submittedEntry.id!, dateStr)}
-                                  title="Delete entry"
-                                >
-                                  <Trash2 className="h-4 w-4 text-red-500" />
-                                </Button>
-                              </div>
-                            )}
                           </div>
                           <div className="text-xs text-gray-600">
                             <div><strong>Project:</strong> {submittedEntry.project || "-"}</div>
@@ -1005,12 +982,12 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                             <th className="border p-2 text-left min-w-[80px]">From</th>
                             <th className="border p-2 text-left min-w-[80px]">To</th>
                             <th className="border p-2 text-left min-w-[80px]">Hours</th>
-                            <th className="border p-2 text-center min-w-[50px]">Action</th>
+                            {!isLocked && <th className="border p-2 text-center min-w-[50px]">Action</th>}
                           </tr>
                         </thead>
                         <tbody>
-                          {/* Editable entries */}
-                          {day.entries.map((entry, entryIdx) => {
+                          {/* Editable entries - only show if week is not locked */}
+                          {!isLocked && day.entries.map((entry, entryIdx) => {
                             const isNewEntry = !entry.id;
                             const isEditing = entry.id && editingEntry?.id === entry.id;
                             return (
@@ -1169,8 +1146,8 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                               <td className="border p-2">
                                 <span className="text-sm font-medium">{submittedEntry.hours || "0"}</span>
                               </td>
-                              <td className="border p-2 text-center">
-                                {!isDayLocked && (
+                              {!isLocked && (
+                                <td className="border p-2 text-center">
                                   <div className="flex justify-center gap-1">
                                     <Button 
                                       size="icon" 
@@ -1193,8 +1170,8 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                                       <Trash2 className="h-4 w-4 text-red-500" />
                                     </Button>
                                   </div>
-                                )}
-                              </td>
+                                </td>
+                              )}
                             </tr>
                           ))}
                         </tbody>
