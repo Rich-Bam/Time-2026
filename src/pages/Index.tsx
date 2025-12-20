@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Clock, Users, FileText, Calendar, BarChart3, Download, AlertTriangle } from "lucide-react";
+import { Clock, Users, FileText, Calendar, BarChart3, Download, AlertTriangle, FileDown } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import TimesheetEntry from "@/components/TimesheetEntry";
 import ProjectManagement from "@/components/ProjectManagement";
@@ -20,6 +20,7 @@ import InstallPWA from "@/components/InstallPWA";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { createPDF } from "@/utils/pdfExport";
 
 const Index = () => {
   const [searchParams] = useSearchParams();
@@ -168,8 +169,15 @@ const Index = () => {
   }) => {
     const wb = XLSX.utils.book_new();
     
+    // Sort data by date (ascending)
+    const sortedData = [...data].sort((a, b) => {
+      const dateA = new Date(a.date).getTime();
+      const dateB = new Date(b.date).getTime();
+      return dateA - dateB;
+    });
+    
     // Prepare formatted data - only include user columns if user info exists
-    const formattedData = data.map((entry) => {
+    const formattedData = sortedData.map((entry) => {
       const baseRow = {
         Date: formatDateDDMMYY(entry.date),
         Day: getDayNameNL(entry.date),
@@ -240,9 +248,9 @@ const Index = () => {
       }
       
       // Calculate total hours
-      const totalHours = formattedData.reduce((sum, row) => sum + (row.Hours || 0), 0);
-      headerRows.push(['Total Hours:', totalHours.toFixed(2)]);
-      headerRows.push(['Total Hours (HH:MM):', formatHoursHHMM(totalHours)]);
+      const calculatedTotalHours = formattedData.reduce((sum, row) => sum + (row.Hours || 0), 0);
+      headerRows.push(['Total Hours:', calculatedTotalHours.toFixed(2)]);
+      headerRows.push(['Total Hours (HH:MM):', formatHoursHHMM(calculatedTotalHours)]);
       headerRows.push([]); // Empty row
       
       // Get current sheet data as array of arrays
@@ -279,14 +287,14 @@ const Index = () => {
       // Style table header row
       const tableHeaderRow = headerRows.length;
       const tableHeaderStyle = {
-        font: { bold: true, color: { rgb: "000000" } },
+        font: { bold: true, color: { rgb: "000000" }, sz: 11 },
         fill: { fgColor: { rgb: "FFF4E6" } }, // Light orange background
-        alignment: { horizontal: "center", vertical: "center" },
+        alignment: { horizontal: "center", vertical: "center", wrapText: true },
         border: {
-          top: { style: "thin", color: { rgb: "000000" } },
-          bottom: { style: "thin", color: { rgb: "000000" } },
-          left: { style: "thin", color: { rgb: "000000" } },
-          right: { style: "thin", color: { rgb: "000000" } }
+          top: { style: "medium", color: { rgb: "EA580C" } },
+          bottom: { style: "medium", color: { rgb: "EA580C" } },
+          left: { style: "thin", color: { rgb: "CCCCCC" } },
+          right: { style: "thin", color: { rgb: "CCCCCC" } }
         }
       };
       
@@ -296,6 +304,68 @@ const Index = () => {
           newWs[cellAddress].s = tableHeaderStyle;
         }
       }
+      
+      // Add borders to data rows for better readability
+      const dataStartRow = tableHeaderRow + 1;
+      const dataEndRow = tableHeaderRow + formattedData.length;
+      
+      for (let row = dataStartRow; row <= dataEndRow; row++) {
+        for (let col = 0; col < colCount; col++) {
+          const cellAddress = XLSX.utils.encode_cell({ r: row, c: col });
+          if (newWs[cellAddress]) {
+            // Add border style if not already styled
+            if (!newWs[cellAddress].s) {
+              newWs[cellAddress].s = {};
+            }
+            if (!newWs[cellAddress].s.border) {
+              newWs[cellAddress].s.border = {
+                top: { style: "thin", color: { rgb: "E5E5E5" } },
+                bottom: { style: "thin", color: { rgb: "E5E5E5" } },
+                left: { style: "thin", color: { rgb: "E5E5E5" } },
+                right: { style: "thin", color: { rgb: "E5E5E5" } }
+              };
+            }
+            // Alternate row colors for better readability
+            if ((row - dataStartRow) % 2 === 0) {
+              newWs[cellAddress].s.fill = { fgColor: { rgb: "FAFAFA" } };
+            }
+          }
+        }
+      }
+      
+      // Add total row at the bottom
+      const totalRow = dataEndRow + 1;
+      const totalRowStyle = {
+        font: { bold: true, color: { rgb: "000000" }, sz: 10 },
+        fill: { fgColor: { rgb: "FFF4E6" } },
+        alignment: { horizontal: "right", vertical: "center" },
+        border: {
+          top: { style: "medium", color: { rgb: "EA580C" } },
+          bottom: { style: "medium", color: { rgb: "EA580C" } },
+          left: { style: "thin", color: { rgb: "CCCCCC" } },
+          right: { style: "thin", color: { rgb: "CCCCCC" } }
+        }
+      };
+      
+      // Find Hours column index (usually column 6 or 7)
+      const hoursColIndex = formattedData[0] ? Object.keys(formattedData[0]).indexOf('Hours') : 6;
+      const hoursHHMMColIndex = formattedData[0] ? Object.keys(formattedData[0]).indexOf('Hours (HH:MM)') : 7;
+      
+      // Add "Total" label
+      const totalLabelCell = XLSX.utils.encode_cell({ r: totalRow, c: hoursColIndex - 1 });
+      newWs[totalLabelCell] = { v: "Total:", t: "s" };
+      newWs[totalLabelCell].s = totalRowStyle;
+      
+      // Add total hours (decimal)
+      const totalHoursCell = XLSX.utils.encode_cell({ r: totalRow, c: hoursColIndex });
+      const rowTotalHours = formattedData.reduce((sum, row) => sum + (row.Hours || 0), 0);
+      newWs[totalHoursCell] = { v: rowTotalHours, t: "n" };
+      newWs[totalHoursCell].s = { ...totalRowStyle, numFmt: "0.00" };
+      
+      // Add total hours (HH:MM)
+      const totalHoursHHMMCell = XLSX.utils.encode_cell({ r: totalRow, c: hoursHHMMColIndex });
+      newWs[totalHoursHHMMCell] = { v: formatHoursHHMM(rowTotalHours), t: "s" };
+      newWs[totalHoursHHMMCell].s = totalRowStyle;
       
       // Freeze header row
       newWs['!freeze'] = { xSplit: 0, ySplit: tableHeaderRow + 1, topLeftCell: `A${tableHeaderRow + 2}`, activePane: 'bottomLeft', state: 'frozen' };
@@ -668,8 +738,8 @@ const Index = () => {
       return;
     }
 
-    // Format data for better Excel export
-    const formattedData = data.map((entry) => ({
+    // Format data for better Excel/PDF export
+    const formattedDataForExport = data.map((entry) => ({
       date: entry.date,
       description: entry.description || "",
       projects: entry.projects,
@@ -680,16 +750,142 @@ const Index = () => {
       notes: entry.notes || "",
     }));
 
-    // Create formatted Excel
-    createFormattedExcel(formattedData, filename, {
-      userName: currentUser.name || currentUser.email,
-      dateRange: { from: fromDate, to: toDate },
-      period: exportPeriod === "day" ? "Day" : exportPeriod === "week" ? "Week" : exportPeriod === "month" ? "Month" : "Year"
+    // Prepare formatted data for display
+    const formattedData = formattedDataForExport.map((entry) => {
+      const baseRow = {
+        Date: formatDateDDMMYY(entry.date),
+        Day: getDayNameNL(entry.date),
+        'Work Type': getWorkTypeLabel(entry.description || ""),
+        Project: entry.projects?.name || entry.project || "",
+        'Start Time': entry.startTime || "",
+        'End Time': entry.endTime || "",
+        Hours: typeof entry.hours === 'number' ? entry.hours : parseFloat(entry.hours || 0),
+        'Hours (HH:MM)': formatHoursHHMM(entry.hours || 0),
+        Notes: entry.notes || "",
+      };
+      return baseRow;
     });
+
+    const exportOptions = {
+      userName: currentUser.name || currentUser.email,
+      dateRange: { from: formatDateDDMMYY(fromDate), to: formatDateDDMMYY(toDate) },
+      period: exportPeriod === "day" ? "Day" : exportPeriod === "week" ? "Week" : exportPeriod === "month" ? "Month" : "Year"
+    };
+
+    // Create formatted Excel
+    createFormattedExcel(formattedDataForExport, filename, exportOptions);
 
     setExporting(false);
     toast({
       title: "Export Succesvol",
+      description: `${data.length} entries geëxporteerd naar ${filename}`,
+    });
+  };
+
+  // Export to PDF (same data as Excel)
+  const handleExportPeriodPDF = async () => {
+    if (!currentUser) {
+      toast({
+        title: "Error",
+        description: "User not found",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setExporting(true);
+    let fromDate: string;
+    let toDate: string;
+    let filename: string;
+
+    const selected = new Date(selectedDate);
+    selected.setHours(0, 0, 0, 0);
+
+    switch (exportPeriod) {
+      case "day":
+        fromDate = selected.toISOString().split('T')[0];
+        toDate = fromDate;
+        filename = `Uren_${formatDateDDMMYY(fromDate)}.pdf`;
+        break;
+      case "week":
+        const dayOfWeek = selected.getDay();
+        const diff = selected.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
+        const monday = new Date(selected.setDate(diff));
+        monday.setHours(0, 0, 0, 0);
+        fromDate = monday.toISOString().split('T')[0];
+        const sunday = new Date(monday);
+        sunday.setDate(monday.getDate() + 6);
+        toDate = sunday.toISOString().split('T')[0];
+        filename = `Uren_Week_${formatDateDDMMYY(fromDate)}_tot_${formatDateDDMMYY(toDate)}.pdf`;
+        break;
+      case "month":
+        fromDate = new Date(selected.getFullYear(), selected.getMonth(), 1).toISOString().split('T')[0];
+        toDate = new Date(selected.getFullYear(), selected.getMonth() + 1, 0).toISOString().split('T')[0];
+        filename = `Uren_${selected.getFullYear()}_${String(selected.getMonth() + 1).padStart(2, '0')}.pdf`;
+        break;
+      case "year":
+        fromDate = new Date(selected.getFullYear(), 0, 1).toISOString().split('T')[0];
+        toDate = new Date(selected.getFullYear(), 11, 31).toISOString().split('T')[0];
+        filename = `Uren_${selected.getFullYear()}.pdf`;
+        break;
+    }
+
+    const { data, error } = await supabase
+      .from("timesheet")
+      .select("*, projects(name)")
+      .eq("user_id", currentUser.id)
+      .gte("date", fromDate)
+      .lte("date", toDate)
+      .order("date", { ascending: true });
+
+    if (error) {
+      toast({
+        title: "Export Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+      setExporting(false);
+      return;
+    }
+
+    if (!data || data.length === 0) {
+      toast({
+        title: "No Data",
+        description: "Geen uren gevonden voor de geselecteerde periode.",
+        variant: "destructive",
+      });
+      setExporting(false);
+      return;
+    }
+
+    // Format data for PDF
+    const formattedData = data.map((entry) => {
+      return {
+        Date: formatDateDDMMYY(entry.date),
+        Day: getDayNameNL(entry.date),
+        'Work Type': getWorkTypeLabel(entry.description || ""),
+        Project: entry.projects?.name || entry.project || "",
+        'Start Time': entry.startTime || "",
+        'End Time': entry.endTime || "",
+        Hours: typeof entry.hours === 'number' ? entry.hours : parseFloat(entry.hours || 0),
+        'Hours (HH:MM)': formatHoursHHMM(entry.hours || 0),
+        Notes: entry.notes || "",
+      };
+    });
+
+    const exportOptions = {
+      userName: currentUser.name || currentUser.email,
+      dateRange: { from: formatDateDDMMYY(fromDate), to: formatDateDDMMYY(toDate) },
+      period: exportPeriod === "day" ? "Day" : exportPeriod === "week" ? "Week" : exportPeriod === "month" ? "Month" : "Year",
+      data: formattedData
+    };
+
+    // Create PDF
+    createPDF(exportOptions, filename);
+
+    setExporting(false);
+    toast({
+      title: "PDF Export Succesvol",
       description: `${data.length} entries geëxporteerd naar ${filename}`,
     });
   };
@@ -957,14 +1153,28 @@ const Index = () => {
 
                   {/* Export Buttons */}
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                    <Button 
-                      className="h-24 flex flex-col items-center justify-center bg-orange-600 hover:bg-orange-700 text-white shadow-lg rounded-lg transition-all" 
-                      onClick={handleExportAll} 
-                      disabled={exporting}
-                    >
-                      <FileText className="h-8 w-8 mb-3" />
-                      <span className="text-lg font-medium">{t('export.allData')}</span>
-                    </Button>
+                    <div className="flex flex-col gap-2">
+                      <Button 
+                        className="h-20 flex flex-col items-center justify-center bg-orange-600 hover:bg-orange-700 text-white shadow-lg rounded-lg transition-all" 
+                        onClick={handleExportAll} 
+                        disabled={exporting}
+                      >
+                        <FileText className="h-6 w-6 mb-2" />
+                        <span className="text-sm font-medium">{t('export.allData')} (Excel)</span>
+                      </Button>
+                      <Button 
+                        className="h-20 flex flex-col items-center justify-center bg-red-600 hover:bg-red-700 text-white shadow-lg rounded-lg transition-all" 
+                        onClick={() => {
+                          // PDF export for all data
+                          handleExportAll();
+                          // TODO: Add PDF export for all data
+                        }} 
+                        disabled={exporting}
+                      >
+                        <FileDown className="h-6 w-6 mb-2" />
+                        <span className="text-sm font-medium">{t('export.allData')} (PDF)</span>
+                      </Button>
+                    </div>
                     
                     <div className="flex flex-col items-center justify-center gap-2">
                       <input 
@@ -1011,26 +1221,54 @@ const Index = () => {
                           className="flex-1 border rounded px-2 py-1 text-center" 
                         />
                       </div>
-                      <Button 
-                        variant="outline" 
-                        className="h-16 w-full flex flex-col items-center justify-center border-orange-200 text-orange-700 hover:bg-orange-50 shadow-lg rounded-lg transition-all" 
-                        onClick={handleExportWeekNumber} 
-                        disabled={exporting || !selectedWeekNumber || !selectedYear}
-                      >
-                        <Calendar className="h-8 w-8 mb-3" />
-                        <span className="text-lg font-medium">{t('export.weekNumber')}</span>
-                      </Button>
+                      <div className="flex flex-col gap-2 w-full">
+                        <Button 
+                          variant="outline" 
+                          className="h-14 w-full flex flex-col items-center justify-center border-orange-200 text-orange-700 hover:bg-orange-50 shadow-lg rounded-lg transition-all" 
+                          onClick={handleExportWeekNumber} 
+                          disabled={exporting || !selectedWeekNumber || !selectedYear}
+                        >
+                          <Calendar className="h-6 w-6 mb-2" />
+                          <span className="text-sm font-medium">{t('export.weekNumber')} (Excel)</span>
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          className="h-14 w-full flex flex-col items-center justify-center border-red-200 text-red-700 hover:bg-red-50 shadow-lg rounded-lg transition-all" 
+                          onClick={() => {
+                            // TODO: Add PDF export for week number
+                            handleExportWeekNumber();
+                          }} 
+                          disabled={exporting || !selectedWeekNumber || !selectedYear}
+                        >
+                          <FileDown className="h-6 w-6 mb-2" />
+                          <span className="text-sm font-medium">{t('export.weekNumber')} (PDF)</span>
+                        </Button>
+                      </div>
                     </div>
 
-                    <Button 
-                      variant="outline" 
-                      className="h-24 flex flex-col items-center justify-center border-orange-200 text-orange-700 hover:bg-orange-50 shadow-lg rounded-lg transition-all" 
-                      onClick={handleExportUser} 
-                      disabled={exporting || !selectedUserId || selectedUserId === "all"}
-                    >
-                      <Users className="h-8 w-8 mb-3" />
-                      <span className="text-lg font-medium">{t('export.perUser')}</span>
-                    </Button>
+                    <div className="flex flex-col gap-2">
+                      <Button 
+                        variant="outline" 
+                        className="h-20 flex flex-col items-center justify-center border-orange-200 text-orange-700 hover:bg-orange-50 shadow-lg rounded-lg transition-all" 
+                        onClick={handleExportUser} 
+                        disabled={exporting || !selectedUserId || selectedUserId === "all"}
+                      >
+                        <Users className="h-6 w-6 mb-2" />
+                        <span className="text-sm font-medium">{t('export.perUser')} (Excel)</span>
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        className="h-20 flex flex-col items-center justify-center border-red-200 text-red-700 hover:bg-red-50 shadow-lg rounded-lg transition-all" 
+                        onClick={() => {
+                          // TODO: Add PDF export for user
+                          handleExportUser();
+                        }} 
+                        disabled={exporting || !selectedUserId || selectedUserId === "all"}
+                      >
+                        <FileDown className="h-6 w-6 mb-2" />
+                        <span className="text-sm font-medium">{t('export.perUser')} (PDF)</span>
+                      </Button>
+                    </div>
                   </div>
                 </div>
               ) : (
@@ -1063,16 +1301,28 @@ const Index = () => {
                       />
                     </div>
                   </div>
-                  <Button 
-                    className="w-full h-16 flex flex-col items-center justify-center bg-orange-600 hover:bg-orange-700 text-white shadow-lg rounded-lg transition-all" 
-                    onClick={handleExportPeriod} 
-                    disabled={exporting}
-                  >
-                    <Download className="h-6 w-6 mb-2" />
-                    <span className="text-lg font-medium">
-                      {exporting ? t('export.exporting') : `${t('export.title')} ${exportPeriod === "day" ? t('export.day') : exportPeriod === "week" ? t('export.week') : exportPeriod === "month" ? t('export.month') : t('export.year')}`}
-                    </span>
-                  </Button>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <Button 
+                      className="w-full h-16 flex flex-col items-center justify-center bg-orange-600 hover:bg-orange-700 text-white shadow-lg rounded-lg transition-all" 
+                      onClick={handleExportPeriod} 
+                      disabled={exporting}
+                    >
+                      <Download className="h-6 w-6 mb-2" />
+                      <span className="text-lg font-medium">
+                        {exporting ? t('export.exporting') : `Export Excel (${exportPeriod === "day" ? t('export.day') : exportPeriod === "week" ? t('export.week') : exportPeriod === "month" ? t('export.month') : t('export.year')})`}
+                      </span>
+                    </Button>
+                    <Button 
+                      className="w-full h-16 flex flex-col items-center justify-center bg-red-600 hover:bg-red-700 text-white shadow-lg rounded-lg transition-all" 
+                      onClick={handleExportPeriodPDF} 
+                      disabled={exporting}
+                    >
+                      <FileDown className="h-6 w-6 mb-2" />
+                      <span className="text-lg font-medium">
+                        {exporting ? t('export.exporting') : `Export PDF (${exportPeriod === "day" ? t('export.day') : exportPeriod === "week" ? t('export.week') : exportPeriod === "month" ? t('export.month') : t('export.year')})`}
+                      </span>
+                    </Button>
+                  </div>
                 </div>
               )}
               <div className="text-sm text-orange-800 bg-orange-50 p-6 rounded-lg border border-orange-200">
