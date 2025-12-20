@@ -629,7 +629,12 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
           <div className="space-y-3 sm:space-y-4">
             {days.map((day, dayIdx) => {
               const dateStr = day.date.toISOString().split('T')[0];
-              const submitted = submittedEntries[dateStr] || [];
+              const submitted = (submittedEntries[dateStr] || []).sort((a, b) => {
+                // Sort by startTime (ascending)
+                const timeA = a.startTime || "00:00";
+                const timeB = b.startTime || "00:00";
+                return timeA.localeCompare(timeB);
+              });
               const isDayLocked = confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin;
               const dayName = day.date.toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long' });
               const dayShort = day.date.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short' });
