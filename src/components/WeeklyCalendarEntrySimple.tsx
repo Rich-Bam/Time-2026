@@ -649,10 +649,21 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                   {isMobile ? (
                     <div className="p-2 sm:p-4 space-y-3">
                       {/* Editable entries */}
-                      {day.entries.map((entry, entryIdx) => (
-                        <div key={`edit-${dayIdx}-${entryIdx}`} className="bg-white rounded-lg border p-3 space-y-3">
+                      {day.entries.map((entry, entryIdx) => {
+                        const isNewEntry = !entry.id;
+                        const isEditing = entry.id && editingEntry?.id === entry.id;
+                        return (
+                        <div key={`edit-${dayIdx}-${entryIdx}`} className={`rounded-lg border p-3 space-y-3 ${isNewEntry ? 'bg-blue-50 border-blue-200' : isEditing ? 'bg-yellow-50 border-yellow-200' : 'bg-white'}`}>
                           <div className="flex items-center justify-between">
-                            <Label className="text-xs font-semibold">Work Type</Label>
+                            <div className="flex items-center gap-2">
+                              {isNewEntry && (
+                                <span className="text-xs bg-blue-500 text-white px-2 py-0.5 rounded font-semibold">NEW ENTRY</span>
+                              )}
+                              {isEditing && (
+                                <span className="text-xs bg-yellow-500 text-white px-2 py-0.5 rounded font-semibold">EDITING</span>
+                              )}
+                              <Label className="text-xs font-semibold">Work Type</Label>
+                            </div>
                             {day.entries.length > 1 && (
                               <Button 
                                 variant="destructive" 
