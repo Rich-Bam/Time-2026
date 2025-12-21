@@ -10,9 +10,10 @@ import { Label } from "@/components/ui/label";
 
 interface ScreenshotButtonProps {
   currentUser: any;
+  floating?: boolean; // If true, renders as a floating button
 }
 
-const ScreenshotButton = ({ currentUser }: ScreenshotButtonProps) => {
+const ScreenshotButton = ({ currentUser, floating = false }: ScreenshotButtonProps) => {
   const { toast } = useToast();
   const [isCapturing, setIsCapturing] = useState(false);
   const [showDialog, setShowDialog] = useState(false);
@@ -21,8 +22,8 @@ const ScreenshotButton = ({ currentUser }: ScreenshotButtonProps) => {
   const handleOpenDialog = () => {
     if (!currentUser?.isAdmin) {
       toast({
-        title: "Geen toegang",
-        description: "Alleen admins kunnen screenshots maken.",
+        title: "No Access",
+        description: "Only admins can create bug reports.",
         variant: "destructive",
       });
       return;
@@ -47,8 +48,8 @@ const ScreenshotButton = ({ currentUser }: ScreenshotButtonProps) => {
       canvas.toBlob(async (blob) => {
         if (!blob) {
           toast({
-            title: "Fout",
-            description: "Kon screenshot niet maken.",
+            title: "Error",
+            description: "Could not create screenshot.",
             variant: "destructive",
           });
           setIsCapturing(false);
@@ -72,8 +73,8 @@ const ScreenshotButton = ({ currentUser }: ScreenshotButtonProps) => {
             // If bucket doesn't exist, create it first (this will fail but we'll handle it)
             if (uploadError.message.includes("Bucket not found")) {
               toast({
-                title: "Storage Bucket Ontbreekt",
-                description: "De 'screenshots' bucket bestaat nog niet. Maak deze aan in Supabase Dashboard → Storage.",
+                title: "Storage Bucket Missing",
+                description: "The 'screenshots' bucket does not exist. Create it in Supabase Dashboard → Storage.",
                 variant: "destructive",
               });
               setIsCapturing(false);
@@ -107,8 +108,8 @@ const ScreenshotButton = ({ currentUser }: ScreenshotButtonProps) => {
             // If table doesn't exist, show helpful message
             if (dbError.message.includes("relation") && dbError.message.includes("does not exist")) {
               toast({
-                title: "Database Tabel Ontbreekt",
-                description: "De 'screenshots' tabel bestaat nog niet. Maak deze aan in Supabase Dashboard → SQL Editor.",
+                title: "Database Table Missing",
+                description: "The 'screenshots' table does not exist. Create it in Supabase Dashboard → SQL Editor.",
                 variant: "destructive",
               });
             } else {
@@ -120,15 +121,15 @@ const ScreenshotButton = ({ currentUser }: ScreenshotButtonProps) => {
 
           console.log("ScreenshotButton: Successfully saved screenshot:", insertedData);
           toast({
-            title: "Screenshot Opgeslagen",
-            description: "De screenshot is succesvol opgeslagen en is zichtbaar voor de super admin.",
+            title: "Screenshot Saved",
+            description: "The screenshot has been successfully saved and is visible to the super admin.",
           });
           setDescription(""); // Reset description
         } catch (error: any) {
           console.error("Screenshot upload error:", error);
           toast({
-            title: "Fout bij Opslaan",
-            description: error.message || "Kon screenshot niet opslaan.",
+            title: "Error Saving",
+            description: error.message || "Could not save screenshot.",
             variant: "destructive",
           });
         } finally {
@@ -138,8 +139,8 @@ const ScreenshotButton = ({ currentUser }: ScreenshotButtonProps) => {
     } catch (error: any) {
       console.error("Screenshot capture error:", error);
       toast({
-        title: "Fout",
-        description: error.message || "Kon screenshot niet maken.",
+        title: "Error",
+        description: error.message || "Could not create screenshot.",
         variant: "destructive",
       });
       setIsCapturing(false);
@@ -156,30 +157,32 @@ const ScreenshotButton = ({ currentUser }: ScreenshotButtonProps) => {
     <>
       <Button
         variant="outline"
-        size="sm"
+        size={floating ? "default" : "sm"}
         onClick={handleOpenDialog}
         disabled={isCapturing}
-        className="border-orange-200 text-orange-700 hover:bg-orange-50"
-        title="Maak een screenshot (voor bug reports)"
+        className={floating 
+          ? "border-orange-200 text-orange-700 hover:bg-orange-50 shadow-lg hover:shadow-xl transition-shadow" 
+          : "border-orange-200 text-orange-700 hover:bg-orange-50"}
+        title="Make a screenshot (for bug reports)"
       >
-        <Camera className="h-4 w-4 mr-2" />
-        {isCapturing ? "Bezig..." : "Report Bug"}
+        <Camera className={`${floating ? "h-5 w-5" : "h-4 w-4"} mr-2`} />
+        {isCapturing ? "Processing..." : "Report Bug"}
       </Button>
 
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Bug Report Maken</DialogTitle>
+            <DialogTitle>Create Bug Report</DialogTitle>
             <DialogDescription>
-              Voeg een beschrijving toe van het probleem (optioneel). De screenshot wordt automatisch gemaakt.
+              Add a description of the problem (optional). The screenshot will be taken automatically.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div>
-              <Label htmlFor="description">Beschrijving (optioneel)</Label>
+              <Label htmlFor="description">Description (optional)</Label>
               <Textarea
                 id="description"
-                placeholder="Beschrijf het probleem dat je ziet..."
+                placeholder="Describe the problem you see..."
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 rows={4}
@@ -189,10 +192,10 @@ const ScreenshotButton = ({ currentUser }: ScreenshotButtonProps) => {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => { setShowDialog(false); setDescription(""); }}>
-              Annuleren
+              Cancel
             </Button>
             <Button onClick={captureScreenshot} disabled={isCapturing}>
-              {isCapturing ? "Bezig..." : "Screenshot Maken"}
+              {isCapturing ? "Processing..." : "Take Screenshot"}
             </Button>
           </DialogFooter>
         </DialogContent>

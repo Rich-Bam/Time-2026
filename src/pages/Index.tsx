@@ -96,17 +96,22 @@ const Index = () => {
     checkReminders();
   }, [isLoggedIn, currentUser]);
 
-  // Check for saved session on page load (14 days persistence)
+  // Check for saved session on page load (only if rememberMe was checked)
   useEffect(() => {
+    // Only check localStorage for rememberMe sessions (168 hours / 7 days)
     const savedSession = localStorage.getItem('bampro_user_session');
+    
     if (savedSession) {
       try {
         const sessionData = JSON.parse(savedSession);
         const sessionDate = new Date(sessionData.loginTime);
-        const daysSinceLogin = (Date.now() - sessionDate.getTime()) / (1000 * 60 * 60 * 24);
+        const hoursSinceLogin = (Date.now() - sessionDate.getTime()) / (1000 * 60 * 60);
         
-        // Check if session is still valid (within 14 days)
-        if (daysSinceLogin < 14) {
+        // Only restore session if rememberMe was true and within 168 hours (7 days)
+        const isRememberMe = sessionData.rememberMe === true;
+        const maxHours = 168; // 7 days
+        
+        if (isRememberMe && hoursSinceLogin < maxHours) {
           // Verify user still exists and is approved
           const verifyUser = async () => {
             const { data: user, error } = await supabase
@@ -118,7 +123,7 @@ const Index = () => {
             if (!error && user && user.approved !== false) {
               setCurrentUser(user);
               setIsLoggedIn(true);
-              console.log("✅ Auto-login: Session restored from localStorage");
+              console.log(`✅ Auto-login: Session restored (rememberMe was enabled)`);
             } else {
               // User no longer exists or not approved, clear session
               localStorage.removeItem('bampro_user_session');
@@ -126,9 +131,13 @@ const Index = () => {
           };
           verifyUser();
         } else {
-          // Session expired (older than 14 days)
+          // Session expired or rememberMe was false
           localStorage.removeItem('bampro_user_session');
-          console.log("⏰ Session expired (older than 14 days)");
+          if (!isRememberMe) {
+            console.log(`⏰ Session cleared (rememberMe was not enabled)`);
+          } else {
+            console.log(`⏰ Session expired (older than ${maxHours} hours)`);
+          }
         }
       } catch (error) {
         console.error("Error parsing saved session:", error);
@@ -208,6 +217,13 @@ const Index = () => {
     }
   }
 
+  // Helper to get day name in Dutch
+  const getDayNameNL = (dateStr: string) => {
+    const date = new Date(dateStr);
+    const days = ['Zondag', 'Maandag', 'Dinsdag', 'Woensdag', 'Donderdag', 'Vrijdag', 'Zaterdag'];
+    return days[date.getDay()];
+  };
+
   // Helper to create formatted Excel file with better readability
   const createFormattedExcel = (data: any[], filename: string, options?: {
     userName?: string;
@@ -216,11 +232,25 @@ const Index = () => {
   }) => {
     const wb = XLSX.utils.book_new();
     
+    // Check if this is a week export (period contains "Week" and dateRange spans 7 days)
+    const isWeekExport = options?.period?.toLowerCase().includes('week') && 
+                         options?.dateRange && 
+                         (() => {
+                           const from = new Date(options.dateRange.from);
+                           const to = new Date(options.dateRange.to);
+                           const diffDays = Math.ceil((to.getTime() - from.getTime()) / (1000 * 60 * 60 * 24));
+                           return diffDays === 6; // 7 days (0-6 inclusive)
+                         })();
+    
     // Sort data by date (ascending)
     const sortedData = [...data].sort((a, b) => {
       const dateA = new Date(a.date).getTime();
       const dateB = new Date(b.date).getTime();
-      return dateA - dateB;
+      if (dateA !== dateB) return dateA - dateB;
+      // If same date, sort by startTime
+      const timeA = a.startTime || "";
+      const timeB = b.startTime || "";
+      return timeA.localeCompare(timeB);
     });
     
     // Prepare formatted data - only include user columns if user info exists
@@ -252,7 +282,111 @@ const Index = () => {
     // Check if user columns exist to determine column count
     const hasUserColumns = formattedData.length > 0 && (formattedData[0] as any)['User Name'] !== undefined;
     
-    // Create worksheet
+    // If this is a week export, create per-day sheets
+    if (isWeekExport && options?.dateRange) {
+      const fromDate = new Date(options.dateRange.from);
+      const toDate = new Date(options.dateRange.to);
+      const dayNamesEN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+      
+      // Group entries by day
+      const entriesByDay: Record<string, any[]> = {};
+      for (let d = new Date(fromDate); d <= toDate; d.setDate(d.getDate() + 1)) {
+        const dateStr = d.toISOString().split('T')[0];
+        entriesByDay[dateStr] = sortedData.filter(entry => entry.date === dateStr);
+      }
+      
+      // Create sheets for each day and store them with their day index for sorting
+      const sheets: Array<{ dayIndex: number; dayName: string; ws: any }> = [];
+      
+      for (let d = new Date(fromDate); d <= toDate; d.setDate(d.getDate() + 1)) {
+        const dateStr = d.toISOString().split('T')[0];
+        const dayEntries = entriesByDay[dateStr] || [];
+        // Convert day index: Sunday (0) -> 6, Monday (1) -> 0, etc.
+        const dayIndex = d.getDay() === 0 ? 6 : d.getDay() - 1;
+        const dayName = dayNamesEN[dayIndex];
+        const formattedDate = formatDateDDMMYY(dateStr);
+        
+        // Calculate total hours for the day
+        const totalHours = dayEntries.reduce((sum, entry) => sum + (parseFloat(entry.hours) || 0), 0);
+        const totalHoursHHMM = formatHoursHHMM(totalHours);
+        
+        // Create header rows (similar to original template)
+        const headerRows: any[][] = [
+          ["Employee Name:", options.userName || "", "", "", "", "", "", "", "BAMPRO"],
+          ["Date:", `From: ${formatDateDDMMYY(options.dateRange.from)}`, `To: ${formatDateDDMMYY(options.dateRange.to)}`, "", "", "", "", "", ""],
+          ["Day:", `${formattedDate} ${dayName}`, "", "", "", "", "", "", ""],
+          ["Week Number:", options.period?.match(/\d+/)?.[0] || "", "", "", "", "", "", "", ""],
+          ["Year:", new Date(options.dateRange.from).getFullYear().toString(), "", "", "", "", "", "", ""],
+          [""], // Empty row
+        ];
+
+        // Create table headers
+        const tableHeaders = [
+          ["Day", "Work Type", "Project Work Order", "From", "To", "Hours Worked", "Project Leader", "Car Mileage", "Work Performed"]
+        ];
+
+        // Format data rows for this day
+        const dataRows = dayEntries.map((entry) => [
+          dayName,
+          getWorkTypeLabel(entry.description || ""),
+          entry.projects?.name || entry.project || "",
+          entry.startTime || "",
+          entry.endTime || "",
+          formatHoursHHMM(parseFloat(entry.hours) || 0),
+          "", // Projectleider
+          "", // Km stand auto
+          entry.notes || "",
+        ]);
+
+        // Add total hours row at the bottom
+        const totalRow = [
+          "",
+          "Total:",
+          "",
+          "",
+          "",
+          totalHoursHHMM,
+          "",
+          "",
+          "",
+        ];
+
+        // Combine all rows
+        const allRows = [...headerRows, ...tableHeaders, ...dataRows, [""], totalRow];
+
+        // Create worksheet from array
+        const ws = XLSX.utils.aoa_to_sheet(allRows);
+
+        // Set column widths
+        ws['!cols'] = [
+          { wch: 12 }, // Dag
+          { wch: 20 }, // Soort werk
+          { wch: 25 }, // Project Werkbon
+          { wch: 8 },  // Van
+          { wch: 8 },  // Tot
+          { wch: 15 }, // Gewerkte uren
+          { wch: 15 }, // Projectleider
+          { wch: 12 }, // Km stand auto
+          { wch: 35 }, // Uitgevoerde werkzaamheden
+        ];
+
+        // Store sheet with day index for sorting
+        sheets.push({ dayIndex, dayName, ws });
+      }
+      
+      // Sort sheets by day index (Monday=0, Tuesday=1, ..., Sunday=6)
+      sheets.sort((a, b) => a.dayIndex - b.dayIndex);
+      
+      // Append sheets to workbook in correct order (Monday to Sunday)
+      sheets.forEach(({ dayName, ws }) => {
+        XLSX.utils.book_append_sheet(wb, ws, dayName);
+      });
+      
+      XLSX.writeFile(wb, filename);
+      return;
+    }
+    
+    // Create worksheet (original logic for non-week exports)
     const ws = XLSX.utils.json_to_sheet(formattedData);
 
     // Set column widths for better readability
@@ -448,7 +582,7 @@ const Index = () => {
     return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
   };
 
-  // Helper to get work type label
+  // Helper to get work type label with code
   const getWorkTypeLabel = (desc: string) => {
     const workTypes = [
       { value: 10, label: "Work" },
@@ -476,14 +610,7 @@ const Index = () => {
       { value: 40, label: "Taken Time-for-Time (TFT)" },
     ];
     const workType = workTypes.find(wt => String(wt.value) === String(desc));
-    return workType ? workType.label : desc;
-  };
-
-  // Helper to get day name in English
-  const getDayNameNL = (dateStr: string) => {
-    const date = new Date(dateStr);
-    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    return days[date.getDay()];
+    return workType ? `${workType.value} - ${workType.label}` : desc;
   };
 
   // Export all data (admin only)
@@ -777,16 +904,18 @@ const Index = () => {
       user_email: users.find(u => u.id === row.user_id)?.email || ""
     }));
     const selectedUser = users.find(u => u.id === selectedUserId);
-    const userLabel = selectedUser ? `_${selectedUser.name || selectedUser.email}` : "";
-    createFormattedExcel(rows, `timesheet_Week${weekNum}_${year}${userLabel}.xlsx`, {
-      userName: selectedUser?.name || selectedUser?.email,
+    // Create filename with user name and week number
+    const userName = selectedUser ? (selectedUser.name || selectedUser.email || "User").replace(/[^a-zA-Z0-9]/g, '_') : "All_Users";
+    const filename = `${userName}_Week${weekNum}_${year}.xlsx`;
+    createFormattedExcel(rows, filename, {
+      userName: selectedUser?.name || selectedUser?.email || (selectedUserId === "all" ? "All users" : undefined),
       dateRange: { from, to },
       period: `Week ${weekNum}, ${year}`
     });
     setExporting(false);
     toast({
       title: "Export Successful",
-      description: `Data exported for week ${weekNum} of ${year}${selectedUser ? ` for ${selectedUser.name || selectedUser.email}` : ""}.`,
+      description: `Week ${weekNum} entries exported to timesheet_Week${weekNum}_${year}${userLabel}.xlsx with 7 day sheets${selectedUser ? ` for ${selectedUser.name || selectedUser.email}` : ""}.`,
     });
   };
 
@@ -1293,8 +1422,9 @@ const Index = () => {
                 variant="outline" 
                 size="sm"
                 onClick={() => {
-                  // Clear session from localStorage
+                  // Clear session from both localStorage and sessionStorage
                   localStorage.removeItem('bampro_user_session');
+                  sessionStorage.removeItem('bampro_user_session');
                   setIsLoggedIn(false);
                   setCurrentUser(null);
                   toast({
@@ -1575,6 +1705,14 @@ const Index = () => {
           <BugReports currentUser={currentUser} />
         )}
       </div>
+      
+      {/* Floating Report Bug Button - Always visible for admins */}
+      {currentUser?.isAdmin && (
+        <div className="fixed bottom-6 right-6 z-50">
+          <ScreenshotButton currentUser={currentUser} floating={true} />
+        </div>
+      )}
+      
       {/* PWA Install Prompt */}
       <InstallPWA />
     </div>

@@ -3,6 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { User } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -16,6 +17,7 @@ interface AuthSectionProps {
 
 const AuthSection = ({ onLogin, setCurrentUser }: AuthSectionProps) => {
   const [loginData, setLoginData] = useState({ email: "", password: "" });
+  const [rememberMe, setRememberMe] = useState(false);
   const [registerData, setRegisterData] = useState({ email: "", name: "", password: "" });
   const [registerLoading, setRegisterLoading] = useState(false);
   const { toast } = useToast();
@@ -86,27 +88,39 @@ const AuthSection = ({ onLogin, setCurrentUser }: AuthSectionProps) => {
       return;
     }
     
-    // Save session to localStorage (14 days persistence)
-    const sessionData = {
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        isAdmin: user.isAdmin,
-        approved: user.approved,
-        must_change_password: user.must_change_password,
-        photo_url: user.photo_url || null,
-        phone_number: user.phone_number || null,
-      },
-      loginTime: new Date().toISOString(),
-    };
-    localStorage.setItem('bampro_user_session', JSON.stringify(sessionData));
+    // Save session only if rememberMe is checked
+    // If rememberMe is checked: 168 hours (7 days) in localStorage
+    // If not checked: no session saved, user must login again each time
+    if (rememberMe) {
+      const sessionData = {
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          isAdmin: user.isAdmin,
+          approved: user.approved,
+          must_change_password: user.must_change_password,
+          photo_url: user.photo_url || null,
+          phone_number: user.phone_number || null,
+        },
+        loginTime: new Date().toISOString(),
+        rememberMe: true,
+      };
+      // Save to localStorage for 168 hours (7 days)
+      localStorage.setItem('bampro_user_session', JSON.stringify(sessionData));
+    } else {
+      // Clear any existing session if user doesn't want to stay logged in
+      localStorage.removeItem('bampro_user_session');
+      sessionStorage.removeItem('bampro_user_session');
+    }
     
     setCurrentUser(user);
     onLogin(true);
     toast({
-      title: "Login Succesvol",
-      description: `Welkom, ${user.name || user.email}! Je blijft ingelogd voor 14 dagen.`,
+      title: "Login Successful",
+      description: rememberMe 
+        ? `Welcome, ${user.name || user.email}! You will stay logged in for 7 days.`
+        : `Welcome, ${user.name || user.email}!`,
     });
   };
 
@@ -270,7 +284,20 @@ const AuthSection = ({ onLogin, setCurrentUser }: AuthSectionProps) => {
                 required
               />
             </div>
-            <div className="flex justify-end">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="remember-me"
+                  checked={rememberMe}
+                  onCheckedChange={(checked) => setRememberMe(checked === true)}
+                />
+                <Label
+                  htmlFor="remember-me"
+                  className="text-sm font-normal cursor-pointer"
+                >
+                  Stay logged in (7 days)
+                </Label>
+              </div>
               <Button variant="link" type="button" onClick={() => setShowResetModal(true)}>
                 Forgot Password?
               </Button>

@@ -69,12 +69,19 @@ const ProjectManagement = ({ currentUser }: ProjectManagementProps) => {
   useEffect(() => {
     const fetchHours = async () => {
       if (projects.length === 0) return;
-      const { data, error } = await supabase.from("timesheet").select("project_id, hours");
+      // Timesheet uses 'project' (name as string), not 'project_id'
+      const { data, error } = await supabase.from("timesheet").select("project, hours");
       if (data) {
         const hoursMap: Record<number, number> = {};
-        data.forEach((entry: { project_id: number; hours: number }) => {
-          if (!hoursMap[entry.project_id]) hoursMap[entry.project_id] = 0;
-          hoursMap[entry.project_id] += Number(entry.hours) || 0;
+        // Match timesheet entries by project name to project id
+        data.forEach((entry: { project: string | null; hours: number }) => {
+          if (!entry.project) return; // Skip entries without project
+          // Find project by name
+          const matchingProject = projects.find(p => p.name === entry.project);
+          if (matchingProject) {
+            if (!hoursMap[matchingProject.id]) hoursMap[matchingProject.id] = 0;
+            hoursMap[matchingProject.id] += Number(entry.hours) || 0;
+          }
         });
         setProjectHours(hoursMap);
       }

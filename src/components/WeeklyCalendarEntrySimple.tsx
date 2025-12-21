@@ -4,12 +4,15 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { Trash2, Download, Plus } from 'lucide-react';
+import { Trash2, Download, Plus, Check, ChevronsUpDown } from 'lucide-react';
 import { useIsMobile } from "@/hooks/use-mobile";
 import * as XLSX from "xlsx";
+import { cn } from "@/lib/utils";
 
 const workTypes = [
   { value: 10, label: "Work" },
@@ -96,6 +99,8 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
   const [dbDaysOff, setDbDaysOff] = useState(0);
   const [customProjectInputs, setCustomProjectInputs] = useState<Record<string, string>>({});
   const [editingEntry, setEditingEntry] = useState<{ id: number; dateStr: string } | null>(null);
+  const [openProjectPopovers, setOpenProjectPopovers] = useState<Record<string, boolean>>({});
+  const [projectSearchValues, setProjectSearchValues] = useState<Record<string, string>>({});
   
   const weekDates = getWeekDates(weekStart);
   const weekNumber = getISOWeekNumber(weekDates[0]);
@@ -141,6 +146,64 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
     };
     fetchProjects();
   }, [currentUser]);
+
+  // Function to add a new project to the database
+  const handleAddNewProject = async (projectName: string, dayIdx: number, entryIdx: number) => {
+    if (!projectName.trim()) {
+      toast({
+        title: "Error",
+        description: "Project name cannot be empty",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Check if project already exists
+    const existingProject = projects.find(p => p.name.toLowerCase() === projectName.trim().toLowerCase());
+    if (existingProject) {
+      handleEntryChange(dayIdx, entryIdx, "project", existingProject.name);
+      const key = `${dayIdx}-${entryIdx}`;
+      setOpenProjectPopovers(prev => ({ ...prev, [key]: false }));
+      return;
+    }
+
+    try {
+      // Add new project to database
+      const { data: newProject, error } = await supabase
+        .from("projects")
+        .insert([{
+          name: projectName.trim(),
+          status: "active",
+          user_id: currentUser?.id || null,
+        }])
+        .select("id, name")
+        .single();
+
+      if (error) throw error;
+
+      // Add to projects list
+      setProjects(prev => [...prev, { id: newProject.id, name: newProject.name }]);
+
+      // Set the project in the entry
+      handleEntryChange(dayIdx, entryIdx, "project", newProject.name);
+
+      // Close popover
+      const key = `${dayIdx}-${entryIdx}`;
+      setOpenProjectPopovers(prev => ({ ...prev, [key]: false }));
+      setProjectSearchValues(prev => ({ ...prev, [key]: "" }));
+
+      toast({
+        title: "Success",
+        description: `Project "${newProject.name}" added successfully`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to add project",
+        variant: "destructive",
+      });
+    }
+  };
 
   // Fetch days off
   useEffect(() => {
@@ -626,7 +689,178 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
 
   const getWorkTypeLabel = (desc: string) => {
     const workType = workTypes.find(wt => String(wt.value) === String(desc));
-    return workType ? workType.label : desc;
+    return workType ? `${workType.value} - ${workType.label}` : desc;
+  };
+
+  // Helper functions for Excel export
+  const formatDateDDMMYY = (dateStr: string) => {
+    const date = new Date(dateStr);
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = String(date.getFullYear()).slice(-2);
+    return `${day}/${month}/${year}`;
+  };
+
+  const getDayNameNL = (dateStr: string) => {
+    const date = new Date(dateStr);
+    const days = ['Zondag', 'Maandag', 'Dinsdag', 'Woensdag', 'Donderdag', 'Vrijdag', 'Zaterdag'];
+    return days[date.getDay()];
+  };
+
+  const formatHoursHHMM = (hours: number) => {
+    const h = Math.floor(hours);
+    const m = Math.round((hours - h) * 60);
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  };
+
+  // Export week entries to Excel with per-day sheets
+  const handleExportWeek = async () => {
+    if (!currentUser) {
+      toast({
+        title: "Error",
+        description: "User not found",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const fromDate = weekDates[0].toISOString().split('T')[0];
+    const toDate = weekDates[6].toISOString().split('T')[0];
+
+    const { data, error } = await supabase
+      .from("timesheet")
+      .select("*, projects(name)")
+      .eq("user_id", currentUser.id)
+      .gte("date", fromDate)
+      .lte("date", toDate)
+      .order("date", { ascending: true })
+      .order("startTime", { ascending: true });
+
+    if (error) {
+      toast({
+        title: "Export Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!data || data.length === 0) {
+      toast({
+        title: "No Data",
+        description: "No entries found for this week.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Group entries by day
+    const entriesByDay: Record<string, any[]> = {};
+    weekDates.forEach(date => {
+      const dateStr = date.toISOString().split('T')[0];
+      entriesByDay[dateStr] = data.filter(entry => entry.date === dateStr);
+    });
+
+    // Create workbook
+    const wb = XLSX.utils.book_new();
+    
+    const dayNamesEN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    
+    // Create sheets for each day and store them with their day index for sorting
+    const sheets: Array<{ dayIndex: number; dayName: string; ws: any }> = [];
+    
+    weekDates.forEach((date, dayIdx) => {
+      const dateStr = date.toISOString().split('T')[0];
+      const dayEntries = entriesByDay[dateStr] || [];
+      const dayName = dayNamesEN[dayIdx];
+      const formattedDate = formatDateDDMMYY(dateStr);
+      
+      // Calculate total hours for the day
+      const totalHours = dayEntries.reduce((sum, entry) => sum + (parseFloat(entry.hours) || 0), 0);
+      const totalHoursHHMM = formatHoursHHMM(totalHours);
+      
+      // Create header rows (similar to original template)
+      // Layout: Logo space on right, info on left
+      const headerRows = [
+        ["Employee Name:", currentUser.name || currentUser.email || "", "", "", "", "", "", "", "BAMPRO"], // Logo space
+        ["Date:", `From: ${formatDateDDMMYY(fromDate)}`, `To: ${formatDateDDMMYY(toDate)}`, "", "", "", "", "", ""],
+        ["Day:", `${formattedDate} ${dayName}`, "", "", "", "", "", "", ""],
+        ["Week Number:", weekNumber.toString(), "", "", "", "", "", "", ""],
+        ["Year:", new Date().getFullYear().toString(), "", "", "", "", "", "", ""],
+        [""], // Empty row
+      ];
+
+      // Create table headers
+      const tableHeaders = [
+        ["Day", "Work Type", "Project Work Order", "From", "To", "Hours Worked", "Project Leader", "Car Mileage", "Work Performed"]
+      ];
+
+      // Format data rows for this day
+      const dataRows = dayEntries.map((entry) => [
+        dayName,
+        getWorkTypeLabel(entry.description || ""),
+        entry.projects?.name || entry.project || "",
+        entry.startTime || "",
+        entry.endTime || "",
+        formatHoursHHMM(parseFloat(entry.hours) || 0),
+        "", // Projectleider - not in database yet
+        "", // Km stand auto - not in database yet
+        entry.notes || "",
+      ]);
+
+      // Add total hours row at the bottom
+      const totalRow = [
+        "",
+        "Total:",
+        "",
+        "",
+        "",
+        totalHoursHHMM,
+        "",
+        "",
+        "",
+      ];
+
+      // Combine all rows
+      const allRows = [...headerRows, ...tableHeaders, ...dataRows, [""], totalRow];
+
+      // Create worksheet from array
+      const ws = XLSX.utils.aoa_to_sheet(allRows);
+
+      // Set column widths
+      ws['!cols'] = [
+        { wch: 12 }, // Dag
+        { wch: 20 }, // Soort werk
+        { wch: 25 }, // Project Werkbon
+        { wch: 8 },  // Van
+        { wch: 8 },  // Tot
+        { wch: 15 }, // Gewerkte uren
+        { wch: 15 }, // Projectleider
+        { wch: 12 }, // Km stand auto
+        { wch: 35 }, // Uitgevoerde werkzaamheden
+      ];
+
+      // Store sheet with day index for sorting (dayIdx is already 0-6 for Monday-Sunday)
+      sheets.push({ dayIndex: dayIdx, dayName, ws });
+    });
+    
+    // Sort sheets by day index (Monday=0, Tuesday=1, ..., Sunday=6)
+    sheets.sort((a, b) => a.dayIndex - b.dayIndex);
+    
+    // Append sheets to workbook in correct order (Monday to Sunday)
+    sheets.forEach(({ dayName, ws }) => {
+      XLSX.utils.book_append_sheet(wb, ws, dayName);
+    });
+
+    // Generate filename with user name and week number
+    const userName = (currentUser.name || currentUser.email || "User").replace(/[^a-zA-Z0-9]/g, '_');
+    const filename = `${userName}_Week${weekNumber}_${new Date(fromDate).getFullYear()}.xlsx`;
+    XLSX.writeFile(wb, filename);
+
+    toast({
+      title: "Export Successful",
+      description: `Week ${weekNumber} entries exported to ${filename} with ${weekDates.length} day sheets`,
+    });
   };
 
   // Handle week confirmation
@@ -730,6 +964,10 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
             </Button>
             <Button variant="outline" size={isMobile ? "sm" : "default"} onClick={() => changeWeek(1)} className="text-xs sm:text-sm">
               {t('weekly.next')} &gt;
+            </Button>
+            <Button variant="outline" size={isMobile ? "sm" : "default"} onClick={handleExportWeek} className="text-xs sm:text-sm">
+              <Download className="h-4 w-4 mr-2" />
+              Export Excel
             </Button>
           </div>
         </div>
@@ -863,46 +1101,120 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
 
                           <div>
                             <Label className="text-xs font-semibold">Project</Label>
-                            <div className="space-y-2 mt-1">
-                              <Select
-                                value={entry.project && projects.some(p => p.name === entry.project) ? entry.project : ""}
-                                onValueChange={val => {
+                            <div className="mt-1">
+                              <Popover
+                                open={openProjectPopovers[`${dayIdx}-${entryIdx}`] || false}
+                                onOpenChange={(open) => {
                                   const key = `${dayIdx}-${entryIdx}`;
-                                  setCustomProjectInputs(prev => ({ ...prev, [key]: "" }));
-                                  handleEntryChange(dayIdx, entryIdx, "project", val);
-                                }}
-                                disabled={entry.workType === "31" || isLocked}
-                              >
-                                <SelectTrigger className="h-10 text-sm bg-white">
-                                  <SelectValue placeholder="Select project" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {projects.map(project => (
-                                    <SelectItem key={project.id} value={project.name}>
-                                      {project.name}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                              <Input
-                                type="text"
-                                value={entry.project && !projects.some(p => p.name === entry.project) 
-                                  ? entry.project 
-                                  : customProjectInputs[`${dayIdx}-${entryIdx}`] || ""}
-                                onChange={e => {
-                                  const value = e.target.value;
-                                  const key = `${dayIdx}-${entryIdx}`;
-                                  setCustomProjectInputs(prev => ({ ...prev, [key]: value }));
-                                  if (value.trim()) {
-                                    handleEntryChange(dayIdx, entryIdx, "project", value);
-                                  } else {
-                                    handleEntryChange(dayIdx, entryIdx, "project", "");
+                                  setOpenProjectPopovers(prev => ({ ...prev, [key]: open }));
+                                  if (!open) {
+                                    setProjectSearchValues(prev => ({ ...prev, [key]: "" }));
                                   }
                                 }}
-                                placeholder="Or type a new project..."
-                                className="h-10 text-sm bg-white"
-                                disabled={entry.workType === "31" || isLocked}
-                              />
+                              >
+                                <PopoverTrigger asChild>
+                                  <Button
+                                    variant="outline"
+                                    role="combobox"
+                                    className="w-full justify-between h-10 text-sm bg-white"
+                                    disabled={entry.workType === "31" || isLocked}
+                                  >
+                                    {entry.project || "Select project..."}
+                                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                  </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                                  <Command>
+                                    <CommandInput
+                                      placeholder="Search project or type to create new..."
+                                      value={projectSearchValues[`${dayIdx}-${entryIdx}`] || ""}
+                                      onValueChange={(value) => {
+                                        const key = `${dayIdx}-${entryIdx}`;
+                                        setProjectSearchValues(prev => ({ ...prev, [key]: value }));
+                                      }}
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter" && projectSearchValues[`${dayIdx}-${entryIdx}`]) {
+                                          const searchValue = projectSearchValues[`${dayIdx}-${entryIdx}`];
+                                          if (searchValue && !projects.some(p => p.name.toLowerCase() === searchValue.toLowerCase())) {
+                                            e.preventDefault();
+                                            handleAddNewProject(searchValue, dayIdx, entryIdx);
+                                          }
+                                        }
+                                      }}
+                                    />
+                                    <CommandList>
+                                      <CommandEmpty>
+                                        {projectSearchValues[`${dayIdx}-${entryIdx}`] ? (
+                                          <div className="py-2 px-4">
+                                            <div className="text-sm text-muted-foreground mb-2">
+                                              No project found. Press Enter to create "{projectSearchValues[`${dayIdx}-${entryIdx}`]}"
+                                            </div>
+                                            <Button
+                                              size="sm"
+                                              className="w-full"
+                                              onClick={() => {
+                                                const searchValue = projectSearchValues[`${dayIdx}-${entryIdx}`];
+                                                if (searchValue) {
+                                                  handleAddNewProject(searchValue, dayIdx, entryIdx);
+                                                }
+                                              }}
+                                            >
+                                              Add "{projectSearchValues[`${dayIdx}-${entryIdx}`]}"
+                                            </Button>
+                                          </div>
+                                        ) : (
+                                          "No projects found."
+                                        )}
+                                      </CommandEmpty>
+                                      <CommandGroup>
+                                        {projects
+                                          .filter(project =>
+                                            !projectSearchValues[`${dayIdx}-${entryIdx}`] ||
+                                            project.name.toLowerCase().includes(projectSearchValues[`${dayIdx}-${entryIdx}`].toLowerCase())
+                                          )
+                                          .map((project) => (
+                                            <CommandItem
+                                              key={project.id}
+                                              value={project.name}
+                                              onSelect={() => {
+                                                handleEntryChange(dayIdx, entryIdx, "project", project.name);
+                                                const key = `${dayIdx}-${entryIdx}`;
+                                                setOpenProjectPopovers(prev => ({ ...prev, [key]: false }));
+                                                setProjectSearchValues(prev => ({ ...prev, [key]: "" }));
+                                              }}
+                                            >
+                                              <Check
+                                                className={cn(
+                                                  "mr-2 h-4 w-4",
+                                                  entry.project === project.name ? "opacity-100" : "opacity-0"
+                                                )}
+                                              />
+                                              {project.name}
+                                            </CommandItem>
+                                          ))}
+                                        {projectSearchValues[`${dayIdx}-${entryIdx}`] &&
+                                          !projects.some(p =>
+                                            p.name.toLowerCase() === projectSearchValues[`${dayIdx}-${entryIdx}`].toLowerCase()
+                                          ) && (
+                                            <CommandItem
+                                              value={projectSearchValues[`${dayIdx}-${entryIdx}`]}
+                                              onSelect={() => {
+                                                const searchValue = projectSearchValues[`${dayIdx}-${entryIdx}`];
+                                                if (searchValue) {
+                                                  handleAddNewProject(searchValue, dayIdx, entryIdx);
+                                                }
+                                              }}
+                                              className="text-blue-600 font-medium"
+                                            >
+                                              <Plus className="mr-2 h-4 w-4" />
+                                              Create "{projectSearchValues[`${dayIdx}-${entryIdx}`]}"
+                                            </CommandItem>
+                                          )}
+                                      </CommandGroup>
+                                    </CommandList>
+                                  </Command>
+                                </PopoverContent>
+                              </Popover>
                             </div>
                           </div>
 
@@ -1016,47 +1328,119 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                                 </div>
                               </td>
                               <td className="border p-2">
-                                <div className="space-y-1">
-                                  <Select
-                                    value={entry.project && projects.some(p => p.name === entry.project) ? entry.project : ""}
-                                    onValueChange={val => {
-                                      const key = `${dayIdx}-${entryIdx}`;
-                                      setCustomProjectInputs(prev => ({ ...prev, [key]: "" }));
-                                      handleEntryChange(dayIdx, entryIdx, "project", val);
-                                    }}
-                                    disabled={entry.workType === "31" || isLocked}
-                                  >
-                                    <SelectTrigger className="h-9 text-sm bg-white">
-                                      <SelectValue placeholder="Project" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      {projects.map(project => (
-                                        <SelectItem key={project.id} value={project.name}>
-                                          {project.name}
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                                  <Input
-                                    type="text"
-                                    value={entry.project && !projects.some(p => p.name === entry.project) 
-                                      ? entry.project 
-                                      : customProjectInputs[`${dayIdx}-${entryIdx}`] || ""}
-                                    onChange={e => {
-                                      const value = e.target.value;
-                                      const key = `${dayIdx}-${entryIdx}`;
-                                      setCustomProjectInputs(prev => ({ ...prev, [key]: value }));
-                                      if (value.trim()) {
-                                        handleEntryChange(dayIdx, entryIdx, "project", value);
-                                      } else {
-                                        handleEntryChange(dayIdx, entryIdx, "project", "");
-                                      }
-                                    }}
-                                    placeholder="Or type a new project..."
-                                    className="h-8 text-sm bg-white"
-                                    disabled={entry.workType === "31" || isLocked}
-                                  />
-                                </div>
+                                <Popover
+                                  open={openProjectPopovers[`${dayIdx}-${entryIdx}`] || false}
+                                  onOpenChange={(open) => {
+                                    const key = `${dayIdx}-${entryIdx}`;
+                                    setOpenProjectPopovers(prev => ({ ...prev, [key]: open }));
+                                    if (!open) {
+                                      setProjectSearchValues(prev => ({ ...prev, [key]: "" }));
+                                    }
+                                  }}
+                                >
+                                  <PopoverTrigger asChild>
+                                    <Button
+                                      variant="outline"
+                                      role="combobox"
+                                      className="w-full justify-between h-9 text-sm bg-white"
+                                      disabled={entry.workType === "31" || isLocked}
+                                    >
+                                      {entry.project || "Select project..."}
+                                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                    </Button>
+                                  </PopoverTrigger>
+                                  <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                                    <Command>
+                                      <CommandInput
+                                        placeholder="Search project or type to create new..."
+                                        value={projectSearchValues[`${dayIdx}-${entryIdx}`] || ""}
+                                        onValueChange={(value) => {
+                                          const key = `${dayIdx}-${entryIdx}`;
+                                          setProjectSearchValues(prev => ({ ...prev, [key]: value }));
+                                        }}
+                                        onKeyDown={(e) => {
+                                          if (e.key === "Enter" && projectSearchValues[`${dayIdx}-${entryIdx}`]) {
+                                            const searchValue = projectSearchValues[`${dayIdx}-${entryIdx}`];
+                                            if (searchValue && !projects.some(p => p.name.toLowerCase() === searchValue.toLowerCase())) {
+                                              e.preventDefault();
+                                              handleAddNewProject(searchValue, dayIdx, entryIdx);
+                                            }
+                                          }
+                                        }}
+                                      />
+                                      <CommandList>
+                                        <CommandEmpty>
+                                          {projectSearchValues[`${dayIdx}-${entryIdx}`] ? (
+                                            <div className="py-2 px-4">
+                                              <div className="text-sm text-muted-foreground mb-2">
+                                                No project found. Press Enter to create "{projectSearchValues[`${dayIdx}-${entryIdx}`]}"
+                                              </div>
+                                              <Button
+                                                size="sm"
+                                                className="w-full"
+                                                onClick={() => {
+                                                  const searchValue = projectSearchValues[`${dayIdx}-${entryIdx}`];
+                                                  if (searchValue) {
+                                                    handleAddNewProject(searchValue, dayIdx, entryIdx);
+                                                  }
+                                                }}
+                                              >
+                                                Add "{projectSearchValues[`${dayIdx}-${entryIdx}`]}"
+                                              </Button>
+                                            </div>
+                                          ) : (
+                                            "No projects found."
+                                          )}
+                                        </CommandEmpty>
+                                        <CommandGroup>
+                                          {projects
+                                            .filter(project =>
+                                              !projectSearchValues[`${dayIdx}-${entryIdx}`] ||
+                                              project.name.toLowerCase().includes(projectSearchValues[`${dayIdx}-${entryIdx}`].toLowerCase())
+                                            )
+                                            .map((project) => (
+                                              <CommandItem
+                                                key={project.id}
+                                                value={project.name}
+                                                onSelect={() => {
+                                                  handleEntryChange(dayIdx, entryIdx, "project", project.name);
+                                                  const key = `${dayIdx}-${entryIdx}`;
+                                                  setOpenProjectPopovers(prev => ({ ...prev, [key]: false }));
+                                                  setProjectSearchValues(prev => ({ ...prev, [key]: "" }));
+                                                }}
+                                              >
+                                                <Check
+                                                  className={cn(
+                                                    "mr-2 h-4 w-4",
+                                                    entry.project === project.name ? "opacity-100" : "opacity-0"
+                                                  )}
+                                                />
+                                                {project.name}
+                                              </CommandItem>
+                                            ))}
+                                          {projectSearchValues[`${dayIdx}-${entryIdx}`] &&
+                                            !projects.some(p =>
+                                              p.name.toLowerCase() === projectSearchValues[`${dayIdx}-${entryIdx}`].toLowerCase()
+                                            ) && (
+                                              <CommandItem
+                                                value={projectSearchValues[`${dayIdx}-${entryIdx}`]}
+                                                onSelect={() => {
+                                                  const searchValue = projectSearchValues[`${dayIdx}-${entryIdx}`];
+                                                  if (searchValue) {
+                                                    handleAddNewProject(searchValue, dayIdx, entryIdx);
+                                                  }
+                                                }}
+                                                className="text-blue-600 font-medium"
+                                              >
+                                                <Plus className="mr-2 h-4 w-4" />
+                                                Create "{projectSearchValues[`${dayIdx}-${entryIdx}`]}"
+                                              </CommandItem>
+                                            )}
+                                        </CommandGroup>
+                                      </CommandList>
+                                    </Command>
+                                  </PopoverContent>
+                                </Popover>
                               </td>
                               <td className="border p-2">
                                 <Input
