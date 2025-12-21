@@ -826,15 +826,27 @@ const translations: Record<Language, Record<string, string>> = {
 };
 
 export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Always use English, no language switching
-  const language: Language = 'en';
+  // Get language from localStorage or default to English
+  const [language, setLanguageState] = useState<Language>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('bampro_language');
+      if (saved && (saved === 'nl' || saved === 'en')) {
+        return saved as Language;
+      }
+    }
+    return 'en';
+  });
 
+  // Save language preference to localStorage
   const setLanguage = (lang: Language) => {
-    // No-op: language is always English
+    setLanguageState(lang);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('bampro_language', lang);
+    }
   };
 
   const t = (key: string, params?: Record<string, string | number>): string => {
-    let translation = translations['en'][key] || key;
+    let translation = translations[language][key] || translations['en'][key] || key;
     
     // Replace parameters like {name} with actual values
     if (params) {

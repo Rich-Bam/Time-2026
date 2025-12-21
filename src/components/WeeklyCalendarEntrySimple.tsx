@@ -40,6 +40,14 @@ const workTypes = [
   { value: 40, label: "Taken Time-for-Time (TFT)" },
 ];
 
+// Helper function to check if a work type doesn't require a project
+const workTypeRequiresProject = (workType: string): boolean => {
+  if (!workType) return true; // Empty work type requires project
+  const workTypeNum = parseInt(workType, 10);
+  // Work types 30-40 don't require a project
+  return workTypeNum < 30 || workTypeNum > 40;
+};
+
 function getWeekDates(date: Date) {
   const start = new Date(date);
   start.setDate(date.getDate() - ((date.getDay() + 6) % 7)); // Monday as first day
@@ -101,6 +109,8 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
   const [editingEntry, setEditingEntry] = useState<{ id: number; dateStr: string } | null>(null);
   const [openProjectPopovers, setOpenProjectPopovers] = useState<Record<string, boolean>>({});
   const [projectSearchValues, setProjectSearchValues] = useState<Record<string, string>>({});
+  const [openWorkTypePopovers, setOpenWorkTypePopovers] = useState<Record<string, boolean>>({});
+  const [workTypeSearchValues, setWorkTypeSearchValues] = useState<Record<string, string>>({});
   
   const weekDates = getWeekDates(weekStart);
   const weekNumber = getISOWeekNumber(weekDates[0]);
@@ -392,7 +402,8 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
     
     // Validate required fields
     const isDayOff = entry.workType === "31";
-    if (!isDayOff && (!entry.workType || (!entry.project && !isDayOff) || (!entry.startTime && !entry.endTime))) {
+    const requiresProject = workTypeRequiresProject(entry.workType);
+    if (!isDayOff && (!entry.workType || (!entry.project && requiresProject) || (!entry.startTime && !entry.endTime))) {
       toast({
         title: "Error",
         description: "Please fill in all required fields",
@@ -576,6 +587,175 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
     }
   };
 
+  // Copy entries from previous day to current day and save them immediately
+  const handleCopyFromPreviousDay = async (dayIdx: number) => {
+    if (dayIdx === 0) {
+      toast({
+        title: "Cannot Copy",
+        description: "There is no previous day to copy from.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    if (!currentUser) return;
+    
+    const weekKey = weekDates[0].toISOString().split('T')[0];
+    const isWeekLocked = confirmedWeeks[weekKey];
+    
+    if (isWeekLocked && !currentUser?.isAdmin) {
+      toast({
+        title: "Not Allowed",
+        description: "This week is confirmed and cannot be changed anymore.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    const previousDay = days[dayIdx - 1];
+    const previousDateStr = previousDay.date.toISOString().split('T')[0];
+    const previousSubmitted = submittedEntries[previousDateStr] || [];
+    const currentDay = days[dayIdx];
+    const currentDateStr = currentDay.date.toISOString().split('T')[0];
+    
+    // Combine previous day's editable entries and submitted entries
+    // Include entries that have workType and either:
+    // - For work types 30-40: workType + (startTime/endTime or hours) is enough (no project needed)
+    // - For other work types: workType + project + (startTime/endTime or hours)
+    const previousEntries = [
+      ...previousDay.entries.filter(e => {
+        if (!e.workType || e.workType.trim() === "") return false;
+        const requiresProject = workTypeRequiresProject(e.workType);
+        // Check for time data - hours can be 0, so check explicitly for existence
+        const hasTimeData = (e.startTime && e.startTime.trim() !== "") || 
+                           (e.endTime && e.endTime.trim() !== "") || 
+                           (e.hours !== undefined && e.hours !== null && e.hours !== "");
+        if (requiresProject) {
+          return e.project && e.project.trim() !== "" && hasTimeData;
+        } else {
+          return hasTimeData; // Work types 30-40 don't need project
+        }
+      }),
+      ...previousSubmitted
+        .filter(e => {
+          // workType is already mapped from description in fetchSubmittedEntries
+          const workType = e.workType || "";
+          if (!workType || workType.trim() === "") return false;
+          const requiresProject = workTypeRequiresProject(workType);
+          // Check for time data - hours can be 0 or a number, so check explicitly
+          const hasTimeData = (e.startTime && e.startTime.trim() !== "") || 
+                             (e.endTime && e.endTime.trim() !== "") || 
+                             (e.hours !== undefined && e.hours !== null && e.hours !== "");
+          if (requiresProject) {
+            return e.project && e.project.trim() !== "" && hasTimeData;
+          } else {
+            return hasTimeData; // Work types 30-40 don't need project
+          }
+        })
+        .map(e => ({
+          workType: e.workType || "", // workType is already mapped from description in fetchSubmittedEntries
+          project: e.project || "",
+          hours: e.hours?.toString() || "",
+          startTime: e.startTime || "",
+          endTime: e.endTime || ""
+        }))
+    ];
+    
+    if (previousEntries.length === 0) {
+      toast({
+        title: "No Entries",
+        description: "The previous day has no entries to copy.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // Check for future dates
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const entryDate = new Date(currentDay.date);
+    entryDate.setHours(0, 0, 0, 0);
+    
+    if (entryDate > today) {
+      toast({
+        title: "Error",
+        description: "Cannot save entries for future dates",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // Prepare entries to save
+    const entriesToSave = [];
+    for (const entry of previousEntries) {
+      const isDayOff = entry.workType === "31";
+      const requiresProject = workTypeRequiresProject(entry.workType);
+      
+      // Validate required fields
+      // For work types 30-40: only need workType and time data (no project needed)
+      // For other work types: need workType, project, and time data
+      if (!entry.workType || 
+          (requiresProject && !entry.project) ||
+          (!entry.startTime && !entry.endTime && !entry.hours)) {
+        continue; // Skip invalid entries
+      }
+      
+      // Calculate hours
+      let hoursToSave = 0;
+      if (entry.startTime && entry.endTime) {
+        const calculated = calculateHours(entry.startTime, entry.endTime);
+        hoursToSave = parseFloat(calculated) || 0;
+      } else if (entry.hours) {
+        hoursToSave = Number(entry.hours);
+      }
+      
+      // For day off (31), hours can be 0, but for other types we need valid hours
+      if (hoursToSave <= 0 && !isDayOff) {
+        continue; // Skip entries with invalid hours
+      }
+      
+      entriesToSave.push({
+        project: isDayOff ? null : entry.project,
+        user_id: currentUser.id,
+        date: currentDateStr,
+        hours: hoursToSave,
+        description: entry.workType,
+        startTime: entry.startTime || null,
+        endTime: entry.endTime || null,
+      });
+    }
+    
+    if (entriesToSave.length === 0) {
+      toast({
+        title: "Error",
+        description: "No valid entries to copy.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    try {
+      // Save all entries to database
+      const { error } = await supabase.from("timesheet").insert(entriesToSave);
+      
+      if (error) throw error;
+      
+      // Refresh submitted entries for the current day
+      await fetchSubmittedEntries(currentDateStr);
+      
+      toast({
+        title: "Copied",
+        description: `Copied ${entriesToSave.length} entries from ${previousDay.date.toLocaleDateString()}.`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to copy entries",
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleSubmitAll = async () => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -612,9 +792,10 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
       for (let entryIdx = 0; entryIdx < day.entries.length; entryIdx++) {
         const entry = day.entries[entryIdx];
         const isDayOff = entry.workType === "31";
+        const requiresProject = workTypeRequiresProject(entry.workType);
         
-        // For non-weekend days, require: workType, and either (project or dayOff), and (startTime/endTime or hours)
-        if (!isWeekend && ((!entry.project && !isDayOff) || !entry.workType || (!entry.startTime && !entry.endTime && !entry.hours))) {
+        // For non-weekend days, require: workType, and either (project or work type doesn't require project), and (startTime/endTime or hours)
+        if (!isWeekend && ((!entry.project && requiresProject) || !entry.workType || (!entry.startTime && !entry.endTime && !entry.hours))) {
           toast({
             title: "Missing Information",
             description: `Please fill in all required fields for ${day.date.toLocaleDateString()}. You need to enter start and end times.`,
@@ -1031,15 +1212,27 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                       {!isMobile && <span className="text-sm text-gray-600">({dayShort})</span>}
                     </div>
                     {!isLocked && (
-                      <Button 
-                        variant="outline" 
-                        size={isMobile ? "sm" : "sm"}
-                        className={`${isMobile ? 'h-8 text-xs w-full' : 'h-7 text-xs'}`}
-                        onClick={() => handleAddEntry(dayIdx)}
-                      >
-                        <Plus className="h-3 w-3 mr-1" />
-                        Add Entry
-                      </Button>
+                      <div className={`flex gap-2 ${isMobile ? 'w-full' : ''}`}>
+                        {dayIdx > 0 && (
+                          <Button 
+                            variant="outline" 
+                            size={isMobile ? "sm" : "sm"}
+                            className={`${isMobile ? 'h-8 text-xs flex-1' : 'h-7 text-xs'}`}
+                            onClick={() => handleCopyFromPreviousDay(dayIdx)}
+                          >
+                            Copy Previous
+                          </Button>
+                        )}
+                        <Button 
+                          variant="outline" 
+                          size={isMobile ? "sm" : "sm"}
+                          className={`${isMobile ? 'h-8 text-xs flex-1' : 'h-7 text-xs'}`}
+                          onClick={() => handleAddEntry(dayIdx)}
+                        >
+                          <Plus className="h-3 w-3 mr-1" />
+                          Add Entry
+                        </Button>
+                      </div>
                     )}
                   </div>
                   
@@ -1082,22 +1275,76 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                               )}
                             </div>
                           </div>
-                          <Select 
-                            value={entry.workType || ""} 
-                            onValueChange={val => handleEntryChange(dayIdx, entryIdx, "workType", val)}
-                            disabled={isLocked}
-                          >
-                            <SelectTrigger className="h-10 text-sm bg-white">
-                              <SelectValue placeholder="Select work type" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {workTypes.map(type => (
-                                <SelectItem key={type.value} value={String(type.value)}>
-                                  {type.value} - {type.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                          <div>
+                            <Label className="text-xs font-semibold">Work Type</Label>
+                            <Popover
+                              open={openWorkTypePopovers[`${dayIdx}-${entryIdx}`] || false}
+                              onOpenChange={(open) => {
+                                const key = `${dayIdx}-${entryIdx}`;
+                                setOpenWorkTypePopovers(prev => ({ ...prev, [key]: open }));
+                                if (!open) {
+                                  setWorkTypeSearchValues(prev => ({ ...prev, [key]: "" }));
+                                }
+                              }}
+                            >
+                              <PopoverTrigger asChild>
+                                <Button
+                                  variant="outline"
+                                  role="combobox"
+                                  className="w-full justify-between h-10 text-sm bg-white mt-1"
+                                  disabled={isLocked}
+                                >
+                                  {entry.workType 
+                                    ? `${entry.workType} - ${workTypes.find(t => String(t.value) === entry.workType)?.label || ""}`
+                                    : "Select work type..."}
+                                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                </Button>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                                <Command>
+                                  <CommandInput
+                                    placeholder="Search work type..."
+                                    value={workTypeSearchValues[`${dayIdx}-${entryIdx}`] || ""}
+                                    onValueChange={(value) => {
+                                      const key = `${dayIdx}-${entryIdx}`;
+                                      setWorkTypeSearchValues(prev => ({ ...prev, [key]: value }));
+                                    }}
+                                  />
+                                  <CommandList>
+                                    <CommandEmpty>No work type found.</CommandEmpty>
+                                    <CommandGroup>
+                                      {workTypes
+                                        .filter(type =>
+                                          !workTypeSearchValues[`${dayIdx}-${entryIdx}`] ||
+                                          String(type.value).includes(workTypeSearchValues[`${dayIdx}-${entryIdx}`]) ||
+                                          type.label.toLowerCase().includes(workTypeSearchValues[`${dayIdx}-${entryIdx}`].toLowerCase())
+                                        )
+                                        .map((type) => (
+                                          <CommandItem
+                                            key={type.value}
+                                            value={String(type.value)}
+                                            onSelect={() => {
+                                              handleEntryChange(dayIdx, entryIdx, "workType", String(type.value));
+                                              const key = `${dayIdx}-${entryIdx}`;
+                                              setOpenWorkTypePopovers(prev => ({ ...prev, [key]: false }));
+                                              setWorkTypeSearchValues(prev => ({ ...prev, [key]: "" }));
+                                            }}
+                                          >
+                                            <Check
+                                              className={cn(
+                                                "mr-2 h-4 w-4",
+                                                entry.workType === String(type.value) ? "opacity-100" : "opacity-0"
+                                              )}
+                                            />
+                                            {type.value} - {type.label}
+                                          </CommandItem>
+                                        ))}
+                                    </CommandGroup>
+                                  </CommandList>
+                                </Command>
+                              </PopoverContent>
+                            </Popover>
+                          </div>
 
                           <div>
                             <Label className="text-xs font-semibold">Project</Label>
@@ -1117,7 +1364,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                                     variant="outline"
                                     role="combobox"
                                     className="w-full justify-between h-10 text-sm bg-white"
-                                    disabled={entry.workType === "31" || isLocked}
+                                    disabled={!workTypeRequiresProject(entry.workType) || isLocked}
                                   >
                                     {entry.project || "Select project..."}
                                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -1309,22 +1556,73 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                                       <span className="text-xs bg-yellow-500 text-white px-2 py-0.5 rounded font-semibold">EDITING</span>
                                     )}
                                   </div>
-                                  <Select 
-                                    value={entry.workType || ""} 
-                                    onValueChange={val => handleEntryChange(dayIdx, entryIdx, "workType", val)}
-                                    disabled={isLocked}
+                                  <Popover
+                                    open={openWorkTypePopovers[`${dayIdx}-${entryIdx}`] || false}
+                                    onOpenChange={(open) => {
+                                      const key = `${dayIdx}-${entryIdx}`;
+                                      setOpenWorkTypePopovers(prev => ({ ...prev, [key]: open }));
+                                      if (!open) {
+                                        setWorkTypeSearchValues(prev => ({ ...prev, [key]: "" }));
+                                      }
+                                    }}
                                   >
-                                    <SelectTrigger className="h-9 text-sm bg-white">
-                                      <SelectValue placeholder="Type" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      {workTypes.map(type => (
-                                        <SelectItem key={type.value} value={String(type.value)}>
-                                          {type.value} - {type.label}
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
+                                    <PopoverTrigger asChild>
+                                      <Button
+                                        variant="outline"
+                                        role="combobox"
+                                        className="w-full justify-between h-9 text-sm bg-white"
+                                        disabled={isLocked}
+                                      >
+                                        {entry.workType 
+                                          ? `${entry.workType} - ${workTypes.find(t => String(t.value) === entry.workType)?.label || ""}`
+                                          : "Select work type..."}
+                                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                      </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                                      <Command>
+                                        <CommandInput
+                                          placeholder="Search work type..."
+                                          value={workTypeSearchValues[`${dayIdx}-${entryIdx}`] || ""}
+                                          onValueChange={(value) => {
+                                            const key = `${dayIdx}-${entryIdx}`;
+                                            setWorkTypeSearchValues(prev => ({ ...prev, [key]: value }));
+                                          }}
+                                        />
+                                        <CommandList>
+                                          <CommandEmpty>No work type found.</CommandEmpty>
+                                          <CommandGroup>
+                                            {workTypes
+                                              .filter(type =>
+                                                !workTypeSearchValues[`${dayIdx}-${entryIdx}`] ||
+                                                String(type.value).includes(workTypeSearchValues[`${dayIdx}-${entryIdx}`]) ||
+                                                type.label.toLowerCase().includes(workTypeSearchValues[`${dayIdx}-${entryIdx}`].toLowerCase())
+                                              )
+                                              .map((type) => (
+                                                <CommandItem
+                                                  key={type.value}
+                                                  value={String(type.value)}
+                                                  onSelect={() => {
+                                                    handleEntryChange(dayIdx, entryIdx, "workType", String(type.value));
+                                                    const key = `${dayIdx}-${entryIdx}`;
+                                                    setOpenWorkTypePopovers(prev => ({ ...prev, [key]: false }));
+                                                    setWorkTypeSearchValues(prev => ({ ...prev, [key]: "" }));
+                                                  }}
+                                                >
+                                                  <Check
+                                                    className={cn(
+                                                      "mr-2 h-4 w-4",
+                                                      entry.workType === String(type.value) ? "opacity-100" : "opacity-0"
+                                                    )}
+                                                  />
+                                                  {type.value} - {type.label}
+                                                </CommandItem>
+                                              ))}
+                                          </CommandGroup>
+                                        </CommandList>
+                                      </Command>
+                                    </PopoverContent>
+                                  </Popover>
                                 </div>
                               </td>
                               <td className="border p-2">
@@ -1343,7 +1641,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                                       variant="outline"
                                       role="combobox"
                                       className="w-full justify-between h-9 text-sm bg-white"
-                                      disabled={entry.workType === "31" || isLocked}
+                                      disabled={!workTypeRequiresProject(entry.workType) || isLocked}
                                     >
                                       {entry.project || "Select project..."}
                                       <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />

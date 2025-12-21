@@ -18,6 +18,7 @@ import ScreenshotButton from "@/components/ScreenshotButton";
 import BugReports from "@/components/BugReports";
 import InstallPWA from "@/components/InstallPWA";
 import Profile from "@/components/Profile";
+import LanguageSelector from "@/components/LanguageSelector";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -1263,6 +1264,9 @@ const Index = () => {
     return (
       <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-orange-100">
         <div className="container mx-auto px-4 py-12">
+          <div className="flex justify-end mb-4">
+            <LanguageSelector />
+          </div>
           <div className="text-center mb-12">
             <div className="flex items-center justify-center mb-6">
               <img 
@@ -1406,6 +1410,7 @@ const Index = () => {
               </nav>
             </div>
             <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-3 md:gap-6 justify-center md:justify-end">
+              <LanguageSelector />
               {currentUser && (
                 <button
                   onClick={() => setActiveTab('profile')}

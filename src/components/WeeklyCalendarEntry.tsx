@@ -4,11 +4,14 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { Trash2, Download } from 'lucide-react';
+import { Trash2, Download, Check, ChevronsUpDown } from 'lucide-react';
 import * as XLSX from "xlsx";
+import { cn } from "@/lib/utils";
 
 const workTypes = [
   { value: 10, label: "Work" },
@@ -35,6 +38,14 @@ const workTypes = [
   { value: 39, label: "Time Off in Lieu (ADV)" },
   { value: 40, label: "Taken Time-for-Time (TFT)" },
 ];
+
+// Helper function to check if a work type doesn't require a project
+const workTypeRequiresProject = (workType: string): boolean => {
+  if (!workType) return true; // Empty work type requires project
+  const workTypeNum = parseInt(workType, 10);
+  // Work types 30-40 don't require a project
+  return workTypeNum < 30 || workTypeNum > 40;
+};
 
 function getWeekDates(date: Date) {
   const start = new Date(date);
@@ -80,6 +91,8 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
   const [customProjects, setCustomProjects] = useState<Record<string, string>>({});
   const [submittedEntries, setSubmittedEntries] = useState<Record<string, any[]>>({});
   const [confirmedWeeks, setConfirmedWeeks] = useState<Record<string, boolean>>({});
+  const [openWorkTypePopovers, setOpenWorkTypePopovers] = useState<Record<string, boolean>>({});
+  const [workTypeSearchValues, setWorkTypeSearchValues] = useState<Record<string, string>>({});
 
   const weekDates = getWeekDates(weekStart);
   const weekNumber = getISOWeekNumber(weekDates[0]);
@@ -386,8 +399,9 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
       for (let entryIdx = 0; entryIdx < day.entries.length; entryIdx++) {
         const entry = day.entries[entryIdx];
         const isDayOff = entry.workType === "31";
+        const requiresProject = workTypeRequiresProject(entry.workType);
         // Only validate required fields for Mon-Fri
-        if (!isWeekend && ((!entry.project && !isDayOff) || !entry.workType || !entry.hours)) {
+        if (!isWeekend && ((!entry.project && requiresProject) || !entry.workType || !entry.hours)) {
           toast({
             title: "Missing Information",
             description: `Please fill in all required fields for ${day.date.toLocaleDateString()}`,
@@ -553,7 +567,8 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
     for (let entryIdx = 0; entryIdx < day.entries.length; entryIdx++) {
       const entry = day.entries[entryIdx];
       const isDayOff = entry.workType === "31";
-      if (!isWeekend && ((!entry.project && !isDayOff) || !entry.workType || !entry.hours)) {
+      const requiresProject = workTypeRequiresProject(entry.workType);
+      if (!isWeekend && ((!entry.project && requiresProject) || !entry.workType || !entry.hours)) {
         toast({
           title: "Missing Information",
           description: `Please fill in all required fields for ${day.date.toLocaleDateString()}`,
@@ -736,6 +751,61 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
     }
   };
 
+  const handleEditEntry = (entry: any, dateStr: string) => {
+    const weekKey = weekDates[0].toISOString().split('T')[0];
+    const isWeekLocked = confirmedWeeks[weekKey];
+    
+    // Non-admins cannot edit if week is confirmed
+    if (isWeekLocked && !currentUser?.isAdmin) {
+      toast({
+        title: "Not Allowed",
+        description: "This week is confirmed and cannot be changed anymore.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    const dayIdx = days.findIndex(d => d.date.toISOString().split('T')[0] === dateStr);
+    if (dayIdx === -1) return;
+    
+    const day = days[dayIdx];
+    
+    // Convert submitted entry to editable format
+    const editableEntry = {
+      workType: entry.description || "",
+      project: entry.project || "",
+      hours: entry.hours?.toString() || "",
+      startTime: entry.startTime || "",
+      endTime: entry.endTime || "",
+      lunch: false, // Default, can be adjusted if needed
+      id: entry.id // Keep the ID to track which entry is being edited
+    };
+    
+    // Check if there are any completely empty entries
+    const emptyEntryIndex = day.entries.findIndex(e => 
+      !e.workType && !e.project && !e.startTime && !e.endTime && !e.hours && !e.id
+    );
+    
+    setDays(days.map((d, i) => {
+      if (i !== dayIdx) return d;
+      
+      const newEntries = [...d.entries];
+      
+      if (emptyEntryIndex !== -1) {
+        // Replace the first empty entry with the entry being edited
+        newEntries[emptyEntryIndex] = editableEntry;
+      } else {
+        // No empty entry found, add the entry to edit
+        newEntries.push(editableEntry);
+      }
+      
+      return { ...d, entries: newEntries };
+    }));
+    
+    // Delete the submitted entry (it will be re-saved when user submits)
+    handleDeleteEntry(entry.id, dateStr);
+  };
+
   const handleDeleteEntry = async (entryId: number, dateStr: string) => {
     const weekKey = weekDates[0].toISOString().split('T')[0];
     const isWeekLocked = confirmedWeeks[weekKey];
@@ -768,6 +838,240 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
       min = 0;
     }
     return `${hour.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`;
+  };
+
+  // Copy entries from previous day to current day and save them immediately
+  const handleCopyFromPreviousDay = async (dayIdx: number) => {
+    if (dayIdx === 0) {
+      toast({
+        title: "Cannot Copy",
+        description: "There is no previous day to copy from.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    if (!currentUser) return;
+    
+    const weekKey = weekDates[0].toISOString().split('T')[0];
+    const isWeekLocked = confirmedWeeks[weekKey];
+    
+    if (isWeekLocked && !currentUser?.isAdmin) {
+      toast({
+        title: "Not Allowed",
+        description: "This week is confirmed and cannot be changed anymore.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    const previousDay = days[dayIdx - 1];
+    const previousDateStr = previousDay.date.toISOString().split('T')[0];
+    const previousSubmitted = submittedEntries[previousDateStr] || [];
+    const currentDay = days[dayIdx];
+    const currentDateStr = currentDay.date.toISOString().split('T')[0];
+    const isWeekend = currentDay.date.getDay() === 0 || currentDay.date.getDay() === 6;
+    
+    // Prevent future dates
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const entryDate = new Date(currentDay.date);
+    entryDate.setHours(0, 0, 0, 0);
+    if (entryDate > today) {
+      toast({
+        title: "Future Date Not Allowed",
+        description: "You cannot log hours for future dates. Please select today or a past date.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // Combine previous day's editable entries and submitted entries
+    // Include entries that have workType and either:
+    // - For work types 30-40: workType + (startTime/endTime or hours) is enough (no project needed)
+    // - For other work types: workType + project + (startTime/endTime or hours)
+    const previousEntries = [
+      ...previousDay.entries.filter(e => {
+        if (!e.workType || e.workType.trim() === "") return false;
+        const requiresProject = workTypeRequiresProject(e.workType);
+        // Check for time data - hours can be 0, so check explicitly for existence
+        const hasTimeData = (e.startTime && e.startTime.trim() !== "") || 
+                           (e.endTime && e.endTime.trim() !== "") || 
+                           (e.hours !== undefined && e.hours !== null && e.hours !== "");
+        if (requiresProject) {
+          return e.project && e.project.trim() !== "" && hasTimeData;
+        } else {
+          return hasTimeData; // Work types 30-40 don't need project
+        }
+      }),
+      ...previousSubmitted
+        .filter(e => {
+          // In regular view, submitted entries use 'description' field
+          const workType = e.description || "";
+          if (!workType || workType.trim() === "") return false;
+          const requiresProject = workTypeRequiresProject(workType);
+          // Check for time data - hours can be 0 or a number, so check explicitly
+          const hasTimeData = (e.startTime && e.startTime.trim() !== "") || 
+                             (e.endTime && e.endTime.trim() !== "") || 
+                             (e.hours !== undefined && e.hours !== null && e.hours !== "");
+          if (requiresProject) {
+            return e.project && e.project.trim() !== "" && hasTimeData;
+          } else {
+            return hasTimeData; // Work types 30-40 don't need project
+          }
+        })
+        .map(e => ({
+          workType: e.description || "", // In regular view, submitted entries use 'description' field
+          project: e.project || "",
+          hours: e.hours?.toString() || "",
+          startTime: e.startTime || "",
+          endTime: e.endTime || "",
+          lunch: false
+        }))
+    ];
+    
+    if (previousEntries.length === 0) {
+      toast({
+        title: "No Entries",
+        description: "The previous day has no entries to copy.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // First, collect custom projects that need to be created
+    const customProjectsToCreate = new Set<string>();
+    for (const entry of previousEntries) {
+      const isDayOff = entry.workType === "31";
+      if (entry.project && !isDayOff && currentUser?.id) {
+        const isCustomProject = !projects.some(p => p.name === entry.project);
+        if (isCustomProject) {
+          customProjectsToCreate.add(entry.project);
+        }
+      }
+    }
+    
+    // Create all custom projects in batch
+    if (customProjectsToCreate.size > 0 && currentUser?.id) {
+      for (const projectName of customProjectsToCreate) {
+        const { data: existingProject } = await supabase
+          .from("projects")
+          .select("id")
+          .eq("name", projectName)
+          .eq("user_id", currentUser.id)
+          .single();
+        
+        if (!existingProject) {
+          await supabase
+            .from("projects")
+            .insert([{
+              name: projectName,
+              user_id: currentUser.id,
+              description: null
+            }]);
+        }
+      }
+      
+      // Refresh projects list once after creating all custom projects
+      const { data: updatedProjects } = await supabase
+        .from("projects")
+        .select("id, name, user_id")
+        .or(`user_id.is.null,user_id.eq.${currentUser.id}`);
+      if (updatedProjects) {
+        const filteredProjects = updatedProjects.filter(
+          p => !p.user_id || p.user_id === currentUser.id
+        );
+        setProjects(filteredProjects);
+      }
+    }
+    
+    // Prepare entries to save
+    const entriesToSave = [];
+    for (const entry of previousEntries) {
+      const isDayOff = entry.workType === "31";
+      const requiresProject = workTypeRequiresProject(entry.workType);
+      
+      // Validate required fields
+      // For work types 30-40: only need workType and time data (no project needed)
+      // For other work types: need workType, project, and time data
+      if (!entry.workType) {
+        continue; // Skip entries without workType
+      }
+      
+      // Check project requirement
+      if (requiresProject && !entry.project) {
+        continue; // Skip entries that require project but don't have one
+      }
+      
+      // Check time data requirement
+      const hasTimeData = (entry.startTime && entry.startTime.trim() !== "") || 
+                         (entry.endTime && entry.endTime.trim() !== "") || 
+                         (entry.hours && entry.hours.trim() !== "");
+      if (!hasTimeData) {
+        continue; // Skip entries without time data
+      }
+      
+      // Calculate hours
+      let hoursToSave = 0;
+      if (entry.startTime && entry.endTime) {
+        const start = new Date(`2000-01-01T${entry.startTime}`);
+        const end = new Date(`2000-01-01T${entry.endTime}`);
+        hoursToSave = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+        if (entry.lunch && !isDayOff) {
+          hoursToSave = Math.max(0, hoursToSave - 0.5);
+        }
+      } else if (entry.hours) {
+        hoursToSave = Number(entry.hours);
+        if (entry.lunch && !isDayOff) {
+          hoursToSave = Math.max(0, hoursToSave - 0.5);
+        }
+      }
+      
+      // For day off (31), hours can be 0, but for other types we need valid hours
+      if (hoursToSave <= 0 && !isDayOff) {
+        continue; // Skip entries with invalid hours
+      }
+      
+      entriesToSave.push({
+        project: isDayOff ? null : entry.project,
+        user_id: currentUser.id,
+        date: currentDateStr,
+        hours: hoursToSave,
+        description: entry.workType,
+        startTime: entry.startTime || null,
+        endTime: entry.endTime || null,
+      });
+    }
+    
+    if (entriesToSave.length === 0) {
+      toast({
+        title: "Error",
+        description: "No valid entries to copy.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    try {
+      // Save all entries to database
+      const { error } = await supabase.from("timesheet").insert(entriesToSave);
+      
+      if (error) throw error;
+      
+      // Refresh submitted entries for the current day
+      await fetchSubmittedEntries(currentDateStr);
+      
+      toast({
+        title: "Copied",
+        description: `Copied ${entriesToSave.length} entries from ${previousDay.date.toLocaleDateString()}.`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to copy entries",
+        variant: "destructive",
+      });
+    }
   };
 
   // Helper to check if all weekdays are filled
@@ -1038,7 +1342,7 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
                           {isFirstEntry && (
                             <td rowSpan={rowSpan} className="border p-2 sticky left-0 bg-white font-medium align-top">
                               {dayName}
-                              <div className="mt-2">
+                              <div className="mt-2 space-y-1">
                                 <Button 
                                   variant="outline" 
                                   size="sm"
@@ -1048,28 +1352,94 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
                                 >
                                   + {t('weekly.add')}
                                 </Button>
+                                {dayIdx > 0 && (
+                                  <Button 
+                                    variant="outline" 
+                                    size="sm"
+                                    className="h-6 text-xs w-full"
+                                    onClick={() => handleCopyFromPreviousDay(dayIdx)}
+                                    disabled={isLocked}
+                                  >
+                                    Copy Previous
+                                  </Button>
+                                )}
                               </div>
                             </td>
                           )}
                           <td className="border p-1">
-                            <Select 
-                              value={entry.workType || ""} 
-                              onValueChange={val => handleEntryChange(dayIdx, entryIdx, "workType", val)}
-                              disabled={isLocked}
+                            <Popover
+                              open={openWorkTypePopovers[`${dayIdx}-${entryIdx}`] || false}
+                              onOpenChange={(open) => {
+                                const key = `${dayIdx}-${entryIdx}`;
+                                setOpenWorkTypePopovers(prev => ({ ...prev, [key]: open }));
+                                if (!open) {
+                                  setWorkTypeSearchValues(prev => ({ ...prev, [key]: "" }));
+                                }
+                              }}
                             >
-                              <SelectTrigger className="h-8 text-xs"><SelectValue placeholder={t('weekly.type')} /></SelectTrigger>
-                              <SelectContent>
-                                {workTypes.map(type => (
-                                  <SelectItem key={type.value} value={String(type.value)}>{type.value} - {type.label}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                              <PopoverTrigger asChild>
+                                <Button
+                                  variant="outline"
+                                  role="combobox"
+                                  className="w-full justify-between h-8 text-xs"
+                                  disabled={isLocked}
+                                >
+                                  {entry.workType 
+                                    ? `${entry.workType} - ${workTypes.find(t => String(t.value) === entry.workType)?.label || ""}`
+                                    : t('weekly.type')}
+                                  <ChevronsUpDown className="ml-2 h-3 w-3 shrink-0 opacity-50" />
+                                </Button>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                                <Command>
+                                  <CommandInput
+                                    placeholder="Search work type..."
+                                    value={workTypeSearchValues[`${dayIdx}-${entryIdx}`] || ""}
+                                    onValueChange={(value) => {
+                                      const key = `${dayIdx}-${entryIdx}`;
+                                      setWorkTypeSearchValues(prev => ({ ...prev, [key]: value }));
+                                    }}
+                                  />
+                                  <CommandList>
+                                    <CommandEmpty>No work type found.</CommandEmpty>
+                                    <CommandGroup>
+                                      {workTypes
+                                        .filter(type =>
+                                          !workTypeSearchValues[`${dayIdx}-${entryIdx}`] ||
+                                          String(type.value).includes(workTypeSearchValues[`${dayIdx}-${entryIdx}`]) ||
+                                          type.label.toLowerCase().includes(workTypeSearchValues[`${dayIdx}-${entryIdx}`].toLowerCase())
+                                        )
+                                        .map((type) => (
+                                          <CommandItem
+                                            key={type.value}
+                                            value={String(type.value)}
+                                            onSelect={() => {
+                                              handleEntryChange(dayIdx, entryIdx, "workType", String(type.value));
+                                              const key = `${dayIdx}-${entryIdx}`;
+                                              setOpenWorkTypePopovers(prev => ({ ...prev, [key]: false }));
+                                              setWorkTypeSearchValues(prev => ({ ...prev, [key]: "" }));
+                                            }}
+                                          >
+                                            <Check
+                                              className={cn(
+                                                "mr-2 h-4 w-4",
+                                                entry.workType === String(type.value) ? "opacity-100" : "opacity-0"
+                                              )}
+                                            />
+                                            {type.value} - {type.label}
+                                          </CommandItem>
+                                        ))}
+                                    </CommandGroup>
+                                  </CommandList>
+                                </Command>
+                              </PopoverContent>
+                            </Popover>
                           </td>
                           <td className="border p-1">
                             <Select
                               value={entry.project || ""}
                               onValueChange={val => handleEntryChange(dayIdx, entryIdx, "project", val)}
-                              disabled={entry.workType === "31" || isLocked}
+                              disabled={!workTypeRequiresProject(entry.workType) || isLocked}
                             >
                               <SelectTrigger className="h-8 text-xs"><SelectValue placeholder={t('weekly.projectPlaceholder')} /></SelectTrigger>
                               <SelectContent>
@@ -1179,14 +1549,27 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
                         </td>
                         <td className="border p-1 text-center">
                           {!isLocked && (
-                            <Button 
-                              size="icon" 
-                              variant="ghost" 
-                              className="h-7 w-7"
-                              onClick={() => handleDeleteEntry(submittedEntry.id, dateStr)}
-                            >
-                              <Trash2 className="h-3 w-3 text-red-500" />
-                            </Button>
+                            <div className="flex gap-1 justify-center">
+                              <Button 
+                                size="icon" 
+                                variant="ghost" 
+                                className="h-7 w-7"
+                                onClick={() => handleEditEntry(submittedEntry, dateStr)}
+                                title="Edit entry"
+                              >
+                                <svg className="h-3 w-3 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                </svg>
+                              </Button>
+                              <Button 
+                                size="icon" 
+                                variant="ghost" 
+                                className="h-7 w-7"
+                                onClick={() => handleDeleteEntry(submittedEntry.id, dateStr)}
+                              >
+                                <Trash2 className="h-3 w-3 text-red-500" />
+                              </Button>
+                            </div>
                           )}
                         </td>
                       </tr>
@@ -1221,18 +1604,73 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
                 <div key={entryIdx} className="flex flex-wrap gap-2 items-end mb-2">
                   <div>
                     <Label>{t('weekly.workType')}</Label>
-                    <Select 
-                      value={entry.workType} 
-                      onValueChange={val => handleEntryChange(dayIdx, entryIdx, "workType", val)}
-                      disabled={confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin}
+                    <Popover
+                      open={openWorkTypePopovers[`${dayIdx}-${entryIdx}`] || false}
+                      onOpenChange={(open) => {
+                        const key = `${dayIdx}-${entryIdx}`;
+                        setOpenWorkTypePopovers(prev => ({ ...prev, [key]: open }));
+                        if (!open) {
+                          setWorkTypeSearchValues(prev => ({ ...prev, [key]: "" }));
+                        }
+                      }}
                     >
-                      <SelectTrigger><SelectValue placeholder={t('weekly.type')} /></SelectTrigger>
-                      <SelectContent>
-                        {workTypes.map(type => (
-                          <SelectItem key={type.value} value={String(type.value)}>{type.value} - {type.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          role="combobox"
+                          className="w-full justify-between"
+                          disabled={confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin}
+                        >
+                          {entry.workType 
+                            ? `${entry.workType} - ${workTypes.find(t => String(t.value) === entry.workType)?.label || ""}`
+                            : t('weekly.type')}
+                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                        <Command>
+                          <CommandInput
+                            placeholder="Search work type..."
+                            value={workTypeSearchValues[`${dayIdx}-${entryIdx}`] || ""}
+                            onValueChange={(value) => {
+                              const key = `${dayIdx}-${entryIdx}`;
+                              setWorkTypeSearchValues(prev => ({ ...prev, [key]: value }));
+                            }}
+                          />
+                          <CommandList>
+                            <CommandEmpty>No work type found.</CommandEmpty>
+                            <CommandGroup>
+                              {workTypes
+                                .filter(type =>
+                                  !workTypeSearchValues[`${dayIdx}-${entryIdx}`] ||
+                                  String(type.value).includes(workTypeSearchValues[`${dayIdx}-${entryIdx}`]) ||
+                                  type.label.toLowerCase().includes(workTypeSearchValues[`${dayIdx}-${entryIdx}`].toLowerCase())
+                                )
+                                .map((type) => (
+                                  <CommandItem
+                                    key={type.value}
+                                    value={String(type.value)}
+                                    onSelect={() => {
+                                      handleEntryChange(dayIdx, entryIdx, "workType", String(type.value));
+                                      const key = `${dayIdx}-${entryIdx}`;
+                                      setOpenWorkTypePopovers(prev => ({ ...prev, [key]: false }));
+                                      setWorkTypeSearchValues(prev => ({ ...prev, [key]: "" }));
+                                    }}
+                                  >
+                                    <Check
+                                      className={cn(
+                                        "mr-2 h-4 w-4",
+                                        entry.workType === String(type.value) ? "opacity-100" : "opacity-0"
+                                      )}
+                                    />
+                                    {type.value} - {type.label}
+                                  </CommandItem>
+                                ))}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
                   </div>
                   <div>
                     <Label>{t('weekly.project')}</Label>
@@ -1242,7 +1680,7 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
                           value={entry.project}
                           onChange={e => handleEntryChange(dayIdx, entryIdx, "project", e.target.value)}
                           placeholder={t('weekly.projectPlaceholder')}
-                          disabled={entry.workType === "31" || (confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin)}
+                          disabled={!workTypeRequiresProject(entry.workType) || (confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin)}
                         />
                         <Button 
                           size="sm" 
@@ -1258,7 +1696,7 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
                         <Select
                           value={entry.project}
                           onValueChange={val => handleEntryChange(dayIdx, entryIdx, "project", val)}
-                          disabled={entry.workType === "31" || (confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin)}
+                          disabled={!workTypeRequiresProject(entry.workType) || (confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin)}
                         >
                           <SelectTrigger><SelectValue placeholder={t('weekly.projectPlaceholder')} /></SelectTrigger>
                           <SelectContent>
@@ -1345,6 +1783,15 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
                 </div>
               ))}
               <div className="flex gap-4 mt-4">
+                {dayIdx > 0 && (
+                  <Button 
+                    variant="outline" 
+                    onClick={() => handleCopyFromPreviousDay(dayIdx)}
+                    disabled={confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin}
+                  >
+                    Copy from Previous Day
+                  </Button>
+                )}
                 <Button 
                   variant="default" 
                   onClick={() => handleSubmitDay(dayIdx)}
@@ -1376,9 +1823,21 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
                             <td className="p-1 border">{entry.startTime && entry.endTime ? `${entry.startTime} - ${entry.endTime}` : '-'}</td>
                             {!confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && (
                               <td className="p-1 border">
-                                <Button size="icon" variant="ghost" onClick={() => handleDeleteEntry(entry.id, day.date.toISOString().split('T')[0])}>
-                                  <Trash2 className="h-4 w-4 text-red-500" />
-                                </Button>
+                                <div className="flex gap-1">
+                                  <Button 
+                                    size="icon" 
+                                    variant="ghost" 
+                                    onClick={() => handleEditEntry(entry, day.date.toISOString().split('T')[0])}
+                                    title="Edit entry"
+                                  >
+                                    <svg className="h-4 w-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                    </svg>
+                                  </Button>
+                                  <Button size="icon" variant="ghost" onClick={() => handleDeleteEntry(entry.id, day.date.toISOString().split('T')[0])}>
+                                    <Trash2 className="h-4 w-4 text-red-500" />
+                                  </Button>
+                                </div>
                               </td>
                             )}
                           </tr>
