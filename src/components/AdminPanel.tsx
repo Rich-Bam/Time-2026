@@ -68,7 +68,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
   // Fetch users
   const fetchUsers = async () => {
     setLoading(true);
-    const { data, error } = await supabase.from("users").select("id, email, name, isAdmin, must_change_password, approved");
+    const { data, error } = await supabase.from("users").select("id, email, name, isAdmin, must_change_password, approved, can_use_timebuzzer");
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
@@ -370,6 +370,28 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
       toast({
         title: "Admin status updated",
         description: `${userEmail} is now ${makeAdmin ? "an admin" : "a regular user"}.`,
+      });
+      fetchUsers();
+    }
+  };
+
+  // Toggle Timebuzzer access for a user (only super admin can do this)
+  const handleToggleTimebuzzer = async (userId: string, userEmail: string, canUse: boolean) => {
+    if (currentUser.email !== SUPER_ADMIN_EMAIL) {
+      toast({
+        title: "Action not allowed",
+        description: "Only the super admin can manage Timebuzzer access.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const { error } = await supabase.from("users").update({ can_use_timebuzzer: canUse }).eq("id", userId);
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      toast({
+        title: "Timebuzzer access updated",
+        description: `${userEmail} ${canUse ? "can now" : "can no longer"} use Timebuzzer integration.`,
       });
       fetchUsers();
     }
@@ -911,6 +933,20 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                     <span className="text-gray-600">Must Change Password:</span>
                     <span>{user.must_change_password ? "Yes" : "No"}</span>
                   </div>
+                  {currentUser.email === SUPER_ADMIN_EMAIL && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Timebuzzer:</span>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={!!user.can_use_timebuzzer}
+                          onChange={(e) => handleToggleTimebuzzer(user.id, user.email, e.target.checked)}
+                          className="h-3 w-3"
+                        />
+                        <span>{user.can_use_timebuzzer ? "Yes" : "No"}</span>
+                      </div>
+                    </div>
+                  )}
                   <div className="flex justify-between">
                     <span className="text-gray-600">Days Off Left:</span>
                     <span className="font-semibold">{(totalDaysOff - ((daysOffMap[user.id] || 0) / 8)).toFixed(2)} / {totalDaysOff}</span>
@@ -980,6 +1016,9 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                   <th className="p-2 text-left">Admin</th>
                   <th className="p-2 text-left">Approved</th>
                   <th className="p-2 text-left">Must Change Password</th>
+                  {currentUser.email === SUPER_ADMIN_EMAIL && (
+                    <th className="p-2 text-left">Timebuzzer</th>
+                  )}
                   <th className="p-2 text-left">Days Off Left</th>
                   <th className="p-2 text-left">Actions</th>
                 </tr>
@@ -1002,6 +1041,19 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                     </td>
                     <td className="p-2">{user.approved !== false ? "Yes" : "No"}</td>
                     <td className="p-2">{user.must_change_password ? "Yes" : "No"}</td>
+                    {currentUser.email === SUPER_ADMIN_EMAIL && (
+                      <td className="p-2">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={!!user.can_use_timebuzzer}
+                            onChange={(e) => handleToggleTimebuzzer(user.id, user.email, e.target.checked)}
+                            className="h-4 w-4"
+                          />
+                          <span>{user.can_use_timebuzzer ? "Yes" : "No"}</span>
+                        </div>
+                      </td>
+                    )}
                     <td className="p-2">{(totalDaysOff - ((daysOffMap[user.id] || 0) / 8)).toFixed(2)} / {totalDaysOff}</td>
                     <td className="p-2">
                       {resetUserId === user.id ? (
