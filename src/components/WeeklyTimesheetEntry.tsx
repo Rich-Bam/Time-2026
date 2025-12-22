@@ -29,6 +29,7 @@ const workTypes = [
   { value: 38, label: "Public Holiday" },
   { value: 39, label: "Time Off in Lieu (ADV)" },
   { value: 40, label: "Taken Time-for-Time (TFT)" },
+  { value: 100, label: "Remote" },
 ];
 
 const daysOfWeek = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];

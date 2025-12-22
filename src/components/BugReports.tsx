@@ -159,21 +159,21 @@ const BugReports = ({ currentUser }: BugReportsProps) => {
         </CardHeader>
         <CardContent>
           {loading ? (
-            <div className="text-center py-8 text-sm text-gray-500">Loading bug reports...</div>
+            <div className="text-center py-8 text-sm text-gray-500 dark:text-gray-400">Loading bug reports...</div>
           ) : bugReports.length === 0 ? (
-            <div className="text-center py-8 text-sm text-gray-500">No bug reports found.</div>
+            <div className="text-center py-8 text-sm text-gray-500 dark:text-gray-400">No bug reports found.</div>
           ) : (
             <div className="space-y-4">
               {bugReports.map((report) => (
                 <div
                   key={report.id}
-                  className="border rounded-lg p-4 hover:shadow-md transition-shadow bg-white"
+                  className="border rounded-lg p-4 hover:shadow-md transition-shadow bg-white dark:bg-gray-800 dark:border-gray-700"
                 >
                   <div className={`flex ${isMobile ? 'flex-col' : 'items-center justify-between'} gap-4`}>
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-2">
-                        <User className="h-4 w-4 text-gray-500" />
-                        <span className="font-semibold text-gray-900">
+                        <User className="h-4 w-4 text-gray-500 dark:text-gray-400" />
+                        <span className="font-semibold text-gray-900 dark:text-gray-100">
                           {report.user_name || report.user_email}
                         </span>
                         <Badge variant="outline" className="text-xs">
@@ -182,11 +182,11 @@ const BugReports = ({ currentUser }: BugReportsProps) => {
                       </div>
                       {report.description && (
                         <div className="flex items-start gap-2 mb-2">
-                          <FileText className="h-4 w-4 text-gray-500 mt-0.5" />
-                          <p className="text-sm text-gray-700">{report.description}</p>
+                          <FileText className="h-4 w-4 text-gray-500 dark:text-gray-400 mt-0.5" />
+                          <p className="text-sm text-gray-700 dark:text-gray-300">{report.description}</p>
                         </div>
                       )}
-                      <div className="flex items-center gap-2 text-xs text-gray-500">
+                      <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
                         <Calendar className="h-3 w-3" />
                         <span>{formatDate(report.created_at)}</span>
                       </div>
@@ -196,7 +196,7 @@ const BugReports = ({ currentUser }: BugReportsProps) => {
                         variant="outline"
                         size="sm"
                         onClick={() => handleViewReport(report)}
-                        className="border-blue-200 text-blue-700 hover:bg-blue-50"
+                        className="border-blue-200 dark:border-blue-700 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/40"
                       >
                         <ExternalLink className="h-4 w-4 mr-2" />
                         View
@@ -208,7 +208,7 @@ const BugReports = ({ currentUser }: BugReportsProps) => {
                           setReportToDelete(report);
                           setDeleteConfirmOpen(true);
                         }}
-                        className="border-red-200 text-red-700 hover:bg-red-50"
+                        className="border-red-200 dark:border-red-700 text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/40"
                       >
                         <Trash2 className="h-4 w-4 mr-2" />
                         Delete
@@ -234,8 +234,8 @@ const BugReports = ({ currentUser }: BugReportsProps) => {
           <div className="space-y-4">
             {selectedReport?.description && (
               <div>
-                <h4 className="font-semibold mb-2">Description:</h4>
-                <p className="text-sm text-gray-700">{selectedReport.description}</p>
+                <h4 className="font-semibold mb-2 text-gray-900 dark:text-gray-100">Description:</h4>
+                <p className="text-sm text-gray-700 dark:text-gray-300">{selectedReport.description}</p>
               </div>
             )}
             <div>
@@ -248,7 +248,7 @@ const BugReports = ({ currentUser }: BugReportsProps) => {
                 />
               )}
             </div>
-            <div className="text-xs text-gray-500">
+            <div className="text-xs text-gray-500 dark:text-gray-400">
               Submitted: {selectedReport && formatDate(selectedReport.created_at)}
             </div>
           </div>

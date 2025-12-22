@@ -38,6 +38,7 @@ const workTypes = [
   { value: 38, label: "Public Holiday" },
   { value: 39, label: "Time Off in Lieu (ADV)" },
   { value: 40, label: "Taken Time-for-Time (TFT)" },
+  { value: 100, label: "Remote" },
 ];
 
 // Helper function to check if a work type doesn't require a project
@@ -1148,7 +1149,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
             </Button>
             <Button variant="outline" size={isMobile ? "sm" : "default"} onClick={handleExportWeek} className="text-xs sm:text-sm">
               <Download className="h-4 w-4 mr-2" />
-              Export Excel
+              {t('weekly.exportWeek')}
             </Button>
           </div>
         </div>
@@ -1164,7 +1165,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
 
       {isLocked && (
         <div className="p-2 sm:p-3 bg-yellow-50 border border-yellow-200 rounded text-yellow-800 text-xs sm:text-sm">
-          ⚠️ This week is confirmed. You cannot make any more changes.
+          ⚠️ {t('weekly.confirmed')}
         </div>
       )}
 
@@ -1190,8 +1191,8 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                 return parseTime(timeA) - parseTime(timeB);
               });
               const isDayLocked = isLocked;
-              const dayName = day.date.toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long' });
-              const dayShort = day.date.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short' });
+              const dayName = day.date.toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' });
+              const dayShort = day.date.toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short' });
               const dayColors = [
                 'bg-blue-50 border-blue-200', // Monday
                 'bg-green-50 border-green-200', // Tuesday
@@ -1220,7 +1221,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                             className={`${isMobile ? 'h-8 text-xs flex-1' : 'h-7 text-xs'}`}
                             onClick={() => handleCopyFromPreviousDay(dayIdx)}
                           >
-                            Copy Previous
+                            {t('weekly.copyPrevious')}
                           </Button>
                         )}
                         <Button 
@@ -1230,7 +1231,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                           onClick={() => handleAddEntry(dayIdx)}
                         >
                           <Plus className="h-3 w-3 mr-1" />
-                          Add Entry
+                          {t('weekly.addEntry')}
                         </Button>
                       </div>
                     )}
@@ -1250,7 +1251,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                               {isEditing && (
                                 <span className="text-xs bg-yellow-500 text-white px-2 py-0.5 rounded font-semibold">EDITING</span>
                               )}
-                              <Label className="text-xs font-semibold">Work Type</Label>
+                              <Label className="text-xs font-semibold">{t('weekly.workType')}</Label>
                             </div>
                             <div className="flex items-center gap-2">
                               <Button 
@@ -1260,7 +1261,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                                 onClick={() => handleSaveEntry(dayIdx, entryIdx)}
                                 disabled={isLocked}
                               >
-                                Save
+                                {t('common.save')}
                               </Button>
                               {day.entries.length > 1 && (
                                 <Button 
@@ -1276,7 +1277,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                             </div>
                           </div>
                           <div>
-                            <Label className="text-xs font-semibold">Work Type</Label>
+                            <Label className="text-xs font-semibold">{t('weekly.workType')}</Label>
                             <Popover
                               open={openWorkTypePopovers[`${dayIdx}-${entryIdx}`] || false}
                               onOpenChange={(open) => {
@@ -1296,14 +1297,14 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                                 >
                                   {entry.workType 
                                     ? `${entry.workType} - ${workTypes.find(t => String(t.value) === entry.workType)?.label || ""}`
-                                    : "Select work type..."}
+                                    : t('weekly.selectWorkType')}
                                   <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                 </Button>
                               </PopoverTrigger>
                               <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
                                 <Command>
                                   <CommandInput
-                                    placeholder="Search work type..."
+                                    placeholder={t('weekly.searchWorkType')}
                                     value={workTypeSearchValues[`${dayIdx}-${entryIdx}`] || ""}
                                     onValueChange={(value) => {
                                       const key = `${dayIdx}-${entryIdx}`;
@@ -1311,7 +1312,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                                     }}
                                   />
                                   <CommandList>
-                                    <CommandEmpty>No work type found.</CommandEmpty>
+                                    <CommandEmpty>{t('weekly.noWorkTypeFound')}</CommandEmpty>
                                     <CommandGroup>
                                       {workTypes
                                         .filter(type =>
@@ -1347,7 +1348,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                           </div>
 
                           <div>
-                            <Label className="text-xs font-semibold">Project</Label>
+                            <Label className="text-xs font-semibold">{t('weekly.project')}</Label>
                             <div className="mt-1">
                               <Popover
                                 open={openProjectPopovers[`${dayIdx}-${entryIdx}`] || false}
@@ -1366,7 +1367,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                                     className="w-full justify-between h-10 text-sm bg-white"
                                     disabled={!workTypeRequiresProject(entry.workType) || isLocked}
                                   >
-                                    {entry.project || "Select project..."}
+                                    {entry.project || t('weekly.selectProject')}
                                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                   </Button>
                                 </PopoverTrigger>
@@ -1454,7 +1455,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                                               className="text-blue-600 font-medium"
                                             >
                                               <Plus className="mr-2 h-4 w-4" />
-                                              Create "{projectSearchValues[`${dayIdx}-${entryIdx}`]}"
+                                              {t('weekly.create')} "{projectSearchValues[`${dayIdx}-${entryIdx}`]}"
                                             </CommandItem>
                                           )}
                                       </CommandGroup>
@@ -1467,7 +1468,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
 
                           <div className="grid grid-cols-3 gap-2">
                             <div>
-                              <Label className="text-xs font-semibold">From</Label>
+                              <Label className="text-xs font-semibold">{t('weekly.from')}</Label>
                               <Input
                                 type="text"
                                 value={entry.startTime || ""}
@@ -1478,7 +1479,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                               />
                             </div>
                             <div>
-                              <Label className="text-xs font-semibold">To</Label>
+                              <Label className="text-xs font-semibold">{t('weekly.to')}</Label>
                               <Input
                                 type="text"
                                 value={entry.endTime || ""}
@@ -1489,7 +1490,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                               />
                             </div>
                             <div>
-                              <Label className="text-xs font-semibold">Hours</Label>
+                              <Label className="text-xs font-semibold">{t('weekly.hours')}</Label>
                               <div className="h-10 flex items-center justify-center bg-gray-50 border rounded px-2 text-sm font-medium mt-1">
                                 {(() => {
                                   if (entry.startTime && entry.endTime) {
@@ -1521,9 +1522,9 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                             <span className="text-sm font-semibold">{getWorkTypeLabel(submittedEntry.workType || "")}</span>
                           </div>
                           <div className="text-xs text-gray-600">
-                            <div><strong>Project:</strong> {submittedEntry.project || "-"}</div>
-                            <div><strong>Time:</strong> {submittedEntry.startTime || "-"} - {submittedEntry.endTime || "-"}</div>
-                            <div><strong>Hours:</strong> {submittedEntry.hours || "0"}h</div>
+                            <div><strong>{t('weekly.project')}:</strong> {submittedEntry.project || "-"}</div>
+                            <div><strong>{t('weekly.time')}:</strong> {submittedEntry.startTime || "-"} - {submittedEntry.endTime || "-"}</div>
+                            <div><strong>{t('weekly.hours')}:</strong> {submittedEntry.hours || "0"}h</div>
                           </div>
                         </div>
                       ))}
@@ -1534,12 +1535,12 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                       <table className="min-w-full border-collapse">
                         <thead>
                           <tr className="bg-white/50">
-                            <th className="border p-2 text-left min-w-[120px]">Work Type</th>
-                            <th className="border p-2 text-left min-w-[150px]">Project</th>
-                            <th className="border p-2 text-left min-w-[80px]">From</th>
-                            <th className="border p-2 text-left min-w-[80px]">To</th>
-                            <th className="border p-2 text-left min-w-[80px]">Hours</th>
-                            {!isLocked && <th className="border p-2 text-center min-w-[50px]">Action</th>}
+                            <th className="border p-2 text-left min-w-[120px]">{t('weekly.workType')}</th>
+                            <th className="border p-2 text-left min-w-[150px]">{t('weekly.project')}</th>
+                            <th className="border p-2 text-left min-w-[80px]">{t('weekly.from')}</th>
+                            <th className="border p-2 text-left min-w-[80px]">{t('weekly.to')}</th>
+                            <th className="border p-2 text-left min-w-[80px]">{t('weekly.hours')}</th>
+                            {!isLocked && <th className="border p-2 text-center min-w-[50px]">{t('weekly.action')}</th>}
                           </tr>
                         </thead>
                         <tbody>
@@ -1575,14 +1576,14 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                                       >
                                         {entry.workType 
                                           ? `${entry.workType} - ${workTypes.find(t => String(t.value) === entry.workType)?.label || ""}`
-                                          : "Select work type..."}
+                                          : t('weekly.selectWorkType')}
                                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                       </Button>
                                     </PopoverTrigger>
                                     <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
                                       <Command>
                                         <CommandInput
-                                          placeholder="Search work type..."
+                                          placeholder={t('weekly.searchWorkType')}
                                           value={workTypeSearchValues[`${dayIdx}-${entryIdx}`] || ""}
                                           onValueChange={(value) => {
                                             const key = `${dayIdx}-${entryIdx}`;
@@ -1590,7 +1591,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                                           }}
                                         />
                                         <CommandList>
-                                          <CommandEmpty>No work type found.</CommandEmpty>
+                                          <CommandEmpty>{t('weekly.noWorkTypeFound')}</CommandEmpty>
                                           <CommandGroup>
                                             {workTypes
                                               .filter(type =>
@@ -1643,14 +1644,14 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                                       className="w-full justify-between h-9 text-sm bg-white"
                                       disabled={!workTypeRequiresProject(entry.workType) || isLocked}
                                     >
-                                      {entry.project || "Select project..."}
+                                      {entry.project || t('weekly.selectProject')}
                                       <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                     </Button>
                                   </PopoverTrigger>
                                   <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
                                     <Command>
                                       <CommandInput
-                                        placeholder="Search project or type to create new..."
+                                        placeholder={t('weekly.searchProject')}
                                         value={projectSearchValues[`${dayIdx}-${entryIdx}`] || ""}
                                         onValueChange={(value) => {
                                           const key = `${dayIdx}-${entryIdx}`;
@@ -1671,7 +1672,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                                           {projectSearchValues[`${dayIdx}-${entryIdx}`] ? (
                                             <div className="py-2 px-4">
                                               <div className="text-sm text-muted-foreground mb-2">
-                                                No project found. Press Enter to create "{projectSearchValues[`${dayIdx}-${entryIdx}`]}"
+                                                {t('weekly.noProjectFound')} "{projectSearchValues[`${dayIdx}-${entryIdx}`]}"
                                               </div>
                                               <Button
                                                 size="sm"
@@ -1683,11 +1684,11 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                                                   }
                                                 }}
                                               >
-                                                Add "{projectSearchValues[`${dayIdx}-${entryIdx}`]}"
+                                                {t('weekly.add')} "{projectSearchValues[`${dayIdx}-${entryIdx}`]}"
                                               </Button>
                                             </div>
                                           ) : (
-                                            "No projects found."
+                                            t('weekly.noProjectsFound')
                                           )}
                                         </CommandEmpty>
                                         <CommandGroup>
@@ -1789,7 +1790,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                                     onClick={() => handleSaveEntry(dayIdx, entryIdx)}
                                     disabled={isLocked}
                                   >
-                                    Save
+                                    {t('common.save')}
                                   </Button>
                                   {day.entries.length > 1 && (
                                     <Button 
@@ -1834,7 +1835,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                                       variant="ghost" 
                                       className="h-8 w-8"
                                       onClick={() => handleEditEntry(submittedEntry, dateStr)}
-                                      title="Edit entry"
+                                      title={t('common.edit')}
                                     >
                                       <svg className="h-4 w-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />

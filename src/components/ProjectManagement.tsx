@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { Plus, FileText, Users, Clock, Trash2, Lock, LockOpen } from "lucide-react";
+import { Plus, FileText, Users, Clock, Trash2, Lock, LockOpen, Pencil, Check, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useLanguage } from "@/contexts/LanguageContext";
 import {
@@ -46,6 +46,9 @@ const ProjectManagement = ({ currentUser }: ProjectManagementProps) => {
   const [modalEntries, setModalEntries] = useState<any[]>([]);
   const [modalProject, setModalProject] = useState<any>(null);
   const [modalOpen, setModalOpen] = useState(false);
+  // Edit project name state
+  const [editingProjectId, setEditingProjectId] = useState<number | null>(null);
+  const [editedProjectName, setEditedProjectName] = useState<string>("");
 
   // Fetch projects from Supabase on mount
   useEffect(() => {
@@ -128,10 +131,21 @@ const ProjectManagement = ({ currentUser }: ProjectManagementProps) => {
   const handleViewDetails = async (project: any) => {
     setModalProject(project);
     setModalOpen(true);
+    // Timesheet uses 'project' (name as string), not 'project_id'
     const { data, error } = await supabase
       .from("timesheet")
-      .select("*, projects(name), user_id")
-      .eq("project_id", project.id);
+      .select("*, users(name, email)")
+      .eq("project", project.name);
+    
+    if (error) {
+      console.error("Error fetching project details:", error);
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+    
     setModalEntries(data || []);
   };
 
@@ -259,12 +273,113 @@ const ProjectManagement = ({ currentUser }: ProjectManagementProps) => {
     setDeleteConfirmOpen(true);
   };
 
+  const handleStartEdit = (project: any) => {
+    if (!currentUser?.isAdmin) {
+      toast({
+        title: "Geen Toegang",
+        description: "Alleen admins kunnen projectnamen bewerken.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setEditingProjectId(project.id);
+    setEditedProjectName(project.name);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingProjectId(null);
+    setEditedProjectName("");
+  };
+
+  const handleSaveEdit = async (project: any) => {
+    if (!currentUser?.isAdmin) {
+      toast({
+        title: "Geen Toegang",
+        description: "Alleen admins kunnen projectnamen bewerken.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!editedProjectName.trim()) {
+      toast({
+        title: "Fout",
+        description: "Projectnaam mag niet leeg zijn.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const oldName = project.name;
+    const newName = editedProjectName.trim();
+
+    if (oldName === newName) {
+      handleCancelEdit();
+      return;
+    }
+
+    try {
+      // Update project name in projects table
+      const { error: projectError } = await supabase
+        .from("projects")
+        .update({ name: newName })
+        .eq("id", project.id);
+
+      if (projectError) {
+        throw projectError;
+      }
+
+      // Update all timesheet entries that reference the old project name
+      const { error: timesheetError } = await supabase
+        .from("timesheet")
+        .update({ project: newName })
+        .eq("project", oldName);
+
+      if (timesheetError) {
+        console.warn("Error updating timesheet entries:", timesheetError);
+        // Continue anyway - project name is updated
+      }
+
+      toast({
+        title: "Projectnaam Bijgewerkt",
+        description: `Projectnaam is gewijzigd van "${oldName}" naar "${newName}". Alle gerelateerde timesheet entries zijn ook bijgewerkt.`,
+      });
+
+      // Refresh projects list
+      const { data: updatedProjects } = await supabase.from("projects").select("*");
+      setProjects(updatedProjects || []);
+
+      // Refresh project hours
+      const { data: timesheetData } = await supabase.from("timesheet").select("project, hours");
+      if (timesheetData) {
+        const hoursMap: Record<number, number> = {};
+        timesheetData.forEach((entry: { project: string | null; hours: number }) => {
+          if (!entry.project) return;
+          const matchingProject = (updatedProjects || []).find(p => p.name === entry.project);
+          if (matchingProject) {
+            if (!hoursMap[matchingProject.id]) hoursMap[matchingProject.id] = 0;
+            hoursMap[matchingProject.id] += Number(entry.hours) || 0;
+          }
+        });
+        setProjectHours(hoursMap);
+      }
+
+      handleCancelEdit();
+    } catch (error: any) {
+      toast({
+        title: "Fout",
+        description: error.message || "Er is een fout opgetreden bij het bijwerken van de projectnaam.",
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <div className={`grid grid-cols-1 ${isMobile ? '' : 'lg:grid-cols-3'} gap-4 sm:gap-6 lg:gap-8`}>
       {/* Add New Project */}
-      <Card className={`${isMobile ? '' : 'lg:col-span-1'} shadow-lg border-blue-100`}>
-        <CardHeader className="bg-gradient-to-r from-blue-50 to-blue-100 rounded-t-lg p-4 sm:p-6">
-          <CardTitle className="flex items-center text-blue-900 text-lg sm:text-xl">
+      <Card className={`${isMobile ? '' : 'lg:col-span-1'} shadow-lg border-blue-100 dark:border-blue-800`}>
+        <CardHeader className="bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/30 dark:to-blue-800/30 rounded-t-lg p-4 sm:p-6">
+          <CardTitle className="flex items-center text-blue-900 dark:text-blue-100 text-lg sm:text-xl">
             <Plus className="h-5 w-5 sm:h-6 sm:w-6 mr-2 sm:mr-3" />
             {t('project.addNew')}
           </CardTitle>
@@ -275,35 +390,35 @@ const ProjectManagement = ({ currentUser }: ProjectManagementProps) => {
         <CardContent className="p-4 sm:p-6">
           <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-5">
             <div className="space-y-2">
-              <Label htmlFor="projectName" className="text-sm text-gray-700 font-medium">{t('project.name')}</Label>
+              <Label htmlFor="projectName" className="text-sm text-gray-700 dark:text-gray-300 font-medium">{t('project.name')}</Label>
               <Input
                 id="projectName"
                 placeholder={t('project.namePlaceholder')}
                 value={newProject.name}
                 onChange={(e) => setNewProject({ ...newProject, name: e.target.value })}
                 required
-                className="h-10 sm:h-9 border-blue-200 focus:border-blue-500 focus:ring-blue-500"
+                className="h-10 sm:h-9 border-blue-200 dark:border-blue-700 focus:border-blue-500 dark:focus:border-blue-400 focus:ring-blue-500 dark:focus:ring-blue-400"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="client" className="text-sm text-gray-700 font-medium">{t('project.client')}</Label>
+              <Label htmlFor="client" className="text-sm text-gray-700 dark:text-gray-300 font-medium">{t('project.client')}</Label>
               <Input
                 id="client"
                 placeholder={t('project.clientPlaceholder')}
                 value={newProject.client}
                 onChange={(e) => setNewProject({ ...newProject, client: e.target.value })}
                 required
-                className="h-10 sm:h-9 border-blue-200 focus:border-blue-500 focus:ring-blue-500"
+                className="h-10 sm:h-9 border-blue-200 dark:border-blue-700 focus:border-blue-500 dark:focus:border-blue-400 focus:ring-blue-500 dark:focus:ring-blue-400"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="description" className="text-sm text-gray-700 font-medium">{t('project.description')}</Label>
+              <Label htmlFor="description" className="text-sm text-gray-700 dark:text-gray-300 font-medium">{t('project.description')}</Label>
               <Textarea
                 id="description"
                 placeholder={t('project.descriptionPlaceholder')}
                 value={newProject.description}
                 onChange={(e) => setNewProject({ ...newProject, description: e.target.value })}
-                className="min-h-[80px] border-blue-200 focus:border-blue-500 focus:ring-blue-500"
+                className="min-h-[80px] border-blue-200 dark:border-blue-700 focus:border-blue-500 dark:focus:border-blue-400 focus:ring-blue-500 dark:focus:ring-blue-400"
               />
             </div>
             <Button type="submit" className="w-full h-10 sm:h-9 bg-blue-600 hover:bg-blue-700 text-white shadow-lg" size={isMobile ? "lg" : "default"}>
@@ -316,9 +431,9 @@ const ProjectManagement = ({ currentUser }: ProjectManagementProps) => {
 
       {/* Projects List */}
       <div className={`${isMobile ? '' : 'lg:col-span-2'} space-y-4 sm:space-y-6`}>
-        <Card className="shadow-lg border-blue-100">
-          <CardHeader className="bg-gradient-to-r from-blue-50 to-blue-100 rounded-t-lg p-4 sm:p-6">
-            <CardTitle className="flex items-center text-blue-900 text-lg sm:text-xl">
+        <Card className="shadow-lg border-blue-100 dark:border-blue-800">
+          <CardHeader className="bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/30 dark:to-blue-800/30 rounded-t-lg p-4 sm:p-6">
+            <CardTitle className="flex items-center text-blue-900 dark:text-blue-100 text-lg sm:text-xl">
               <FileText className="h-5 w-5 sm:h-6 sm:w-6 mr-2 sm:mr-3" />
               {t('project.active')}
             </CardTitle>
@@ -329,32 +444,79 @@ const ProjectManagement = ({ currentUser }: ProjectManagementProps) => {
           <CardContent className="p-4 sm:p-6">
             <div className="space-y-4 sm:space-y-6">
               {projects.map((project) => (
-                <div key={project.id} className="border border-blue-100 rounded-xl p-4 sm:p-6 hover:shadow-md transition-all bg-gradient-to-r from-white to-blue-50">
+                <div key={project.id} className="border border-blue-100 dark:border-blue-800 rounded-xl p-4 sm:p-6 hover:shadow-md transition-all bg-gradient-to-r from-white to-blue-50 dark:from-gray-800 dark:to-blue-900/20">
                   <div className={`flex ${isMobile ? 'flex-col' : 'justify-between items-start'} gap-3 mb-4`}>
-                    <div className="flex-1">
-                      <h3 className="text-lg sm:text-xl font-bold text-gray-900">{project.name}</h3>
-                      <p className="text-sm sm:text-base text-blue-700 font-medium">{project.client}</p>
+                    <div className="flex-1 w-full">
+                      {editingProjectId === project.id ? (
+                        <div className="flex items-center gap-2">
+                          <Input
+                            value={editedProjectName}
+                            onChange={(e) => setEditedProjectName(e.target.value)}
+                            className="text-lg sm:text-xl font-bold h-9 sm:h-10"
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                handleSaveEdit(project);
+                              } else if (e.key === "Escape") {
+                                handleCancelEdit();
+                              }
+                            }}
+                            autoFocus
+                          />
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleSaveEdit(project)}
+                            className="h-9 sm:h-10 border-green-200 dark:border-green-700 text-green-700 dark:text-green-300 hover:bg-green-50 dark:hover:bg-green-900/40"
+                          >
+                            <Check className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleCancelEdit}
+                            className="h-9 sm:h-10 border-red-200 dark:border-red-700 text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/40"
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100">{project.name}</h3>
+                          {currentUser?.isAdmin && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleStartEdit(project)}
+                              className="h-7 w-7 p-0 text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400"
+                              title="Edit project name"
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
+                      )}
+                      <p className="text-sm sm:text-base text-blue-700 dark:text-blue-300 font-medium">{project.client}</p>
                     </div>
                     <Badge className={`${getStatusColor(project.status || "active")} border font-medium text-xs`}>
                       {project.status === "closed" ? "Closed" : project.status || "Active"}
                     </Badge>
                   </div>
-                  <p className="text-sm sm:text-base text-gray-700 mb-4 leading-relaxed">{project.description}</p>
-                  <div className={`flex ${isMobile ? 'flex-col' : 'items-center justify-between'} gap-3 sm:gap-0 text-xs sm:text-sm text-gray-600`}>
+                  <p className="text-sm sm:text-base text-gray-700 dark:text-gray-300 mb-4 leading-relaxed">{project.description}</p>
+                    <div className={`flex ${isMobile ? 'flex-col' : 'items-center justify-between'} gap-3 sm:gap-0 text-xs sm:text-sm text-gray-600 dark:text-gray-400`}>
                     <div className={`flex ${isMobile ? 'flex-col' : 'items-center'} ${isMobile ? 'gap-2' : 'space-x-6'}`}>
                       <div className="flex items-center">
-                        <Clock className="h-4 w-4 sm:h-5 sm:w-5 mr-2 text-blue-600" />
-                        <span className="font-medium">{t('project.hoursLogged', { hours: String(projectHours[project.id] || 0) })}</span>
+                        <Clock className="h-4 w-4 sm:h-5 sm:w-5 mr-2 text-blue-600 dark:text-blue-400" />
+                        <span className="font-medium text-gray-900 dark:text-gray-100">{t('project.hoursLogged', { hours: String(projectHours[project.id] || 0) })}</span>
                       </div>
                       <div className="flex items-center">
-                        <Users className="h-4 w-4 sm:h-5 sm:w-5 mr-2 text-blue-600" />
-                        <span className="font-medium">{t('project.members')}</span>
+                        <Users className="h-4 w-4 sm:h-5 sm:w-5 mr-2 text-blue-600 dark:text-blue-400" />
+                        <span className="font-medium text-gray-900 dark:text-gray-100">{t('project.members')}</span>
                       </div>
                     </div>
                     <div className={`flex ${isMobile ? 'flex-col' : 'items-center'} ${isMobile ? 'gap-2' : 'gap-2'} w-full ${isMobile ? '' : 'w-auto'}`}>
                       <Dialog open={modalOpen && modalProject?.id === project.id} onOpenChange={setModalOpen}>
                         <DialogTrigger asChild>
-                          <Button variant="outline" size={isMobile ? "sm" : "sm"} className={`${isMobile ? 'w-full' : ''} border-blue-200 text-blue-700 hover:bg-blue-50 h-9 sm:h-8`} onClick={() => handleViewDetails(project)}>
+                          <Button variant="outline" size={isMobile ? "sm" : "sm"} className={`${isMobile ? 'w-full' : ''} border-blue-200 dark:border-blue-700 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/40 h-9 sm:h-8`} onClick={() => handleViewDetails(project)}>
                             {t('project.viewDetails')}
                           </Button>
                         </DialogTrigger>
@@ -365,18 +527,26 @@ const ProjectManagement = ({ currentUser }: ProjectManagementProps) => {
                           </DialogHeader>
                           <div className="space-y-4 mt-4">
                             {modalEntries.length === 0 ? (
-                              <div className="text-gray-500">{t('project.noEntries')}</div>
+                              <div className="text-gray-500 dark:text-gray-400">{t('project.noEntries')}</div>
                             ) : (
                               modalEntries.map((entry, idx) => (
-                                <div key={idx} className="border-l-4 border-blue-400 pl-4 py-2">
+                                <div key={entry.id || idx} className="border-l-4 border-blue-400 dark:border-blue-600 pl-4 py-2">
                                   <div className="flex justify-between items-start">
                                     <div>
-                                      <div className="font-medium text-gray-900">{entry.user_id || "Unknown User"}</div>
-                                      <div className="text-sm text-gray-600">{entry.description}</div>
+                                      <div className="font-medium text-gray-900 dark:text-gray-100">
+                                        {entry.users?.name || entry.users?.email || "Unknown User"}
+                                      </div>
+                                      <div className="text-sm text-gray-600 dark:text-gray-400">
+                                        {entry.date} {entry.startTime && entry.endTime && `(${entry.startTime} - ${entry.endTime})`}
+                                      </div>
+                                      {entry.description && (
+                                        <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                          Work Type: {entry.description}
+                                        </div>
+                                      )}
                                     </div>
                                     <div className="text-right">
-                                      <div className="font-medium text-blue-600">{entry.hours}h</div>
-                                      <div className="text-xs text-gray-500">{entry.date}</div>
+                                      <div className="font-medium text-blue-600 dark:text-blue-400">{entry.hours}h</div>
                                     </div>
                                   </div>
                                 </div>
@@ -394,8 +564,8 @@ const ProjectManagement = ({ currentUser }: ProjectManagementProps) => {
                             variant="outline" 
                             size={isMobile ? "sm" : "sm"} 
                             className={`${isMobile ? 'w-full' : ''} ${project.status === "closed" 
-                              ? "border-green-200 text-green-700 hover:bg-green-50" 
-                              : "border-orange-200 text-orange-700 hover:bg-orange-50"
+                              ? "border-green-200 dark:border-green-700 text-green-700 dark:text-green-300 hover:bg-green-50 dark:hover:bg-green-900/40" 
+                              : "border-orange-200 dark:border-orange-700 text-orange-700 dark:text-orange-300 hover:bg-orange-50 dark:hover:bg-orange-900/40"
                             } h-9 sm:h-8`} 
                             onClick={() => handleCloseProject(project)}
                             title={project.status === "closed" ? "Reopen project" : "Close project"}
@@ -415,7 +585,7 @@ const ProjectManagement = ({ currentUser }: ProjectManagementProps) => {
                           <Button 
                             variant="outline" 
                             size={isMobile ? "sm" : "sm"} 
-                            className={`${isMobile ? 'w-full' : ''} border-red-200 text-red-700 hover:bg-red-50 h-9 sm:h-8`} 
+                            className={`${isMobile ? 'w-full' : ''} border-red-200 dark:border-red-700 text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/40 h-9 sm:h-8`} 
                             onClick={() => openDeleteConfirm(project)}
                           >
                           <Trash2 className="h-4 w-4 mr-1" />
@@ -449,8 +619,8 @@ const ProjectManagement = ({ currentUser }: ProjectManagementProps) => {
                 </div>
               </DialogContent>
             </Dialog>
-            <div className="mt-6 sm:mt-8 p-4 sm:p-6 bg-blue-50 rounded-xl text-xs sm:text-sm text-blue-800 border border-blue-200">
-              <strong className="text-blue-900">Note:</strong> Connect to Supabase to persist project data and enable team collaboration features.
+            <div className="mt-6 sm:mt-8 p-4 sm:p-6 bg-blue-50 dark:bg-blue-900/30 rounded-xl text-xs sm:text-sm text-blue-800 dark:text-blue-200 border border-blue-200 dark:border-blue-800">
+              <strong className="text-blue-900 dark:text-blue-100">Note:</strong> Connect to Supabase to persist project data and enable team collaboration features.
             </div>
           </CardContent>
         </Card>

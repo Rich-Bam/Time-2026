@@ -16,7 +16,7 @@ export default defineConfig(({ mode }) => ({
     componentTagger(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['bampro-marine-logo.jpg', 'favicon.ico'],
+      includeAssets: ['Bampro_Logo_klein.png', 'favicon.ico'],
       manifest: {
         name: 'BAMPRO MARINE - Urenregistratie',
         short_name: 'BAMPRO Uren',
@@ -29,15 +29,15 @@ export default defineConfig(({ mode }) => ({
         start_url: '/',
         icons: [
           {
-            src: '/bampro-marine-logo.jpg',
+            src: '/Bampro_Logo_klein.png',
             sizes: '192x192',
-            type: 'image/jpeg',
+            type: 'image/png',
             purpose: 'any maskable'
           },
           {
-            src: '/bampro-marine-logo.jpg',
+            src: '/Bampro_Logo_klein.png',
             sizes: '512x512',
-            type: 'image/jpeg',
+            type: 'image/png',
             purpose: 'any maskable'
           }
         ],
@@ -47,7 +47,7 @@ export default defineConfig(({ mode }) => ({
             short_name: 'Weekly',
             description: 'Open Weekly Entry',
             url: '/?tab=weekly',
-            icons: [{ src: '/bampro-marine-logo.jpg', sizes: '96x96' }]
+            icons: [{ src: '/Bampro_Logo_klein.png', sizes: '96x96' }]
           }
         ]
       },

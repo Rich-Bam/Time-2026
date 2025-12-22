@@ -29,6 +29,7 @@ const workTypes = [
   { value: 38, label: "Public Holiday" },
   { value: 39, label: "Time Off in Lieu (ADV)" },
   { value: 40, label: "Taken Time-for-Time (TFT)" },
+  { value: 100, label: "Remote" },
 ];
 
 function getWeekDates(date: Date) {
@@ -60,7 +61,7 @@ const WeeklyDayListEntry = ({ currentUser }: { currentUser: any }) => {
 
   const handleAddEntry = (dayIdx: number) => {
     setDays(days.map((day, i) =>
-      i === dayIdx ? { ...day, entries: [...day.entries, { workType: "", project: "", hours: "", lunch: false }] } : day
+      i === dayIdx ? { ...day, entries: [...day.entries, { workType: "", project: "", hours: "" }] } : day
     ));
   };
 
@@ -116,10 +117,6 @@ const WeeklyDayListEntry = ({ currentUser }: { currentUser: any }) => {
                   <div>
                     <Label>Hours</Label>
                     <Input type="number" min="0" step="0.25" value={entry.hours} onChange={e => handleEntryChange(dayIdx, entryIdx, "hours", e.target.value)} placeholder="h" />
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <input type="checkbox" id={`lunch-${dayIdx}-${entryIdx}`} checked={entry.lunch} onChange={e => handleEntryChange(dayIdx, entryIdx, "lunch", e.target.checked)} />
-                    <Label htmlFor={`lunch-${dayIdx}-${entryIdx}`}>Lunch</Label>
                   </div>
                   <Button variant="destructive" size="sm" onClick={() => handleRemoveEntry(dayIdx, entryIdx)}>-</Button>
                 </div>

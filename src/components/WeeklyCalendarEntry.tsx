@@ -37,6 +37,7 @@ const workTypes = [
   { value: 38, label: "Public Holiday" },
   { value: 39, label: "Time Off in Lieu (ADV)" },
   { value: 40, label: "Taken Time-for-Time (TFT)" },
+  { value: 100, label: "Remote" },
 ];
 
 // Helper function to check if a work type doesn't require a project
@@ -83,7 +84,7 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
     now.setHours(0, 0, 0, 0);
     return getWeekDates(now)[0];
   });
-  const [days, setDays] = useState(() => getWeekDates(new Date()).map(date => ({ date, entries: [{ workType: "", project: "", hours: "", lunch: true, startTime: "", endTime: "" }], open: true }))); // Default open for better overview
+  const [days, setDays] = useState(() => getWeekDates(new Date()).map(date => ({ date, entries: [{ workType: "", project: "", hours: "", startTime: "", endTime: "" }], open: true }))); // Default open for better overview
   const [viewMode, setViewMode] = useState<"cards" | "overview">("cards"); // View mode: cards (current) or overview (week table)
   const [projects, setProjects] = useState<{ id: number; name: string }[]>([]);
   const { toast } = useToast();
@@ -216,7 +217,7 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
       ...day,
       entries: day.entries.length > 0 
         ? day.entries 
-        : [{ workType: "", project: "", hours: "", lunch: true, startTime: "", endTime: "" }]
+        : [{ workType: "", project: "", hours: "", startTime: "", endTime: "" }]
     })));
   }, [weekStart]);
 
@@ -224,7 +225,7 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
     const newStart = new Date(weekStart);
     newStart.setDate(newStart.getDate() + delta * 7);
     setWeekStart(getWeekDates(newStart)[0]);
-    setDays(getWeekDates(newStart).map(date => ({ date, entries: [{ workType: "", project: "", hours: "", lunch: true, startTime: "", endTime: "" }], open: false })));
+    setDays(getWeekDates(newStart).map(date => ({ date, entries: [{ workType: "", project: "", hours: "", startTime: "", endTime: "" }], open: false })));
   };
 
   const handleOpenDay = (dayIdx: number) => {
@@ -239,14 +240,14 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
         open: true,
         entries: hasEntries
           ? day.entries
-          : [{ workType: "", project: "", hours: "", lunch: true, startTime: "", endTime: "" }],
+          : [{ workType: "", project: "", hours: "", startTime: "", endTime: "" }],
       };
     }));
   };
 
   const handleAddEntry = (dayIdx: number) => {
     setDays(days.map((day, i) =>
-      i === dayIdx ? { ...day, entries: [...day.entries, { workType: "", project: "", hours: "", lunch: true, startTime: "", endTime: "" }] } : day
+      i === dayIdx ? { ...day, entries: [...day.entries, { workType: "", project: "", hours: "", startTime: "", endTime: "" }] } : day
     ));
   };
 
@@ -265,25 +266,13 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
       // Ensure entries array exists and has at least one entry
       const currentEntries = day.entries.length > 0 
         ? day.entries 
-        : [{ workType: "", project: "", hours: "", lunch: true, startTime: "", endTime: "" }];
+        : [{ workType: "", project: "", hours: "", startTime: "", endTime: "" }];
       
       return {
         ...day,
         entries: currentEntries.map((entry, j) => {
           if (j !== entryIdx) return entry;
           let updated = { ...entry, [field]: value };
-          
-          // Warn when lunch checkbox is toggled and hours would become 0
-          if (field === "lunch" && value === true && updated.hours) {
-            const hoursAfterLunch = Math.max(0, Number(updated.hours) - 0.5);
-            if (hoursAfterLunch === 0) {
-              toast({
-                title: "Warning: Lunch Deduction",
-                description: "Lunch will reduce hours to 0. Consider using work type 35 (Break) instead for flexible break times.",
-                variant: "default",
-              });
-            }
-          }
           
           // Auto-calculate hours if startTime and endTime are set and field is startTime or endTime
           if ((field === "startTime" || field === "endTime") && updated.startTime && updated.endTime) {
@@ -420,8 +409,7 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
           const end = new Date(`2000-01-01T${entry.endTime}`);
           const calculatedHours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
           const enteredHours = Number(entry.hours);
-          const lunchDeduction = entry.lunch && !isDayOff ? 0.5 : 0;
-          const expectedHours = Math.max(0, calculatedHours - lunchDeduction);
+          const expectedHours = calculatedHours;
           
           // Allow small difference (0.25 hours = 15 minutes tolerance)
           if (Math.abs(enteredHours - expectedHours) > 0.25) {
@@ -435,9 +423,6 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
         }
         
         let hoursToSave = Number(entry.hours);
-        if (entry.lunch && !isDayOff) {
-          hoursToSave = Math.max(0, hoursToSave - 0.5);
-        }
         
         entriesToSave.push({
           project: isDayOff ? null : entry.project,
@@ -777,7 +762,6 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
       hours: entry.hours?.toString() || "",
       startTime: entry.startTime || "",
       endTime: entry.endTime || "",
-      lunch: false, // Default, can be adjusted if needed
       id: entry.id // Keep the ID to track which entry is being edited
     };
     
@@ -925,8 +909,7 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
           project: e.project || "",
           hours: e.hours?.toString() || "",
           startTime: e.startTime || "",
-          endTime: e.endTime || "",
-          lunch: false
+          endTime: e.endTime || ""
         }))
     ];
     
@@ -1017,14 +1000,8 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
         const start = new Date(`2000-01-01T${entry.startTime}`);
         const end = new Date(`2000-01-01T${entry.endTime}`);
         hoursToSave = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
-        if (entry.lunch && !isDayOff) {
-          hoursToSave = Math.max(0, hoursToSave - 0.5);
-        }
       } else if (entry.hours) {
         hoursToSave = Number(entry.hours);
-        if (entry.lunch && !isDayOff) {
-          hoursToSave = Math.max(0, hoursToSave - 0.5);
-        }
       }
       
       // For day off (31), hours can be 0, but for other types we need valid hours
@@ -1230,7 +1207,7 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold">{t('weekly.title')}</h2>
-          <div className="mt-1 text-gray-700 font-medium">
+          <div className="mt-1 text-gray-700 dark:text-gray-300 font-medium">
             {t('weekly.week')} {weekNumber} ({weekDates[0].toLocaleDateString()} - {weekDates[6].toLocaleDateString()})
           </div>
           <div className="flex items-center gap-4 mt-2">
@@ -1242,13 +1219,13 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
             </Button>
           </div>
         </div>
-        <Card className="bg-blue-50 border-blue-200 min-w-[260px]">
+        <Card className="bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-800 min-w-[260px]">
           <CardHeader>
-            <CardTitle className="text-blue-900 text-lg">{t('weekly.daysOffRemaining')}</CardTitle>
+            <CardTitle className="text-blue-900 dark:text-blue-100 text-lg">{t('weekly.daysOffRemaining')}</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-blue-700">{daysOffLeft} / {totalDaysOff}</div>
-            <div className="text-sm text-blue-600 mt-2">{t('weekly.daysOffLeft', { days: daysOffLeft })}</div>
+            <div className="text-3xl font-bold text-blue-700 dark:text-blue-300">{daysOffLeft} / {totalDaysOff}</div>
+            <div className="text-sm text-blue-600 dark:text-blue-400 mt-2">{t('weekly.daysOffLeft', { days: daysOffLeft })}</div>
           </CardContent>
         </Card>
       </div>
@@ -1263,12 +1240,12 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
                 return (
                   <div 
                     key={dayIdx} 
-                    className={`border rounded-lg p-2 cursor-pointer transition-colors ${day.open ? 'bg-orange-100 border-orange-300' : 'bg-gray-50 hover:bg-gray-100'}`} 
+                    className={`border rounded-lg p-2 cursor-pointer transition-colors ${day.open ? 'bg-orange-100 dark:bg-orange-900/30 border-orange-300 dark:border-orange-700' : 'bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700'}`} 
                     onClick={() => handleOpenDay(dayIdx)}
                   >
                     <div className="font-semibold text-center text-sm">{day.date.toLocaleDateString(undefined, { weekday: 'short' })}</div>
                     <div className="font-medium text-center text-xs">{day.date.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}</div>
-                    <div className="text-xs text-center text-gray-500 mt-1">{totalEntries} {totalEntries === 1 ? t('weekly.entry') : t('weekly.entries')}</div>
+                    <div className="text-xs text-center text-gray-500 dark:text-gray-400 mt-1">{totalEntries} {totalEntries === 1 ? t('weekly.entry') : t('weekly.entries')}</div>
                   </div>
                 );
               })}
@@ -1295,14 +1272,13 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
             <div className="overflow-x-auto">
               <table className="min-w-full border-collapse">
                 <thead>
-                  <tr className="bg-gray-100">
-                    <th className="border p-2 text-left sticky left-0 bg-gray-100 z-10 min-w-[120px]">{t('weekly.day')}</th>
+                  <tr className="bg-gray-100 dark:bg-gray-800">
+                    <th className="border p-2 text-left sticky left-0 bg-gray-100 dark:bg-gray-800 z-10 min-w-[120px]">{t('weekly.day')}</th>
                     <th className="border p-2 text-left min-w-[100px]">{t('weekly.workType')}</th>
                     <th className="border p-2 text-left min-w-[150px]">{t('weekly.project')}</th>
                     <th className="border p-2 text-left min-w-[80px]">{t('weekly.van')}</th>
                     <th className="border p-2 text-left min-w-[80px]">{t('weekly.tot')}</th>
                     <th className="border p-2 text-left min-w-[80px]">{t('weekly.hours')}</th>
-                    <th className="border p-2 text-center min-w-[60px]">{t('weekly.lunch')}</th>
                     <th className="border p-2 text-center min-w-[50px]">{t('weekly.actions')}</th>
                   </tr>
                 </thead>
@@ -1323,7 +1299,6 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
                         hours: s.hours, 
                         startTime: s.startTime, 
                         endTime: s.endTime,
-                        lunch: false,
                         isSubmitted: true 
                       }))
                     ];
@@ -1331,16 +1306,16 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
                     // Ensure at least one empty entry for editing
                     const editableEntries = day.entries.length > 0 
                       ? day.entries 
-                      : [{ workType: "", project: "", hours: "", lunch: true, startTime: "", endTime: "" }];
+                      : [{ workType: "", project: "", hours: "", startTime: "", endTime: "" }];
 
                     return editableEntries.map((entry, entryIdx) => {
                       const isFirstEntry = entryIdx === 0;
                       const rowSpan = isFirstEntry ? editableEntries.length : 0;
                       
                       return (
-                        <tr key={`${dayIdx}-${entryIdx}`} className="border-t hover:bg-gray-50">
+                        <tr key={`${dayIdx}-${entryIdx}`} className="border-t hover:bg-gray-50 dark:hover:bg-gray-800">
                           {isFirstEntry && (
-                            <td rowSpan={rowSpan} className="border p-2 sticky left-0 bg-white font-medium align-top">
+                            <td rowSpan={rowSpan} className="border p-2 sticky left-0 bg-white dark:bg-gray-900 font-medium align-top">
                               {dayName}
                               <div className="mt-2 space-y-1">
                                 <Button 
@@ -1360,7 +1335,7 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
                                     onClick={() => handleCopyFromPreviousDay(dayIdx)}
                                     disabled={isLocked}
                                   >
-                                    Copy Previous
+                                    {t('weekly.copyPrevious')}
                                   </Button>
                                 )}
                               </div>
@@ -1393,7 +1368,7 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
                               <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
                                 <Command>
                                   <CommandInput
-                                    placeholder="Search work type..."
+                                    placeholder={t('weekly.searchWorkType')}
                                     value={workTypeSearchValues[`${dayIdx}-${entryIdx}`] || ""}
                                     onValueChange={(value) => {
                                       const key = `${dayIdx}-${entryIdx}`;
@@ -1401,7 +1376,7 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
                                     }}
                                   />
                                   <CommandList>
-                                    <CommandEmpty>No work type found.</CommandEmpty>
+                                    <CommandEmpty>{t('weekly.noWorkTypeFound')}</CommandEmpty>
                                     <CommandGroup>
                                       {workTypes
                                         .filter(type =>
@@ -1482,15 +1457,6 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
                             />
                           </td>
                           <td className="border p-1 text-center">
-                            <input
-                              type="checkbox"
-                              checked={entry.lunch || false}
-                              onChange={e => handleEntryChange(dayIdx, entryIdx, "lunch", e.target.checked)}
-                              className="h-4 w-4"
-                              disabled={isLocked}
-                            />
-                          </td>
-                          <td className="border p-1 text-center">
                             <div className="flex gap-1 justify-center">
                               <Button 
                                 variant="outline" 
@@ -1555,7 +1521,7 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
                                 variant="ghost" 
                                 className="h-7 w-7"
                                 onClick={() => handleEditEntry(submittedEntry, dateStr)}
-                                title="Edit entry"
+                                title={t('common.edit')}
                               >
                                 <svg className="h-3 w-3 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -1630,7 +1596,7 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
                       <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
                         <Command>
                           <CommandInput
-                            placeholder="Search work type..."
+                            placeholder={t('weekly.searchWorkType')}
                             value={workTypeSearchValues[`${dayIdx}-${entryIdx}`] || ""}
                             onValueChange={(value) => {
                               const key = `${dayIdx}-${entryIdx}`;
@@ -1759,19 +1725,6 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
                       disabled={confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin}
                     />
                   </div>
-                  <div className="flex items-center ml-2">
-                    <input
-                      id={`lunch-${dayIdx}-${entryIdx}`}
-                      type="checkbox"
-                      checked={entry.lunch}
-                      onChange={e => handleEntryChange(dayIdx, entryIdx, "lunch", e.target.checked)}
-                      className="h-4 w-4 text-orange-600 border-gray-300 rounded focus:ring-orange-500"
-                      disabled={confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin}
-                    />
-                    <label htmlFor={`lunch-${dayIdx}-${entryIdx}`} className="ml-1 text-xs text-gray-700 select-none">
-                      {t('weekly.lunch')}
-                    </label>
-                  </div>
                   <Button 
                     variant="destructive" 
                     size="sm" 
@@ -1828,7 +1781,7 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
                                     size="icon" 
                                     variant="ghost" 
                                     onClick={() => handleEditEntry(entry, day.date.toISOString().split('T')[0])}
-                                    title="Edit entry"
+                                    title={t('common.edit')}
                                   >
                                     <svg className="h-4 w-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />

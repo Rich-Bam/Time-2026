@@ -19,6 +19,7 @@ import BugReports from "@/components/BugReports";
 import InstallPWA from "@/components/InstallPWA";
 import Profile from "@/components/Profile";
 import LanguageSelector from "@/components/LanguageSelector";
+import ThemeToggle from "@/components/ThemeToggle";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -609,6 +610,7 @@ const Index = () => {
       { value: 38, label: "Public Holiday" },
       { value: 39, label: "Time Off in Lieu (ADV)" },
       { value: 40, label: "Taken Time-for-Time (TFT)" },
+      { value: 100, label: "Remote" },
     ];
     const workType = workTypes.find(wt => String(wt.value) === String(desc));
     return workType ? `${workType.value} - ${workType.label}` : desc;
@@ -1262,11 +1264,12 @@ const Index = () => {
 
   if (!isLoggedIn) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-orange-100">
-        <div className="container mx-auto px-4 py-12">
-          <div className="flex justify-end mb-4">
-            <LanguageSelector />
-          </div>
+    <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-orange-100 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
+          <div className="container mx-auto px-4 py-12">
+            <div className="flex justify-end gap-2 mb-4">
+              <ThemeToggle />
+              <LanguageSelector />
+            </div>
           <div className="text-center mb-12">
             <div className="flex items-center justify-center mb-6">
               <img 
@@ -1315,7 +1318,7 @@ const Index = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-orange-100">
+    <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-orange-100 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
       {/* Reminder Dialog for Users */}
       <Dialog open={showReminderDialog} onOpenChange={setShowReminderDialog}>
         <DialogContent className="max-w-md">
@@ -1349,7 +1352,7 @@ const Index = () => {
         </DialogContent>
       </Dialog>
       {/* Header */}
-      <header className="bg-white shadow-lg border-b border-orange-100">
+      <header className="bg-white dark:bg-gray-800 shadow-lg border-b border-orange-100 dark:border-gray-700">
         <div className="container mx-auto px-3 sm:px-4 md:px-6 py-3 sm:py-4 md:py-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 sm:gap-4">
             <div className="flex flex-col md:flex-row md:items-center gap-2 sm:gap-3 md:gap-12">
@@ -1366,28 +1369,28 @@ const Index = () => {
               </button>
               <nav className="flex flex-wrap md:flex-nowrap items-center gap-1.5 sm:gap-2 md:gap-4 lg:gap-8 justify-center md:justify-start">
                 <button
-                  className={`text-sm sm:text-base md:text-lg font-medium px-2 sm:px-3 py-1.5 sm:py-1 rounded transition-colors ${activeTab === 'weekly' ? 'bg-orange-600 text-white' : 'text-orange-700 hover:bg-orange-50'}`}
+                  className={`text-sm sm:text-base md:text-lg font-medium px-2 sm:px-3 py-1.5 sm:py-1 rounded transition-colors ${activeTab === 'weekly' ? 'bg-orange-600 text-white dark:bg-orange-500' : 'text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-700'}`}
                   onClick={() => setActiveTab('weekly')}
                 >
                   {t('nav.weekly')}
                 </button>
                 {currentUser?.isAdmin && (
                   <button
-                    className={`text-sm sm:text-base md:text-lg font-medium px-2 sm:px-3 py-1.5 sm:py-1 rounded transition-colors ${activeTab === 'projects' ? 'bg-orange-600 text-white' : 'text-orange-700 hover:bg-orange-50'}`}
+                    className={`text-sm sm:text-base md:text-lg font-medium px-2 sm:px-3 py-1.5 sm:py-1 rounded transition-colors ${activeTab === 'projects' ? 'bg-orange-600 text-white dark:bg-orange-500' : 'text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-700'}`}
                     onClick={() => setActiveTab('projects')}
                   >
                     {t('nav.projects')}
                   </button>
                 )}
                 <button
-                  className={`text-sm sm:text-base md:text-lg font-medium px-2 sm:px-3 py-1.5 sm:py-1 rounded transition-colors ${activeTab === 'export' ? 'bg-orange-600 text-white' : 'text-orange-700 hover:bg-orange-50'}`}
+                  className={`text-sm sm:text-base md:text-lg font-medium px-2 sm:px-3 py-1.5 sm:py-1 rounded transition-colors ${activeTab === 'export' ? 'bg-orange-600 text-white dark:bg-orange-500' : 'text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-700'}`}
                   onClick={() => setActiveTab('export')}
                 >
                   {t('nav.export')}
                 </button>
                 {currentUser?.isAdmin && (
                   <button
-                    className={`text-sm sm:text-base md:text-lg font-medium px-2 sm:px-3 py-1.5 sm:py-1 rounded transition-colors ${activeTab === 'admin' ? 'bg-orange-600 text-white' : 'text-orange-700 hover:bg-orange-50'}`}
+                    className={`text-sm sm:text-base md:text-lg font-medium px-2 sm:px-3 py-1.5 sm:py-1 rounded transition-colors ${activeTab === 'admin' ? 'bg-orange-600 text-white dark:bg-orange-500' : 'text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-700'}`}
                     onClick={() => setActiveTab('admin')}
                   >
                     {t('nav.admin')}
@@ -1395,14 +1398,14 @@ const Index = () => {
                 )}
                 {currentUser?.email === SUPER_ADMIN_EMAIL && (
                   <button
-                    className={`text-sm sm:text-base md:text-lg font-medium px-2 sm:px-3 py-1.5 sm:py-1 rounded transition-colors ${activeTab === 'bugreports' ? 'bg-orange-600 text-white' : 'text-orange-700 hover:bg-orange-50'}`}
+                    className={`text-sm sm:text-base md:text-lg font-medium px-2 sm:px-3 py-1.5 sm:py-1 rounded transition-colors ${activeTab === 'bugreports' ? 'bg-orange-600 text-white dark:bg-orange-500' : 'text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-700'}`}
                     onClick={() => setActiveTab('bugreports')}
                   >
                     {t('nav.reportBug')}
                   </button>
                 )}
                 <button
-                  className={`text-sm sm:text-base md:text-lg font-medium px-2 sm:px-3 py-1.5 sm:py-1 rounded transition-colors ${activeTab === 'overview' ? 'bg-orange-600 text-white' : 'text-orange-700 hover:bg-orange-50'}`}
+                  className={`text-sm sm:text-base md:text-lg font-medium px-2 sm:px-3 py-1.5 sm:py-1 rounded transition-colors ${activeTab === 'overview' ? 'bg-orange-600 text-white dark:bg-orange-500' : 'text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-700'}`}
                   onClick={() => setActiveTab('overview')}
                 >
                   {t('nav.overview')}
@@ -1410,11 +1413,12 @@ const Index = () => {
               </nav>
             </div>
             <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-3 md:gap-6 justify-center md:justify-end">
+              <ThemeToggle />
               <LanguageSelector />
               {currentUser && (
                 <button
                   onClick={() => setActiveTab('profile')}
-                  className="text-xs sm:text-sm md:text-base text-gray-700 font-medium text-center sm:text-left hover:text-orange-600 transition-colors cursor-pointer underline decoration-1 hover:decoration-2"
+                  className="text-xs sm:text-sm md:text-base text-gray-700 dark:text-gray-300 font-medium text-center sm:text-left hover:text-orange-600 dark:hover:text-orange-400 transition-colors cursor-pointer underline decoration-1 hover:decoration-2"
                   title="Click to view and edit your profile"
                 >
                   {t('nav.welcome')}, {currentUser?.name || "User"}
@@ -1437,7 +1441,7 @@ const Index = () => {
                     description: "You have been successfully logged out.",
                   });
                 }}
-                className="border-orange-200 text-orange-700 hover:bg-orange-50 h-9 sm:h-8 text-xs sm:text-sm w-full sm:w-auto"
+                className="border-orange-200 dark:border-orange-700 text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-700 h-9 sm:h-8 text-xs sm:text-sm w-full sm:w-auto"
               >
                 {t('nav.logout')}
               </Button>
@@ -1497,7 +1501,7 @@ const Index = () => {
                 <Download className="h-6 w-6 mr-3" />
                 {t('export.title')}
               </CardTitle>
-              <CardDescription className="text-orange-700">
+              <CardDescription className="text-orange-700 dark:text-orange-300">
                 {t('export.description')}
               </CardDescription>
             </CardHeader>
@@ -1506,12 +1510,12 @@ const Index = () => {
                 // Admin export options
                 <div className="space-y-6">
                   {/* User Selection Dropdown */}
-                  <div className="bg-orange-50 p-4 rounded-lg border border-orange-200">
-                    <label className="block text-sm font-medium text-orange-900 mb-2">
+                  <div className="bg-orange-50 dark:bg-orange-900/30 p-4 rounded-lg border border-orange-200 dark:border-orange-800">
+                    <label className="block text-sm font-medium text-orange-900 dark:text-orange-100 mb-2">
                       {t('export.selectUser')}
                     </label>
                     <Select value={selectedUserId || "all"} onValueChange={(value) => setSelectedUserId(value === "all" ? "" : value)}>
-                      <SelectTrigger className="w-full bg-white">
+                      <SelectTrigger className="w-full bg-white dark:bg-gray-800">
                         <SelectValue placeholder={t('export.allUsers')} />
                       </SelectTrigger>
                       <SelectContent>
@@ -1523,7 +1527,7 @@ const Index = () => {
                         ))}
                       </SelectContent>
                     </Select>
-                    <p className="text-xs text-orange-700 mt-2">
+                    <p className="text-xs text-orange-700 dark:text-orange-300 mt-2">
                       {t('export.selectUserHelp')}
                     </p>
                   </div>
@@ -1554,17 +1558,17 @@ const Index = () => {
                         type="date" 
                         value={dateRange.from} 
                         onChange={e => setDateRange({ ...dateRange, from: e.target.value })} 
-                        className="mb-2 border rounded px-2 py-1 w-full" 
+                        className="mb-2 border rounded px-2 py-1 w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100" 
                       />
                       <input 
                         type="date" 
                         value={dateRange.to} 
                         onChange={e => setDateRange({ ...dateRange, to: e.target.value })} 
-                        className="mb-2 border rounded px-2 py-1 w-full" 
+                        className="mb-2 border rounded px-2 py-1 w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100" 
                       />
                       <Button 
                         variant="outline" 
-                        className="h-16 w-full flex flex-col items-center justify-center border-orange-200 text-orange-700 hover:bg-orange-50 shadow-lg rounded-lg transition-all" 
+                        className="h-16 w-full flex flex-col items-center justify-center border-orange-200 dark:border-orange-700 text-orange-700 dark:text-orange-300 hover:bg-orange-50 dark:hover:bg-orange-900/40 shadow-lg rounded-lg transition-all" 
                         onClick={handleExportRange} 
                         disabled={exporting}
                       >
@@ -1582,7 +1586,7 @@ const Index = () => {
                           placeholder={t('export.weekPlaceholder')} 
                           value={selectedWeekNumber} 
                           onChange={e => setSelectedWeekNumber(e.target.value)} 
-                          className="flex-1 border rounded px-2 py-1 text-center" 
+                          className="flex-1 border rounded px-2 py-1 text-center bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100" 
                         />
                         <input 
                           type="number" 
@@ -1591,13 +1595,13 @@ const Index = () => {
                           placeholder={t('export.yearPlaceholder')} 
                           value={selectedYear} 
                           onChange={e => setSelectedYear(e.target.value)} 
-                          className="flex-1 border rounded px-2 py-1 text-center" 
+                          className="flex-1 border rounded px-2 py-1 text-center bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100" 
                         />
                       </div>
                       <div className="flex flex-col gap-2 w-full">
                         <Button 
                           variant="outline" 
-                          className="h-14 w-full flex flex-col items-center justify-center border-orange-200 text-orange-700 hover:bg-orange-50 shadow-lg rounded-lg transition-all" 
+                          className="h-14 w-full flex flex-col items-center justify-center border-orange-200 dark:border-orange-700 text-orange-700 dark:text-orange-300 hover:bg-orange-50 dark:hover:bg-orange-900/40 shadow-lg rounded-lg transition-all" 
                           onClick={handleExportWeekNumber} 
                           disabled={exporting || !selectedWeekNumber || !selectedYear}
                         >
@@ -1606,7 +1610,7 @@ const Index = () => {
                         </Button>
                         <Button 
                           variant="outline" 
-                          className="h-14 w-full flex flex-col items-center justify-center border-red-200 text-red-700 hover:bg-red-50 shadow-lg rounded-lg transition-all" 
+                          className="h-14 w-full flex flex-col items-center justify-center border-red-200 dark:border-red-700 text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/40 shadow-lg rounded-lg transition-all" 
                           onClick={handleExportWeekNumberPDF} 
                           disabled={exporting || !selectedWeekNumber || !selectedYear}
                         >
@@ -1619,7 +1623,7 @@ const Index = () => {
                     <div className="flex flex-col gap-2">
                       <Button 
                         variant="outline" 
-                        className="h-20 flex flex-col items-center justify-center border-orange-200 text-orange-700 hover:bg-orange-50 shadow-lg rounded-lg transition-all" 
+                        className="h-20 flex flex-col items-center justify-center border-orange-200 dark:border-orange-700 text-orange-700 dark:text-orange-300 hover:bg-orange-50 dark:hover:bg-orange-900/40 shadow-lg rounded-lg transition-all" 
                         onClick={handleExportUser} 
                         disabled={exporting || !selectedUserId || selectedUserId === "all"}
                       >
@@ -1628,7 +1632,7 @@ const Index = () => {
                       </Button>
                       <Button 
                         variant="outline" 
-                        className="h-20 flex flex-col items-center justify-center border-red-200 text-red-700 hover:bg-red-50 shadow-lg rounded-lg transition-all" 
+                        className="h-20 flex flex-col items-center justify-center border-red-200 dark:border-red-700 text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/40 shadow-lg rounded-lg transition-all" 
                         onClick={handleExportUserPDF} 
                         disabled={exporting || !selectedUserId || selectedUserId === "all"}
                       >
@@ -1643,7 +1647,7 @@ const Index = () => {
                 <div className="space-y-4">
                   <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
                     <div className="flex-1">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">{t('export.selectPeriod')}</label>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('export.selectPeriod')}</label>
                       <Select value={exportPeriod} onValueChange={(value: "day" | "week" | "month" | "year") => setExportPeriod(value)}>
                         <SelectTrigger className="w-full">
                           <SelectValue />
@@ -1657,14 +1661,14 @@ const Index = () => {
                       </Select>
                     </div>
                     <div className="flex-1">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                         {exportPeriod === "day" ? t('export.selectDay') : exportPeriod === "week" ? t('export.selectWeek') : exportPeriod === "month" ? t('export.selectMonth') : t('export.selectYear')}
                       </label>
                       <input 
                         type="date" 
                         value={selectedDate} 
                         onChange={e => setSelectedDate(e.target.value)} 
-                        className="w-full border rounded px-3 py-2"
+                        className="w-full border rounded px-3 py-2 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
                       />
                     </div>
                   </div>
@@ -1692,8 +1696,8 @@ const Index = () => {
                   </div>
                 </div>
               )}
-              <div className="text-sm text-orange-800 bg-orange-50 p-6 rounded-lg border border-orange-200">
-                <strong className="text-orange-900">{t('export.note')}</strong> {currentUser?.isAdmin 
+              <div className="text-sm text-orange-800 dark:text-orange-200 bg-orange-50 dark:bg-orange-900/30 p-6 rounded-lg border border-orange-200 dark:border-orange-800">
+                <strong className="text-orange-900 dark:text-orange-100">{t('export.note')}</strong> {currentUser?.isAdmin 
                   ? t('export.adminNote')
                   : t('export.userNote')}
               </div>

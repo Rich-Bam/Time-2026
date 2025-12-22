@@ -285,3 +285,5 @@ Je hebt nu een **volledig functionele PWA** die:
 
 
 
+
+

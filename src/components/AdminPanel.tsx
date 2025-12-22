@@ -10,12 +10,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { User, Calendar } from "lucide-react";
 import { hashPassword } from "@/utils/password";
 import { Checkbox } from "@/components/ui/checkbox";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 interface AdminPanelProps {
   currentUser: any;
 }
 
 const AdminPanel = ({ currentUser }: AdminPanelProps) => {
+  const { t } = useLanguage();
   const { toast } = useToast();
   const isMobile = useIsMobile();
   const [users, setUsers] = useState<any[]>([]);
@@ -39,13 +41,24 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
   const [reminderWeekNumber, setReminderWeekNumber] = useState<string>("");
   const [reminderYear, setReminderYear] = useState<string>(new Date().getFullYear().toString());
   const [timebuzzerSyncing, setTimebuzzerSyncing] = useState(false);
+  // Helper function to get ISO week number
+  const getISOWeekNumber = (date: Date) => {
+    const tempDate = new Date(date.getTime());
+    tempDate.setHours(0, 0, 0, 0);
+    tempDate.setDate(tempDate.getDate() + 3 - ((tempDate.getDay() + 6) % 7));
+    const week1 = new Date(tempDate.getFullYear(), 0, 4);
+    return (
+      1 +
+      Math.round(
+        ((tempDate.getTime() - week1.getTime()) / 86400000 - 3 + ((week1.getDay() + 6) % 7)) / 7
+      )
+    );
+  };
+
   const [timebuzzerSyncWeekNumber, setTimebuzzerSyncWeekNumber] = useState<number>(() => {
-    // Get current ISO week number using the existing function
+    // Get current ISO week number
     const today = new Date();
-    const weekStr = getISOWeek(today.toISOString().split('T')[0]);
-    // Extract week number from format like "2025-W51"
-    const weekMatch = weekStr.match(/W(\d+)/);
-    return weekMatch ? parseInt(weekMatch[1]) : 1;
+    return getISOWeekNumber(today);
   });
   const [timebuzzerSyncYear, setTimebuzzerSyncYear] = useState<number>(new Date().getFullYear());
   const [timebuzzerTestResult, setTimebuzzerTestResult] = useState<any>(null);
@@ -53,6 +66,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
   const [selectedActivityIds, setSelectedActivityIds] = useState<Set<number>>(new Set());
   const [loadingActivities, setLoadingActivities] = useState(false);
   const [projects, setProjects] = useState<any[]>([]);
+  const [selectedTimebuzzerUserId, setSelectedTimebuzzerUserId] = useState<string>(""); // For testing Timebuzzer per user
   
   // Fetch projects for mapping
   useEffect(() => {
@@ -68,7 +82,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
   // Fetch users
   const fetchUsers = async () => {
     setLoading(true);
-    const { data, error } = await supabase.from("users").select("id, email, name, isAdmin, must_change_password, approved, can_use_timebuzzer");
+    const { data, error } = await supabase.from("users").select("id, email, name, isAdmin, must_change_password, approved, can_use_timebuzzer, timebuzzer_user_id");
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
@@ -145,7 +159,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
     fetchAllEntries();
   }, [users]);
 
-// Add user (with optional invite via Supabase Edge Function)
+  // Add user (with optional invite via Supabase Edge Function)
   const handleAddUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.email || !form.password) {
@@ -214,12 +228,12 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
 
       if (!error && data?.success) {
         console.log("✅ Edge Function success:", data);
-        toast({
+      toast({
           title: "Uitnodiging verstuurd",
           description: `Een uitnodigingsemail is verstuurd naar ${form.email}. Check je inbox (en spam folder) voor de uitnodigingslink.`,
-        });
-        setForm({ email: "", name: "", password: "", isAdmin: false, must_change_password: true });
-        fetchUsers();
+      });
+      setForm({ email: "", name: "", password: "", isAdmin: false, must_change_password: true });
+      fetchUsers();
         return;
       }
       
@@ -722,56 +736,56 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
   };
 
   return (
-    <div className="p-3 sm:p-4 md:p-8 bg-white rounded shadow w-full max-w-full">
-      <h2 className="text-xl sm:text-2xl font-bold mb-3 sm:mb-4">Admin Panel</h2>
+    <div className="p-3 sm:p-4 md:p-8 bg-white dark:bg-gray-800 rounded shadow w-full max-w-full">
+      <h2 className="text-xl sm:text-2xl font-bold mb-3 sm:mb-4 text-gray-900 dark:text-gray-100">{t('admin.title')}</h2>
       
       <div className="mb-6 sm:mb-8">
-        <h3 className="text-base sm:text-lg font-semibold mb-2">Add User</h3>
+        <h3 className="text-base sm:text-lg font-semibold mb-2 text-gray-900 dark:text-gray-100">{t('admin.addUser')}</h3>
         <form onSubmit={handleAddUser} className={`flex ${isMobile ? 'flex-col' : 'flex-row flex-wrap'} gap-3 sm:gap-4 ${isMobile ? '' : 'items-end'} w-full`}>
           <div className={isMobile ? 'w-full' : ''}>
-            <Label className="text-sm">Email</Label>
+            <Label className="text-sm">{t('admin.email')}</Label>
             <Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} required className="h-10 sm:h-9" />
           </div>
           <div className={isMobile ? 'w-full' : ''}>
-            <Label className="text-sm">Name</Label>
+            <Label className="text-sm">{t('admin.name')}</Label>
             <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className="h-10 sm:h-9" />
           </div>
           <div className={isMobile ? 'w-full' : ''}>
-            <Label className="text-sm">Password</Label>
+            <Label className="text-sm">{t('admin.password')}</Label>
             <Input 
               type="password" 
               value={form.password} 
               onChange={e => setForm(f => ({ ...f, password: e.target.value }))} 
               required 
               minLength={6}
-              placeholder="Min. 6 characters"
+              placeholder={t('admin.passwordPlaceholder')}
               className="h-10 sm:h-9"
             />
             {form.password && form.password.length > 0 && form.password.length < 6 && (
-              <p className="text-xs text-red-500 mt-1">Password must be at least 6 characters.</p>
+              <p className="text-xs text-red-500 mt-1">{t('admin.passwordMinLength')}</p>
             )}
           </div>
           <div className={`flex items-center gap-2 ${isMobile ? 'w-full' : ''}`}>
             <input type="checkbox" id="isAdmin" checked={form.isAdmin} onChange={e => setForm(f => ({ ...f, isAdmin: e.target.checked }))} className="h-4 w-4" />
-            <Label htmlFor="isAdmin" className="text-sm">Admin</Label>
+            <Label htmlFor="isAdmin" className="text-sm">{t('admin.isAdmin')}</Label>
           </div>
           <div className={`flex items-center gap-2 ${isMobile ? 'w-full' : ''}`}>
             <input type="checkbox" id="must_change_password" checked={form.must_change_password} onChange={e => setForm(f => ({ ...f, must_change_password: e.target.checked }))} className="h-4 w-4" />
-            <Label htmlFor="must_change_password" className="text-sm">Must change password</Label>
+            <Label htmlFor="must_change_password" className="text-sm">{t('admin.mustChangePassword')}</Label>
           </div>
-          <Button type="submit" className={`${isMobile ? 'w-full' : ''} h-10 sm:h-9`} size={isMobile ? "lg" : "default"}>Add User</Button>
+          <Button type="submit" className={`${isMobile ? 'w-full' : ''} h-10 sm:h-9`} size={isMobile ? "lg" : "default"}>{t('admin.createUser')}</Button>
         </form>
       </div>
       
       {/* Send Reminder Section */}
-      <div className="mb-6 sm:mb-8 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-        <h3 className="text-base sm:text-lg font-semibold mb-3 text-blue-800">Send Timesheet Reminder</h3>
-        <p className="text-xs sm:text-sm text-blue-700 mb-4">Select one or more users to send a reminder to fill in their hours for a specific week.</p>
+      <div className="mb-6 sm:mb-8 p-4 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg">
+        <h3 className="text-base sm:text-lg font-semibold mb-3 text-blue-800 dark:text-blue-200">{t('admin.sendReminder')}</h3>
+        <p className="text-xs sm:text-sm text-blue-700 dark:text-blue-300 mb-4">{t('admin.sendReminderDescription')}</p>
         <div className="mb-4">
-          <Label className="text-sm font-semibold mb-2 block">Select Users</Label>
-          <div className="max-h-48 overflow-y-auto border rounded-lg p-3 bg-white">
+          <Label className="text-sm font-semibold mb-2 block">{t('admin.selectUsers')}</Label>
+          <div className="max-h-48 overflow-y-auto border rounded-lg p-3 bg-white dark:bg-gray-700">
             {users.length === 0 ? (
-              <p className="text-sm text-gray-500">No users available</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">{t('admin.noUsers')}</p>
             ) : (
               <div className="space-y-2">
                 {users.map(user => (
@@ -783,8 +797,8 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                       onChange={() => toggleReminderUser(user.id.toString())}
                       className="h-4 w-4"
                     />
-                    <Label htmlFor={`reminder-user-${user.id}`} className="text-sm cursor-pointer">
-                      {user.name || user.email} {user.isAdmin && <span className="text-xs text-blue-600">(Admin)</span>}
+                    <Label htmlFor={`reminder-user-${user.id}`} className="text-sm cursor-pointer text-gray-900 dark:text-gray-100">
+                      {user.name || user.email} {user.isAdmin && <span className="text-xs text-blue-600 dark:text-blue-400">(Admin)</span>}
                     </Label>
                   </div>
                 ))}
@@ -792,29 +806,29 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
             )}
           </div>
           {reminderUserIds.length > 0 && (
-            <p className="text-xs text-blue-600 mt-2">{reminderUserIds.length} user(s) selected</p>
+            <p className="text-xs text-blue-600 dark:text-blue-400 mt-2">{reminderUserIds.length} user(s) selected</p>
           )}
         </div>
         <div className={`flex ${isMobile ? 'flex-col' : 'flex-row flex-wrap'} gap-3 sm:gap-4 ${isMobile ? '' : 'items-end'} w-full`}>
           <div className={isMobile ? 'w-full' : ''}>
-            <Label className="text-sm">Week Number</Label>
+            <Label className="text-sm">{t('admin.weekNumber')}</Label>
             <Input 
               type="number" 
               value={reminderWeekNumber} 
               onChange={e => setReminderWeekNumber(e.target.value)} 
-              placeholder="e.g. 51"
+              placeholder={t('admin.weekNumberPlaceholder')}
               min="1"
               max="53"
               className="h-10 sm:h-9"
             />
           </div>
           <div className={isMobile ? 'w-full' : ''}>
-            <Label className="text-sm">Year</Label>
+            <Label className="text-sm">{t('admin.year')}</Label>
             <Input 
               type="number" 
               value={reminderYear} 
               onChange={e => setReminderYear(e.target.value)} 
-              placeholder="2025"
+              placeholder={t('admin.yearPlaceholder')}
               min="2020"
               max="2100"
               className="h-10 sm:h-9"
@@ -826,7 +840,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
             size={isMobile ? "lg" : "default"}
             disabled={reminderUserIds.length === 0 || !reminderWeekNumber || !reminderYear}
           >
-            Send Reminder{reminderUserIds.length > 0 ? ` (${reminderUserIds.length})` : ''}
+            {t('admin.sendReminderButton')}{reminderUserIds.length > 0 ? ` (${reminderUserIds.length})` : ''}
           </Button>
         </div>
       </div>
@@ -834,18 +848,18 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
       {/* Pending Users Section */}
       {users.filter(u => u.approved === false).length > 0 && (
         <div className="mb-6 sm:mb-8">
-          <h3 className="text-base sm:text-lg font-semibold mb-2 text-orange-600">Pending Approval</h3>
+          <h3 className="text-base sm:text-lg font-semibold mb-2 text-orange-600 dark:text-orange-400">{t('admin.pendingApproval')}</h3>
           {isMobile ? (
             <div className="space-y-3">
               {users.filter(u => u.approved === false).map(user => (
-                <div key={user.id} className="border rounded-lg p-3 bg-orange-50">
+                <div key={user.id} className="border rounded-lg p-3 bg-orange-50 dark:bg-orange-900/30">
                   <div className="mb-2">
-                    <div className="font-semibold text-sm">{user.email}</div>
-                    <div className="text-xs text-gray-600">{user.name || "-"}</div>
+                    <div className="font-semibold text-sm text-gray-900 dark:text-gray-100">{user.email}</div>
+                    <div className="text-xs text-gray-600 dark:text-gray-400">{user.name || "-"}</div>
                   </div>
                   <div className="flex gap-2">
                     <Button size="sm" variant="default" onClick={() => handleApproveUser(user.id, user.email)} className="flex-1 h-9">
-                      Approve
+                      {t('admin.approve')}
                     </Button>
                     <Button
                       size="sm"
@@ -853,7 +867,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                       onClick={() => handleDeleteUser(user.id, user.email)}
                       className="flex-1 h-9"
                     >
-                      Reject
+                      {t('admin.reject')}
                     </Button>
                   </div>
                 </div>
@@ -863,20 +877,20 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
             <div className="overflow-x-auto w-full">
               <table className="min-w-full border mt-2 text-sm">
                 <thead>
-                  <tr className="bg-orange-100">
-                    <th className="p-2 text-left">Email</th>
-                    <th className="p-2 text-left">Name</th>
-                    <th className="p-2 text-left">Actions</th>
+                  <tr className="bg-orange-100 dark:bg-orange-900/30">
+                    <th className="p-2 text-left text-gray-900 dark:text-gray-100">{t('admin.email')}</th>
+                    <th className="p-2 text-left text-gray-900 dark:text-gray-100">{t('admin.name')}</th>
+                    <th className="p-2 text-left text-gray-900 dark:text-gray-100">{t('admin.actions')}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {users.filter(u => u.approved === false).map(user => (
-                    <tr key={user.id} className="border-t">
-                      <td className="p-2">{user.email}</td>
-                      <td className="p-2">{user.name || "-"}</td>
+                    <tr key={user.id} className="border-t dark:border-gray-700">
+                      <td className="p-2 text-gray-900 dark:text-gray-100">{user.email}</td>
+                      <td className="p-2 text-gray-900 dark:text-gray-100">{user.name || "-"}</td>
                       <td className="p-2">
                         <Button size="sm" variant="default" onClick={() => handleApproveUser(user.id, user.email)}>
-                          Approve
+                          {t('admin.approve')}
                         </Button>
                         <Button
                           size="sm"
@@ -884,7 +898,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                           className="ml-2"
                           onClick={() => handleDeleteUser(user.id, user.email)}
                         >
-                          Reject
+                          {t('admin.reject')}
                         </Button>
                       </td>
                     </tr>
@@ -896,24 +910,24 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
         </div>
       )}
       <div>
-        <h3 className="text-base sm:text-lg font-semibold mb-2">Existing Users</h3>
+        <h3 className="text-base sm:text-lg font-semibold mb-2 text-gray-900 dark:text-gray-100">{t('admin.existingUsers')}</h3>
         {loading ? (
-          <div className="text-sm">Loading...</div>
+          <div className="text-sm">{t('common.loading')}</div>
         ) : isMobile ? (
           /* Mobile: Card Layout */
           <div className="space-y-3">
             {users.filter(u => u.approved !== false).map(user => (
-              <div key={user.id} className="border rounded-lg p-3 bg-gray-50">
+              <div key={user.id} className="border rounded-lg p-3 bg-gray-50 dark:bg-gray-700">
                 <div className="mb-3">
-                  <div className="font-semibold text-sm mb-1">
+                  <div className="font-semibold text-sm mb-1 text-gray-900 dark:text-gray-100">
                     {user.email}
-                    {user.email === SUPER_ADMIN_EMAIL && <span className="ml-2 px-2 py-0.5 text-xs bg-orange-200 text-orange-800 rounded">Super Admin</span>}
+                    {user.email === SUPER_ADMIN_EMAIL && <span className="ml-2 px-2 py-0.5 text-xs bg-orange-200 dark:bg-orange-800 text-orange-800 dark:text-orange-200 rounded">Super Admin</span>}
                   </div>
-                  <div className="text-xs text-gray-600">{user.name}</div>
+                  <div className="text-xs text-gray-600 dark:text-gray-400">{user.name}</div>
                 </div>
                 <div className="space-y-2 text-xs">
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Admin:</span>
+                    <span className="text-gray-600 dark:text-gray-400">{t('admin.isAdmin')}:</span>
                     <div className="flex items-center gap-2">
                       <input
                         type="checkbox"
@@ -922,20 +936,20 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                         onChange={(e) => handleToggleAdmin(user.id, user.email, e.target.checked)}
                         className="h-3 w-3"
                       />
-                      <span>{user.isAdmin ? "Yes" : "No"}</span>
+                      <span>{user.isAdmin ? "Ja" : "Nee"}</span>
                     </div>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Approved:</span>
-                    <span>{user.approved !== false ? "Yes" : "No"}</span>
+                    <span className="text-gray-600 dark:text-gray-400">{t('admin.approved')}:</span>
+                    <span className="text-gray-900 dark:text-gray-100">{user.approved !== false ? "Ja" : "Nee"}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Must Change Password:</span>
-                    <span>{user.must_change_password ? "Yes" : "No"}</span>
+                    <span className="text-gray-600 dark:text-gray-400">{t('admin.mustChangePassword')}:</span>
+                    <span className="text-gray-900 dark:text-gray-100">{user.must_change_password ? "Ja" : "Nee"}</span>
                   </div>
                   {currentUser.email === SUPER_ADMIN_EMAIL && (
                     <div className="flex justify-between">
-                      <span className="text-gray-600">Timebuzzer:</span>
+                      <span className="text-gray-600 dark:text-gray-400">Timebuzzer:</span>
                       <div className="flex items-center gap-2">
                         <input
                           type="checkbox"
@@ -943,13 +957,13 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                           onChange={(e) => handleToggleTimebuzzer(user.id, user.email, e.target.checked)}
                           className="h-3 w-3"
                         />
-                        <span>{user.can_use_timebuzzer ? "Yes" : "No"}</span>
+                        <span>{user.can_use_timebuzzer ? "Ja" : "Nee"}</span>
                       </div>
                     </div>
                   )}
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Days Off Left:</span>
-                    <span className="font-semibold">{(totalDaysOff - ((daysOffMap[user.id] || 0) / 8)).toFixed(2)} / {totalDaysOff}</span>
+                    <span className="text-gray-600 dark:text-gray-400">{t('admin.daysOffLeft')}:</span>
+                    <span className="font-semibold text-gray-900 dark:text-gray-100">{(totalDaysOff - ((daysOffMap[user.id] || 0) / 8)).toFixed(2)} / {totalDaysOff}</span>
                   </div>
                 </div>
                 <div className="mt-3 space-y-2">
@@ -957,19 +971,19 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                     <div className="space-y-2">
                       <Input
                         type="text"
-                        placeholder="New password"
+                        placeholder="Nieuw wachtwoord"
                         value={resetPassword}
                         onChange={e => setResetPassword(e.target.value)}
                         className="h-9 text-sm"
                       />
                       <div className="flex gap-2">
-                        <Button size="sm" onClick={() => handleResetPassword(user.id)} className="flex-1 h-9">Save</Button>
-                        <Button size="sm" variant="outline" onClick={() => { setResetUserId(null); setResetPassword(""); }} className="flex-1 h-9">Cancel</Button>
+                        <Button size="sm" onClick={() => handleResetPassword(user.id)} className="flex-1 h-9">{t('common.save')}</Button>
+                        <Button size="sm" variant="outline" onClick={() => { setResetUserId(null); setResetPassword(""); }} className="flex-1 h-9">{t('common.cancel')}</Button>
                       </div>
                     </div>
                   ) : (
                     <div className="flex gap-2">
-                      <Button size="sm" variant="outline" onClick={() => setResetUserId(user.id)} className="flex-1 h-9 text-xs">Reset Password</Button>
+                      <Button size="sm" variant="outline" onClick={() => setResetUserId(user.id)} className="flex-1 h-9 text-xs">{t('admin.resetPassword')}</Button>
                       <Button
                         size="sm"
                         variant="destructive"
@@ -977,7 +991,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                         disabled={user.id === currentUser.id || user.email === SUPER_ADMIN_EMAIL}
                         className="flex-1 h-9 text-xs"
                       >
-                        Delete
+                        {t('common.delete')}
                       </Button>
                     </div>
                   )}
@@ -986,20 +1000,20 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                       type="number"
                       min="0.25"
                       step="0.25"
-                      placeholder="Hours"
+                      placeholder="Uren"
                       value={daysOffInput[user.id] || ""}
                       onChange={e => setDaysOffInput(prev => ({ ...prev, [user.id]: e.target.value }))}
                       className="h-9 text-sm"
                     />
                     <div className="flex gap-2">
                       <Button size="sm" onClick={() => handleAddOrDeductDaysOff(user.id, -Math.abs(parseFloat(daysOffInput[user.id] || "0")))} className="flex-1 h-9 text-xs">
-                        Add
+                        Toevoegen
                       </Button>
                       <Button size="sm" variant="destructive" onClick={() => handleAddOrDeductDaysOff(user.id, Math.abs(parseFloat(daysOffInput[user.id] || "0")))} className="flex-1 h-9 text-xs">
-                        Deduct
+                        Aftrekken
                       </Button>
                     </div>
-                    <span className="text-xs text-gray-500">(1 day = 8 hours)</span>
+                    <span className="text-xs text-gray-500">(1 dag = 8 uren)</span>
                   </div>
                 </div>
               </div>
@@ -1010,24 +1024,24 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
           <div className="overflow-x-auto w-full">
             <table className="min-w-full border mt-2 text-sm">
               <thead>
-                <tr className="bg-gray-100">
-                  <th className="p-2 text-left">Email</th>
-                  <th className="p-2 text-left">Name</th>
-                  <th className="p-2 text-left">Admin</th>
-                  <th className="p-2 text-left">Approved</th>
-                  <th className="p-2 text-left">Must Change Password</th>
+                <tr className="bg-gray-100 dark:bg-gray-700">
+                  <th className="p-2 text-left text-gray-900 dark:text-gray-100">{t('admin.email')}</th>
+                  <th className="p-2 text-left text-gray-900 dark:text-gray-100">{t('admin.name')}</th>
+                  <th className="p-2 text-left text-gray-900 dark:text-gray-100">{t('admin.isAdmin')}</th>
+                  <th className="p-2 text-left text-gray-900 dark:text-gray-100">{t('admin.approved')}</th>
+                  <th className="p-2 text-left text-gray-900 dark:text-gray-100">{t('admin.mustChangePassword')}</th>
                   {currentUser.email === SUPER_ADMIN_EMAIL && (
-                    <th className="p-2 text-left">Timebuzzer</th>
+                    <th className="p-2 text-left text-gray-900 dark:text-gray-100">Timebuzzer</th>
                   )}
-                  <th className="p-2 text-left">Days Off Left</th>
-                  <th className="p-2 text-left">Actions</th>
+                  <th className="p-2 text-left text-gray-900 dark:text-gray-100">{t('admin.daysOffLeft')}</th>
+                  <th className="p-2 text-left text-gray-900 dark:text-gray-100">{t('admin.actions')}</th>
                 </tr>
               </thead>
               <tbody>
                 {users.filter(u => u.approved !== false).map(user => (
-                  <tr key={user.id} className="border-t">
-                    <td className="p-2">{user.email}{user.email === SUPER_ADMIN_EMAIL && <span className="ml-2 px-2 py-1 text-xs bg-orange-200 text-orange-800 rounded">Super Admin</span>}</td>
-                    <td className="p-2">{user.name}</td>
+                  <tr key={user.id} className="border-t dark:border-gray-700">
+                    <td className="p-2 text-gray-900 dark:text-gray-100">{user.email}{user.email === SUPER_ADMIN_EMAIL && <span className="ml-2 px-2 py-1 text-xs bg-orange-200 dark:bg-orange-800 text-orange-800 dark:text-orange-200 rounded">Super Admin</span>}</td>
+                    <td className="p-2 text-gray-900 dark:text-gray-100">{user.name}</td>
                     <td className="p-2">
                       <div className="flex items-center gap-2">
                         <input
@@ -1036,11 +1050,11 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                           disabled={user.email === SUPER_ADMIN_EMAIL}
                           onChange={(e) => handleToggleAdmin(user.id, user.email, e.target.checked)}
                         />
-                        <span>{user.isAdmin ? "Yes" : "No"}</span>
+                        <span className="text-gray-900 dark:text-gray-100">{user.isAdmin ? "Ja" : "Nee"}</span>
                       </div>
                     </td>
-                    <td className="p-2">{user.approved !== false ? "Yes" : "No"}</td>
-                    <td className="p-2">{user.must_change_password ? "Yes" : "No"}</td>
+                    <td className="p-2 text-gray-900 dark:text-gray-100">{user.approved !== false ? "Ja" : "Nee"}</td>
+                    <td className="p-2 text-gray-900 dark:text-gray-100">{user.must_change_password ? "Ja" : "Nee"}</td>
                     {currentUser.email === SUPER_ADMIN_EMAIL && (
                       <td className="p-2">
                         <div className="flex items-center gap-2">
@@ -1050,36 +1064,36 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                             onChange={(e) => handleToggleTimebuzzer(user.id, user.email, e.target.checked)}
                             className="h-4 w-4"
                           />
-                          <span>{user.can_use_timebuzzer ? "Yes" : "No"}</span>
+                          <span className="text-gray-900 dark:text-gray-100">{user.can_use_timebuzzer ? "Ja" : "Nee"}</span>
                         </div>
                       </td>
                     )}
-                    <td className="p-2">{(totalDaysOff - ((daysOffMap[user.id] || 0) / 8)).toFixed(2)} / {totalDaysOff}</td>
+                    <td className="p-2 text-gray-900 dark:text-gray-100">{(totalDaysOff - ((daysOffMap[user.id] || 0) / 8)).toFixed(2)} / {totalDaysOff}</td>
                     <td className="p-2">
                       {resetUserId === user.id ? (
                         <div className="flex gap-2 items-center">
                           <Input
                             type="text"
-                            placeholder="New password"
+                            placeholder="Nieuw wachtwoord"
                             value={resetPassword}
                             onChange={e => setResetPassword(e.target.value)}
                             className="h-8"
                           />
-                          <Button size="sm" onClick={() => handleResetPassword(user.id)}>Save</Button>
-                          <Button size="sm" variant="outline" onClick={() => { setResetUserId(null); setResetPassword(""); }}>Cancel</Button>
+                          <Button size="sm" onClick={() => handleResetPassword(user.id)}>{t('common.save')}</Button>
+                          <Button size="sm" variant="outline" onClick={() => { setResetUserId(null); setResetPassword(""); }}>{t('common.cancel')}</Button>
                         </div>
                       ) : (
                         <>
-                          <Button size="sm" variant="outline" onClick={() => setResetUserId(user.id)}>Reset Password</Button>
+                          <Button size="sm" variant="outline" onClick={() => setResetUserId(user.id)}>{t('admin.resetPassword')}</Button>
                           <Button
                             size="sm"
                             variant="destructive"
                             className="ml-2"
                             onClick={() => handleDeleteUser(user.id, user.email)}
                             disabled={user.id === currentUser.id || user.email === SUPER_ADMIN_EMAIL}
-                            title={user.id === currentUser.id ? "You cannot delete your own account." : user.email === SUPER_ADMIN_EMAIL ? "You cannot delete the super admin." : "Delete user"}
+                            title={user.id === currentUser.id ? "Je kunt je eigen account niet verwijderen." : user.email === SUPER_ADMIN_EMAIL ? "Je kunt de super admin niet verwijderen." : "Verwijder gebruiker"}
                           >
-                            Delete
+                            {t('common.delete')}
                           </Button>
                         </>
                       )}
@@ -1088,20 +1102,20 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                           type="number"
                           min="0.25"
                           step="0.25"
-                          placeholder="Hours"
+                          placeholder="Uren"
                           value={daysOffInput[user.id] || ""}
                           onChange={e => setDaysOffInput(prev => ({ ...prev, [user.id]: e.target.value }))}
                           style={{ width: 70 }}
                           className="h-8"
                         />
                         <Button size="sm" onClick={() => handleAddOrDeductDaysOff(user.id, -Math.abs(parseFloat(daysOffInput[user.id] || "0")))}>
-                          Add
+                          Toevoegen
                         </Button>
                         <Button size="sm" variant="destructive" onClick={() => handleAddOrDeductDaysOff(user.id, Math.abs(parseFloat(daysOffInput[user.id] || "0")))}>
-                          Deduct
+                          Aftrekken
                         </Button>
                       </div>
-                      <span className="text-xs text-gray-500">(1 day = 8 hours)</span>
+                      <span className="text-xs text-gray-500">(1 dag = 8 uren)</span>
                     </td>
                   </tr>
                 ))}
@@ -1113,7 +1127,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
       {/* Pending Week Confirmations Section */}
       {confirmedWeeks.filter(cw => !cw.admin_reviewed || !cw.admin_approved).length > 0 && (
         <div className="mt-6 sm:mt-8 mb-6 sm:mb-8">
-          <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4 text-orange-600">⚠️ Weeks to Review</h3>
+          <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4 text-orange-600">⚠️ {t('admin.weeksToReview')}</h3>
           <div className="space-y-4">
             {confirmedWeeks
               .filter(cw => !cw.admin_reviewed || !cw.admin_approved)
@@ -1135,13 +1149,13 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                     <div className={`flex ${isMobile ? 'flex-col' : 'flex-row sm:items-center sm:justify-between'} gap-3 sm:gap-4 mb-3 sm:mb-4`}>
                       <div>
                         <div className="font-semibold text-base sm:text-lg">
-                          {user?.name || user?.email || 'Unknown user'} - Week {weekNum}
+                          {user?.name || user?.email || t('admin.unknownUser')} - {t('admin.week')} {weekNum}
                         </div>
                         <div className="text-xs sm:text-sm text-gray-600">
-                          {weekStart.toLocaleDateString('en-US')} - {weekEnd.toLocaleDateString('en-US')}
+                          {weekStart.toLocaleDateString('nl-NL')} - {weekEnd.toLocaleDateString('nl-NL')}
                         </div>
                         <div className="text-xs sm:text-sm font-medium mt-1">
-                          Total: {totalHours.toFixed(2)} hours ({weekEntries.length} entries)
+                          {t('admin.total')}: {totalHours.toFixed(2)} {t('admin.hoursLower')} ({weekEntries.length} {t('admin.entries')})
                         </div>
                       </div>
                       <div className={`flex ${isMobile ? 'flex-col' : 'flex-wrap'} gap-2`}>
@@ -1151,7 +1165,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                           className={`${isMobile ? 'w-full' : ''} bg-green-600 hover:bg-green-700 h-9 sm:h-8`}
                           onClick={() => handleApproveWeek(cw.user_id, cw.week_start_date)}
                         >
-                          ✓ Approve
+                          {t('admin.approveButton')}
                         </Button>
                         <Button
                           size={isMobile ? "sm" : "sm"}
@@ -1159,7 +1173,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                           className={`${isMobile ? 'w-full' : ''} h-9 sm:h-8`}
                           onClick={() => handleRejectWeek(cw.user_id, cw.week_start_date)}
                         >
-                          ✗ Reject
+                          {t('admin.rejectButton')}
                         </Button>
                         <Button
                           size={isMobile ? "sm" : "sm"}
@@ -1167,7 +1181,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                           className={`${isMobile ? 'w-full' : ''} border-orange-600 text-orange-600 hover:bg-orange-100 h-9 sm:h-8`}
                           onClick={() => handleUnlockWeek(cw.user_id, cw.week_start_date)}
                         >
-                          🔓 Unlock
+                          {t('admin.unlockButton')}
                         </Button>
                       </div>
                     </div>
@@ -1203,7 +1217,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
       )}
       {/* All Confirmed Weeks Section */}
       <div className="mt-8 sm:mt-12">
-        <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4 text-green-600">✓ All Confirmed Weeks</h3>
+        <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4 text-green-600">{t('admin.allConfirmedWeeks')}</h3>
         <div className="space-y-3">
           {users.map(user => {
             const userConfirmedWeeks = confirmedWeeks.filter(
@@ -1224,7 +1238,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                     const weekStart = new Date(cw.week_start_date);
                     const weekEnd = new Date(weekStart);
                     weekEnd.setDate(weekEnd.getDate() + 6);
-                    const weekNum = getISOWeek(cw.week_start_date);
+                    const weekNum = getISOWeekNumber(weekStart);
                     const weekEntries = allEntries.filter(
                       e => e.user_id === cw.user_id && 
                       e.date >= cw.week_start_date && 
@@ -1237,18 +1251,18 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                           <div>
                             <div className="font-medium text-sm sm:text-base">
-                              Week {weekNum} ({weekStart.toLocaleDateString('en-US')} - {weekEnd.toLocaleDateString('en-US')})
+                              {t('admin.week')} {weekNum} ({weekStart.toLocaleDateString('nl-NL')} - {weekEnd.toLocaleDateString('nl-NL')})
                             </div>
                             <div className="text-xs sm:text-sm text-gray-600">
-                              Total: {totalHours.toFixed(2)} hours ({weekEntries.length} entries)
+                              {t('admin.total')}: {totalHours.toFixed(2)} {t('admin.hoursLower')} ({weekEntries.length} {t('admin.entries')})
                             </div>
                             <div className="text-xs sm:text-sm mt-1">
-                              Status: {cw.admin_approved ? (
-                                <span className="text-green-600 font-semibold">✓ Approved</span>
+                              {t('admin.status')}: {cw.admin_approved ? (
+                                <span className="text-green-600 font-semibold">{t('admin.approvedStatus')}</span>
                               ) : cw.admin_reviewed ? (
-                                <span className="text-red-600 font-semibold">✗ Rejected</span>
+                                <span className="text-red-600 font-semibold">{t('admin.rejectedStatus')}</span>
                               ) : (
-                                <span className="text-orange-600 font-semibold">⏳ Pending Review</span>
+                                <span className="text-orange-600 font-semibold">{t('admin.pendingReviewStatus')}</span>
                               )}
                             </div>
                           </div>
@@ -1260,7 +1274,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                                 className="bg-green-600 hover:bg-green-700 h-8"
                                 onClick={() => handleApproveWeek(cw.user_id, cw.week_start_date)}
                               >
-                                ✓ Approve
+                                {t('admin.approveButton')}
                               </Button>
                             )}
                             <Button
@@ -1269,7 +1283,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                               className="border-orange-600 text-orange-600 hover:bg-orange-100 h-8"
                               onClick={() => handleUnlockWeek(cw.user_id, cw.week_start_date)}
                             >
-                              🔓 Unlock
+                              {t('admin.unlockButton')}
                             </Button>
                           </div>
                         </div>
@@ -1282,7 +1296,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
           })}
           {confirmedWeeks.filter(cw => cw.confirmed).length === 0 && (
             <div className="text-gray-400 text-center italic p-6 border rounded-lg bg-gray-50">
-              No confirmed weeks yet.
+              {t('admin.noConfirmedWeeks')}
             </div>
           )}
         </div>
@@ -1290,7 +1304,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
       
       {/* Below user table: User Weekly Entries Accordion */}
       <div className="mt-8 sm:mt-12">
-        <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4">View User Weekly Entries</h3>
+        <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4">{t('admin.viewUserWeeklyEntries')}</h3>
         <Accordion type="multiple" className="w-full">
           {users.map(user => {
             // Group this user's entries by week
@@ -1312,7 +1326,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                 <AccordionContent className="bg-white">
                   <Accordion type="multiple">
                     {weekKeys.length === 0 ? (
-                      <div className="p-6 text-gray-400 text-center italic">No entries found for this user.</div>
+                      <div className="p-6 text-gray-400 text-center italic">{t('admin.noEntriesForUser')}</div>
                     ) : (
                       weekKeys.map(week => (
                         <AccordionItem key={week} value={week} className="border rounded mb-3 shadow-sm bg-orange-50">
@@ -1325,12 +1339,12 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                               <table className="min-w-full text-sm border rounded-lg shadow-sm">
                                 <thead className="sticky top-0 bg-orange-100 z-10">
                                   <tr>
-                                    <th className="p-2 border">Date</th>
-                                    <th className="p-2 border">Project</th>
-                                    <th className="p-2 border">Hours</th>
-                                    <th className="p-2 border">Work Type</th>
-                                    <th className="p-2 border">Description</th>
-                                    <th className="p-1 border">Start - End</th>
+                                    <th className="p-2 border">{t('admin.date')}</th>
+                                    <th className="p-2 border">{t('weekly.project')}</th>
+                                    <th className="p-2 border">{t('weekly.hours')}</th>
+                                    <th className="p-2 border">{t('admin.workType')}</th>
+                                    <th className="p-2 border">Beschrijving</th>
+                                    <th className="p-1 border">Start - Eind</th>
                                   </tr>
                                 </thead>
                                 <tbody>
@@ -1360,7 +1374,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
       </div>
 
       {/* Timebuzzer Sync Section */}
-      <div className="mb-6 sm:mb-8 p-4 bg-green-50 border border-green-200 rounded-lg">
+      <div className="mb-6 sm:mb-8 p-4 bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 rounded-lg">
         <h3 className="text-base sm:text-lg font-semibold mb-3 text-green-800">Timebuzzer Integration</h3>
         <p className="text-xs sm:text-sm text-green-700 mb-4">
           Sync time entries from Timebuzzer to your timesheet. Make sure users and projects are mapped in the database first.
@@ -1433,6 +1447,34 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
               }
             </div>
           )}
+          {/* User selection for Timebuzzer testing */}
+          <div>
+            <Label className="text-sm font-semibold mb-2 block">Filter by User (Optional)</Label>
+            <Select
+              value={selectedTimebuzzerUserId || "all"}
+              onValueChange={(value) => {
+                console.log('User selection changed:', value);
+                setSelectedTimebuzzerUserId(value === "all" ? "" : value);
+              }}
+            >
+              <SelectTrigger className="h-10 sm:h-9">
+                <SelectValue placeholder="All users (default)" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All users (default)</SelectItem>
+                {users
+                  .filter((u: any) => u.timebuzzer_user_id) // Only show users with Timebuzzer mapping
+                  .map((user: any) => (
+                    <SelectItem key={user.id} value={user.timebuzzer_user_id}>
+                      {user.name || user.email} ({user.timebuzzer_user_id})
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              Select a user to test Timebuzzer API for that specific user only. Leave empty to test for all users.
+            </p>
+          </div>
           <div className="flex gap-2">
             <Button
               onClick={async () => {
@@ -1454,18 +1496,33 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                   const dateRange = getWeekDateRange(timebuzzerSyncWeekNumber, timebuzzerSyncYear);
                   
                   console.log(`Fetching Timebuzzer activities for week ${timebuzzerSyncWeekNumber}, ${timebuzzerSyncYear}`);
+                  if (selectedTimebuzzerUserId) {
+                    console.log(`Filtering by Timebuzzer user ID: ${selectedTimebuzzerUserId}`);
+                  }
                   console.log(`Date range: ${dateRange.from} to ${dateRange.to}`);
                   
                   // Fetch activities without syncing
+                  const requestBody: any = {
+                    action: 'fetch-activities',
+                    startDate: dateRange.from,
+                    endDate: dateRange.to,
+                  };
+                  if (selectedTimebuzzerUserId && selectedTimebuzzerUserId !== 'all') {
+                    requestBody.userId = selectedTimebuzzerUserId;
+                  }
+                  
+                  console.log('Fetch activities request:', requestBody);
                   const { data, error } = await supabase.functions.invoke('timebuzzer-sync', {
-                    body: {
-                      action: 'fetch-activities',
-                      startDate: dateRange.from,
-                      endDate: dateRange.to,
-                    },
+                    body: requestBody,
                   });
                   
                   console.log('Fetch activities response:', { data, error });
+                  if (data && data.activities) {
+                    console.log(`Received ${data.activities.length} activities`);
+                    if (selectedTimebuzzerUserId && selectedTimebuzzerUserId !== 'all' && data.activities.length === 0) {
+                      console.warn(`No activities found for user ${selectedTimebuzzerUserId} in week ${timebuzzerSyncWeekNumber}, ${timebuzzerSyncYear}`);
+                    }
+                  }
                   
                   if (error) {
                     console.error('Fetch error:', error);
@@ -1477,24 +1534,42 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                     return;
                   }
                   
-                  if (data && data.success && data.activities) {
-                    setTimebuzzerActivities(data.activities);
-                    // Select all by default
-                    setSelectedActivityIds(new Set(data.activities.map((a: any) => a.id)));
-                    
-                    // Check if we have mappings by looking at user and tile IDs in activities
-                    const uniqueUserIds = new Set(data.activities.map((a: any) => a.userId));
-                    const uniqueTileIds = new Set(data.activities.flatMap((a: any) => a.tiles || []));
-                    
-                    toast({
-                      title: "Activities Loaded",
-                      description: `Found ${data.activities.length} activities. Select which ones to add to weekly entries.${uniqueUserIds.size > 0 || uniqueTileIds.size > 0 ? ' Make sure users and projects are mapped in the database.' : ''}`,
-                    });
+                  if (data && data.success) {
+                    if (data.activities && data.activities.length > 0) {
+                      setTimebuzzerActivities(data.activities);
+                      // Select all by default
+                      setSelectedActivityIds(new Set(data.activities.map((a: any) => a.id)));
+                      
+                      // Check if we have mappings by looking at user and tile IDs in activities
+                      const uniqueUserIds = new Set(data.activities.map((a: any) => a.userId));
+                      const uniqueTileIds = new Set(data.activities.flatMap((a: any) => a.tiles || []));
+                      
+                      toast({
+                        title: "Activities Loaded",
+                        description: `Found ${data.activities.length} activities. Select which ones to add to weekly entries.${uniqueUserIds.size > 0 || uniqueTileIds.size > 0 ? ' Make sure users and projects are mapped in the database.' : ''}`,
+                      });
+                    } else {
+                      // No activities found
+                      let description = 'No activities found for this week';
+                      if (selectedTimebuzzerUserId && selectedTimebuzzerUserId !== 'all') {
+                        description = `No activities found for user ${selectedTimebuzzerUserId} in week ${timebuzzerSyncWeekNumber}, ${timebuzzerSyncYear}. `;
+                        description += 'This could mean: (1) The user has no activities in this date range, (2) The API key doesn\'t have access to this user\'s activities, or (3) The userId mapping is incorrect.';
+                        if (data.availableUserIds && Array.isArray(data.availableUserIds) && data.availableUserIds.length > 0) {
+                          description += ` Available user IDs in this date range: ${data.availableUserIds.join(', ')}`;
+                        }
+                      }
+                      toast({
+                        title: "No Activities",
+                        description: description,
+                        variant: "default",
+                      });
+                      setTimebuzzerActivities([]);
+                    }
                   } else {
                     toast({
-                      title: "No Activities",
-                      description: data?.error || 'No activities found for this week',
-                      variant: "default",
+                      title: "Error",
+                      description: data?.error || 'Failed to fetch activities from Timebuzzer',
+                      variant: "destructive",
                     });
                     setTimebuzzerActivities([]);
                   }
@@ -1519,8 +1594,14 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                 setTimebuzzerSyncing(true);
                 try {
                   console.log('Testing Timebuzzer API...');
+                  if (selectedTimebuzzerUserId) {
+                    console.log(`Filtering by Timebuzzer user ID: ${selectedTimebuzzerUserId}`);
+                  }
                   const { data, error } = await supabase.functions.invoke('timebuzzer-sync', {
-                    body: { action: 'test-api' },
+                    body: { 
+                      action: 'test-api',
+                      userId: selectedTimebuzzerUserId || undefined, // Include userId if selected
+                    },
                   });
                   
                   console.log('Response:', { data, error });

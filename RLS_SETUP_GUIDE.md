@@ -126,3 +126,5 @@ Met je huidige custom authenticatie setup, is RLS **niet direct bruikbaar**. Je 
 
 Het `enable_rls_all_tables.sql` script is klaar voor gebruik zodra je migreert naar Supabase Auth.
 
+
+

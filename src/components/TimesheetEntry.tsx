@@ -23,7 +23,6 @@ const TimesheetEntry = ({ currentUser }: TimesheetEntryProps) => {
     startTime: "",
     endTime: ""
   });
-  const [lunchBreak, setLunchBreak] = useState(false);
 
   const { toast } = useToast();
   const isMobile = useIsMobile();
@@ -97,6 +96,7 @@ const TimesheetEntry = ({ currentUser }: TimesheetEntryProps) => {
     { value: 38, label: "Public Holiday" },
     { value: 39, label: "Time Off in Lieu (ADV)" },
     { value: 40, label: "Taken Time-for-Time (TFT)" },
+    { value: 100, label: "Remote" },
   ];
 
   // Helper to check if selected work type is 'Day Off / Vacation' (31)
@@ -113,11 +113,7 @@ const TimesheetEntry = ({ currentUser }: TimesheetEntryProps) => {
       return;
     }
 
-    // Deduct 0.5 hours if lunch break is checked
     let hoursToSave = Number(entry.hours);
-    if (lunchBreak) {
-      hoursToSave = Math.max(0, hoursToSave - 0.5);
-    }
 
     // Insert time entry into Supabase
     const { error } = await supabase.from("timesheet").insert([
@@ -151,7 +147,6 @@ const TimesheetEntry = ({ currentUser }: TimesheetEntryProps) => {
       startTime: "",
       endTime: ""
     });
-    setLunchBreak(false);
   };
 
   const calculateHours = () => {
@@ -245,19 +240,6 @@ const TimesheetEntry = ({ currentUser }: TimesheetEntryProps) => {
               </div>
             </div>
 
-            {/* Lunch break is hidden if Day Off is selected */}
-            {!isDayOff && (
-              <div className="flex items-center space-x-2">
-                <input
-                  id="lunchBreak"
-                  type="checkbox"
-                  checked={lunchBreak}
-                  onChange={(e) => setLunchBreak(e.target.checked)}
-                  className="h-4 w-4"
-                />
-                <Label htmlFor="lunchBreak" className="text-sm">Lunch break</Label>
-              </div>
-            )}
 
             <div className="space-y-2">
               <Label htmlFor="workType" className="text-sm font-semibold">Work Type</Label>

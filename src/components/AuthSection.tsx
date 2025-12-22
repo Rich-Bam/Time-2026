@@ -221,18 +221,65 @@ const AuthSection = ({ onLogin, setCurrentUser }: AuthSectionProps) => {
     });
     
     if (resetError) {
-      // If user doesn't exist in Supabase Auth, we need to use Edge Function
+      // If user doesn't exist in Supabase Auth, try Edge Function
       console.log("User not in Supabase Auth, trying Edge Function...");
       
-      // Try calling password-reset Edge Function (if it exists)
-      // For now, show error but suggest contacting admin
-      setResetMessage(
-        "Kon geen password reset email versturen. " +
-        "Als je account via email uitnodiging is aangemaakt, probeer het opnieuw. " +
-        "Anders neem contact op met een administrator."
-      );
-      setResetLoading(false);
-      return;
+      try {
+        // Try calling password-reset Edge Function
+        console.log("🔵 Calling password-reset Edge Function for:", resetEmail);
+        const { data: edgeData, error: edgeError } = await supabase.functions.invoke('password-reset', {
+          body: { email: resetEmail },
+        });
+
+        console.log("🔵 Edge Function response:", { edgeData, edgeError });
+
+        if (edgeError) {
+          console.error("❌ Edge Function error:", edgeError);
+          setResetMessage(
+            "Kon geen password reset email versturen. " +
+            "Fout: " + (edgeError.message || "Onbekende fout") +
+            ". Check de browser console (F12) voor meer details."
+          );
+          setResetLoading(false);
+          return;
+        }
+
+        if (!edgeData || !edgeData.success) {
+          console.error("❌ Edge Function returned error:", edgeData);
+          setResetMessage(
+            "Kon geen password reset email versturen. " +
+            "Fout: " + (edgeData?.error || edgeData?.message || "Onbekende fout") +
+            ". Check de browser console (F12) voor meer details."
+          );
+          setResetLoading(false);
+          return;
+        }
+
+        // Success via Edge Function
+        setResetMessage(
+          "Password reset email is verstuurd! " +
+          "Check je inbox (en spam folder) voor de reset link. " +
+          "De link is 1 uur geldig."
+        );
+        setResetLoading(false);
+        setShowResetModal(false);
+        setResetEmail("");
+        
+        toast({
+          title: "Reset email verstuurd",
+          description: `Een password reset link is verstuurd naar ${resetEmail}. Check je inbox.`,
+        });
+        return;
+      } catch (edgeErr: any) {
+        console.error("Edge Function exception:", edgeErr);
+        setResetMessage(
+          "Kon geen password reset email versturen. " +
+          "De password-reset Edge Function is mogelijk niet gedeployed. " +
+          "Neem contact op met een administrator."
+        );
+        setResetLoading(false);
+        return;
+      }
     }
     
     // Success - email sent!
