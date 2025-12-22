@@ -7,7 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { User, Calendar } from "lucide-react";
+import { User, Calendar, Pencil, Check, X } from "lucide-react";
 import { hashPassword } from "@/utils/password";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -31,6 +31,10 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
   });
   const [resetPassword, setResetPassword] = useState("");
   const [resetUserId, setResetUserId] = useState<string | null>(null);
+  const [editingUserId, setEditingUserId] = useState<string | number | null>(null);
+  const [editingField, setEditingField] = useState<'email' | 'name' | null>(null);
+  const [editedEmail, setEditedEmail] = useState<string>("");
+  const [editedName, setEditedName] = useState<string>("");
   const [daysOffMap, setDaysOffMap] = useState<Record<string, number>>({});
   const [daysOffInput, setDaysOffInput] = useState<Record<string, string>>({});
   const [allEntries, setAllEntries] = useState<any[]>([]);
@@ -339,6 +343,108 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
     }
   };
 
+  // Start editing user email or name
+  const handleStartEdit = (userId: string | number, field: 'email' | 'name', currentValue: string) => {
+    if (!currentUser?.isAdmin) {
+      toast({
+        title: "Geen Toegang",
+        description: "Alleen admins kunnen gebruikersgegevens bewerken.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setEditingUserId(userId);
+    setEditingField(field);
+    if (field === 'email') {
+      setEditedEmail(currentValue);
+    } else {
+      setEditedName(currentValue);
+    }
+  };
+
+  // Cancel editing
+  const handleCancelEdit = () => {
+    setEditingUserId(null);
+    setEditingField(null);
+    setEditedEmail("");
+    setEditedName("");
+  };
+
+  // Save edited email or name
+  const handleSaveEdit = async (userId: string | number, field: 'email' | 'name') => {
+    if (!currentUser?.isAdmin) {
+      toast({
+        title: "Geen Toegang",
+        description: "Alleen admins kunnen gebruikersgegevens bewerken.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const user = users.find(u => u.id === userId);
+    if (!user) return;
+
+    const newValue = field === 'email' ? editedEmail.trim() : editedName.trim();
+    const oldValue = field === 'email' ? user.email : user.name;
+
+    if (!newValue) {
+      toast({
+        title: "Fout",
+        description: `${field === 'email' ? 'Email' : 'Naam'} mag niet leeg zijn.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (newValue === oldValue) {
+      handleCancelEdit();
+      return;
+    }
+
+    // Prevent changing super admin email
+    if (field === 'email' && user.email === SUPER_ADMIN_EMAIL) {
+      toast({
+        title: "Niet Toegestaan",
+        description: "Je kunt het email adres van de super admin niet wijzigen.",
+        variant: "destructive",
+      });
+      handleCancelEdit();
+      return;
+    }
+
+    try {
+      const updateData: any = {};
+      updateData[field] = newValue;
+
+      const { error } = await supabase
+        .from("users")
+        .update(updateData)
+        .eq("id", userId);
+
+      if (error) {
+        throw error;
+      }
+
+      toast({
+        title: "Gebruiker Bijgewerkt",
+        description: `${field === 'email' ? 'Email' : 'Naam'} is gewijzigd van "${oldValue}" naar "${newValue}".`,
+      });
+
+      // Refresh users list
+      await fetchUsers();
+
+      handleCancelEdit();
+    } catch (error: any) {
+      toast({
+        title: "Fout",
+        description: error.message || `Er is een fout opgetreden bij het bijwerken van de ${field === 'email' ? 'email' : 'naam'}.`,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const SUPER_ADMIN_EMAIL = "r.blance@bampro.nl";
+
   // Reset password
   const handleResetPassword = async (userId: string) => {
     if (!resetPassword) {
@@ -357,8 +463,6 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
       fetchUsers();
     }
   };
-
-  const SUPER_ADMIN_EMAIL = "r.blance@bampro.nl";
   // Toggle admin flag for an existing user
   const handleToggleAdmin = async (userId: string, userEmail: string, makeAdmin: boolean) => {
     if (userEmail === SUPER_ADMIN_EMAIL && !makeAdmin) {
@@ -919,11 +1023,108 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
             {users.filter(u => u.approved !== false).map(user => (
               <div key={user.id} className="border rounded-lg p-3 bg-gray-50 dark:bg-gray-700">
                 <div className="mb-3">
-                  <div className="font-semibold text-sm mb-1 text-gray-900 dark:text-gray-100">
-                    {user.email}
-                    {user.email === SUPER_ADMIN_EMAIL && <span className="ml-2 px-2 py-0.5 text-xs bg-orange-200 dark:bg-orange-800 text-orange-800 dark:text-orange-200 rounded">Super Admin</span>}
+                  <div className="font-semibold text-sm mb-1 text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                    {editingUserId === user.id && editingField === 'email' ? (
+                      <div className="flex items-center gap-2 flex-1">
+                        <Input
+                          type="email"
+                          value={editedEmail}
+                          onChange={(e) => setEditedEmail(e.target.value)}
+                          className="h-8 text-sm flex-1"
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              handleSaveEdit(user.id, 'email');
+                            } else if (e.key === "Escape") {
+                              handleCancelEdit();
+                            }
+                          }}
+                          autoFocus
+                        />
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleSaveEdit(user.id, 'email')}
+                          className="h-8 border-green-200 dark:border-green-700 text-green-700 dark:text-green-300 hover:bg-green-50 dark:hover:bg-green-900/40"
+                        >
+                          <Check className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleCancelEdit}
+                          className="h-8 border-red-200 dark:border-red-700 text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/40"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <>
+                        <span>{user.email}</span>
+                        {user.email === SUPER_ADMIN_EMAIL && <span className="ml-2 px-2 py-0.5 text-xs bg-orange-200 dark:bg-orange-800 text-orange-800 dark:text-orange-200 rounded">Super Admin</span>}
+                        {currentUser?.isAdmin && user.email !== SUPER_ADMIN_EMAIL && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleStartEdit(user.id, 'email', user.email)}
+                            className="h-6 w-6 p-0 text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400"
+                            title="Edit email"
+                          >
+                            <Pencil className="h-3 w-3" />
+                          </Button>
+                        )}
+                      </>
+                    )}
                   </div>
-                  <div className="text-xs text-gray-600 dark:text-gray-400">{user.name}</div>
+                  <div className="text-xs text-gray-600 dark:text-gray-400 flex items-center gap-2">
+                    {editingUserId === user.id && editingField === 'name' ? (
+                      <div className="flex items-center gap-2 flex-1">
+                        <Input
+                          value={editedName}
+                          onChange={(e) => setEditedName(e.target.value)}
+                          className="h-8 text-sm flex-1"
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              handleSaveEdit(user.id, 'name');
+                            } else if (e.key === "Escape") {
+                              handleCancelEdit();
+                            }
+                          }}
+                          autoFocus
+                        />
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleSaveEdit(user.id, 'name')}
+                          className="h-8 border-green-200 dark:border-green-700 text-green-700 dark:text-green-300 hover:bg-green-50 dark:hover:bg-green-900/40"
+                        >
+                          <Check className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleCancelEdit}
+                          className="h-8 border-red-200 dark:border-red-700 text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/40"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <>
+                        <span>{user.name}</span>
+                        {currentUser?.isAdmin && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleStartEdit(user.id, 'name', user.name || "")}
+                            className="h-6 w-6 p-0 text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400"
+                            title="Edit name"
+                          >
+                            <Pencil className="h-3 w-3" />
+                          </Button>
+                        )}
+                      </>
+                    )}
+                  </div>
                 </div>
                 <div className="space-y-2 text-xs">
                   <div className="flex justify-between">
@@ -1040,8 +1241,108 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
               <tbody>
                 {users.filter(u => u.approved !== false).map(user => (
                   <tr key={user.id} className="border-t dark:border-gray-700">
-                    <td className="p-2 text-gray-900 dark:text-gray-100">{user.email}{user.email === SUPER_ADMIN_EMAIL && <span className="ml-2 px-2 py-1 text-xs bg-orange-200 dark:bg-orange-800 text-orange-800 dark:text-orange-200 rounded">Super Admin</span>}</td>
-                    <td className="p-2 text-gray-900 dark:text-gray-100">{user.name}</td>
+                    <td className="p-2">
+                      {editingUserId === user.id && editingField === 'email' ? (
+                        <div className="flex items-center gap-2">
+                          <Input
+                            type="email"
+                            value={editedEmail}
+                            onChange={(e) => setEditedEmail(e.target.value)}
+                            className="h-8 text-sm"
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                handleSaveEdit(user.id, 'email');
+                              } else if (e.key === "Escape") {
+                                handleCancelEdit();
+                              }
+                            }}
+                            autoFocus
+                          />
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleSaveEdit(user.id, 'email')}
+                            className="h-8 border-green-200 dark:border-green-700 text-green-700 dark:text-green-300 hover:bg-green-50 dark:hover:bg-green-900/40"
+                          >
+                            <Check className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleCancelEdit}
+                            className="h-8 border-red-200 dark:border-red-700 text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/40"
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <span className="text-gray-900 dark:text-gray-100">{user.email}</span>
+                          {user.email === SUPER_ADMIN_EMAIL && <span className="ml-2 px-2 py-1 text-xs bg-orange-200 dark:bg-orange-800 text-orange-800 dark:text-orange-200 rounded">Super Admin</span>}
+                          {currentUser?.isAdmin && user.email !== SUPER_ADMIN_EMAIL && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleStartEdit(user.id, 'email', user.email)}
+                              className="h-6 w-6 p-0 text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400"
+                              title="Edit email"
+                            >
+                              <Pencil className="h-3 w-3" />
+                            </Button>
+                          )}
+                        </div>
+                      )}
+                    </td>
+                    <td className="p-2">
+                      {editingUserId === user.id && editingField === 'name' ? (
+                        <div className="flex items-center gap-2">
+                          <Input
+                            value={editedName}
+                            onChange={(e) => setEditedName(e.target.value)}
+                            className="h-8 text-sm"
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                handleSaveEdit(user.id, 'name');
+                              } else if (e.key === "Escape") {
+                                handleCancelEdit();
+                              }
+                            }}
+                            autoFocus
+                          />
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleSaveEdit(user.id, 'name')}
+                            className="h-8 border-green-200 dark:border-green-700 text-green-700 dark:text-green-300 hover:bg-green-50 dark:hover:bg-green-900/40"
+                          >
+                            <Check className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleCancelEdit}
+                            className="h-8 border-red-200 dark:border-red-700 text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/40"
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <span className="text-gray-900 dark:text-gray-100">{user.name}</span>
+                          {currentUser?.isAdmin && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleStartEdit(user.id, 'name', user.name || "")}
+                              className="h-6 w-6 p-0 text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400"
+                              title="Edit name"
+                            >
+                              <Pencil className="h-3 w-3" />
+                            </Button>
+                          )}
+                        </div>
+                      )}
+                    </td>
                     <td className="p-2">
                       <div className="flex items-center gap-2">
                         <input

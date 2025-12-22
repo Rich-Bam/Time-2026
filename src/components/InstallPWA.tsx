@@ -9,6 +9,86 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
 }
 
+// Hook to use PWA install functionality
+export const usePWAInstall = () => {
+  const { toast } = useToast();
+  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+  const [isInstalled, setIsInstalled] = useState(false);
+
+  useEffect(() => {
+    // Check if app is already installed
+    if (window.matchMedia('(display-mode: standalone)').matches) {
+      setIsInstalled(true);
+      return;
+    }
+
+    // Check if running on iOS
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    const isInStandaloneMode = ('standalone' in window.navigator) && (window.navigator as any).standalone;
+
+    if (isIOS && isInStandaloneMode) {
+      setIsInstalled(true);
+      return;
+    }
+
+    // Listen for the beforeinstallprompt event (Android/Desktop Chrome/Edge)
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e as BeforeInstallPromptEvent);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
+  }, []);
+
+  const handleInstall = async (): Promise<boolean> => {
+    // If we have a deferred prompt (Android/Desktop Chrome/Edge), use it
+    if (deferredPrompt) {
+      try {
+        // Show the install prompt
+        deferredPrompt.prompt();
+
+        // Wait for the user to respond
+        const { outcome } = await deferredPrompt.userChoice;
+
+        if (outcome === 'accepted') {
+          setIsInstalled(true);
+          toast({
+            title: 'App Geïnstalleerd',
+            description: 'De app is succesvol geïnstalleerd!',
+          });
+          // Clear the deferred prompt
+          setDeferredPrompt(null);
+          return true; // Installation prompt was shown
+        }
+
+        // Clear the deferred prompt
+        setDeferredPrompt(null);
+        return true; // Prompt was shown, even if dismissed
+      } catch (error) {
+        console.error('Error showing install prompt:', error);
+        return false; // Error occurred, show instructions
+      }
+    }
+
+    // No deferred prompt available - return false so caller can show instructions
+    return false;
+  };
+
+  // Show install button if app is not installed
+  // It will work on Android/Desktop (with prompt) or iOS (with instructions)
+  const canInstall = !isInstalled;
+
+  return {
+    canInstall,
+    isInstalled,
+    handleInstall,
+  };
+};
+
 const InstallPWA = () => {
   const { toast } = useToast();
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);

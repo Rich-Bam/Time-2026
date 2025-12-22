@@ -6,7 +6,9 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { hashPassword } from "@/utils/password";
-import { User, Camera, Phone, Save, X } from "lucide-react";
+import { User, Camera, Phone, Save, X, Download } from "lucide-react";
+import { usePWAInstall } from "@/components/InstallPWA";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 interface ProfileProps {
   currentUser: any;
@@ -15,6 +17,7 @@ interface ProfileProps {
 
 const Profile = ({ currentUser, setCurrentUser }: ProfileProps) => {
   const { toast } = useToast();
+  const { canInstall, handleInstall } = usePWAInstall();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
@@ -23,7 +26,21 @@ const Profile = ({ currentUser, setCurrentUser }: ProfileProps) => {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [showInstallDialog, setShowInstallDialog] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Detect device type for better instructions
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+  const isAndroid = /Android/.test(navigator.userAgent);
+  const isDesktop = !isIOS && !isAndroid;
+
+  const handleInstallClick = async () => {
+    const promptShown = await handleInstall();
+    // If no native prompt was shown, show our instructions dialog
+    if (!promptShown) {
+      setShowInstallDialog(true);
+    }
+  };
 
   // Load user data
   useEffect(() => {
@@ -422,6 +439,25 @@ const Profile = ({ currentUser, setCurrentUser }: ProfileProps) => {
               </div>
             </div>
 
+            {/* Install App Section */}
+            {canInstall && (
+              <div className="space-y-4 pt-4 border-t">
+                <h3 className="text-lg font-semibold">Install App</h3>
+                <p className="text-sm text-gray-500">
+                  Install BAMPRO Uren on your device for quick access and offline functionality.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleInstallClick}
+                  className="w-full sm:w-auto border-orange-200 dark:border-orange-700 text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-700"
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Install App on Device
+                </Button>
+              </div>
+            )}
+
             {/* Save Button */}
             <div className="flex justify-end pt-4">
               <Button
@@ -436,6 +472,142 @@ const Profile = ({ currentUser, setCurrentUser }: ProfileProps) => {
           </form>
         </CardContent>
       </Card>
+
+      {/* Install Instructions Dialog */}
+      <Dialog open={showInstallDialog} onOpenChange={setShowInstallDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Download className="h-5 w-5 text-orange-600" />
+              Install BAMPRO Uren App
+            </DialogTitle>
+            <DialogDescription>
+              Follow these steps to install the app on your device:
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {isIOS ? (
+              <div className="space-y-3">
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-orange-100 dark:bg-orange-900 flex items-center justify-center text-orange-600 dark:text-orange-400 font-semibold">
+                    1
+                  </div>
+                  <div>
+                    <p className="font-medium">Tap the Share button</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      Look for the share icon (square with arrow pointing up) in Safari's toolbar
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-orange-100 dark:bg-orange-900 flex items-center justify-center text-orange-600 dark:text-orange-400 font-semibold">
+                    2
+                  </div>
+                  <div>
+                    <p className="font-medium">Select "Add to Home Screen"</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      Scroll down in the share menu and tap "Add to Home Screen"
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-orange-100 dark:bg-orange-900 flex items-center justify-center text-orange-600 dark:text-orange-400 font-semibold">
+                    3
+                  </div>
+                  <div>
+                    <p className="font-medium">Confirm installation</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      Tap "Add" in the top right corner. The app will appear on your home screen.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : isAndroid ? (
+              <div className="space-y-3">
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-orange-100 dark:bg-orange-900 flex items-center justify-center text-orange-600 dark:text-orange-400 font-semibold">
+                    1
+                  </div>
+                  <div>
+                    <p className="font-medium">Open browser menu</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      Tap the three dots (⋮) in the top right corner of Chrome or Edge
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-orange-100 dark:bg-orange-900 flex items-center justify-center text-orange-600 dark:text-orange-400 font-semibold">
+                    2
+                  </div>
+                  <div>
+                    <p className="font-medium">Select "Add to Home screen" or "Install app"</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      Look for "Add to Home screen" or "Install app" in the menu
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-orange-100 dark:bg-orange-900 flex items-center justify-center text-orange-600 dark:text-orange-400 font-semibold">
+                    3
+                  </div>
+                  <div>
+                    <p className="font-medium">Confirm installation</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      Tap "Install" or "Add" to confirm. The app will appear on your home screen.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-orange-100 dark:bg-orange-900 flex items-center justify-center text-orange-600 dark:text-orange-400 font-semibold">
+                    1
+                  </div>
+                  <div>
+                    <p className="font-medium">Look for the install icon</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      In Chrome or Edge, look for an install icon (⊕) in the address bar
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-orange-100 dark:bg-orange-900 flex items-center justify-center text-orange-600 dark:text-orange-400 font-semibold">
+                    2
+                  </div>
+                  <div>
+                    <p className="font-medium">Or use the browser menu</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      Go to Menu (⋮) → "Install BAMPRO Uren" or "Apps" → "Install this site as an app"
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-orange-100 dark:bg-orange-900 flex items-center justify-center text-orange-600 dark:text-orange-400 font-semibold">
+                    3
+                  </div>
+                  <div>
+                    <p className="font-medium">Confirm installation</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      Click "Install" in the popup. The app will open in its own window.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+            <div className="pt-4 border-t">
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                After installation, you can access the app from your home screen or app launcher.
+              </p>
+            </div>
+          </div>
+          <div className="flex justify-end">
+            <Button onClick={() => setShowInstallDialog(false)}>
+              Got it
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
