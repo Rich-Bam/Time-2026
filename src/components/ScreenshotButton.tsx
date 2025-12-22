@@ -20,14 +20,6 @@ const ScreenshotButton = ({ currentUser, floating = false }: ScreenshotButtonPro
   const [description, setDescription] = useState("");
 
   const handleOpenDialog = () => {
-    if (!currentUser?.isAdmin) {
-      toast({
-        title: "No Access",
-        description: "Only admins can create bug reports.",
-        variant: "destructive",
-      });
-      return;
-    }
     setShowDialog(true);
   };
 
@@ -147,9 +139,8 @@ const ScreenshotButton = ({ currentUser, floating = false }: ScreenshotButtonPro
     }
   };
 
-  // Always show button for debugging - will check admin status on click
-  // Remove this check if you want button always visible
-  if (!currentUser?.isAdmin) {
+  // Show button for all logged-in users
+  if (!currentUser) {
     return null;
   }
 

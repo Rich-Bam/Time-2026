@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { Plus, FileText, Users, Clock, Trash2, Lock, LockOpen, Pencil, Check, X } from "lucide-react";
+import { Plus, FileText, Users, Clock, Trash2, Lock, LockOpen, Pencil, Check, X, Search } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useLanguage } from "@/contexts/LanguageContext";
 import {
@@ -49,6 +49,8 @@ const ProjectManagement = ({ currentUser }: ProjectManagementProps) => {
   // Edit project name state
   const [editingProjectId, setEditingProjectId] = useState<number | null>(null);
   const [editedProjectName, setEditedProjectName] = useState<string>("");
+  // Search state
+  const [searchQuery, setSearchQuery] = useState<string>("");
 
   // Fetch projects from Supabase on mount
   useEffect(() => {
@@ -442,8 +444,31 @@ const ProjectManagement = ({ currentUser }: ProjectManagementProps) => {
             </CardDescription>
           </CardHeader>
           <CardContent className="p-4 sm:p-6">
+            {/* Search Input */}
+            <div className="mb-4 sm:mb-6">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input
+                  type="text"
+                  placeholder="Zoek projecten..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10 h-10 sm:h-9 border-blue-200 dark:border-blue-700 focus:border-blue-500 dark:focus:border-blue-400 focus:ring-blue-500 dark:focus:ring-blue-400"
+                />
+              </div>
+            </div>
             <div className="space-y-4 sm:space-y-6">
-              {projects.map((project) => (
+              {projects
+                .filter((project) => {
+                  if (!searchQuery.trim()) return true;
+                  const query = searchQuery.toLowerCase();
+                  return (
+                    project.name?.toLowerCase().includes(query) ||
+                    project.client?.toLowerCase().includes(query) ||
+                    project.description?.toLowerCase().includes(query)
+                  );
+                })
+                .map((project) => (
                 <div key={project.id} className="border border-blue-100 dark:border-blue-800 rounded-xl p-4 sm:p-6 hover:shadow-md transition-all bg-gradient-to-r from-white to-blue-50 dark:from-gray-800 dark:to-blue-900/20">
                   <div className={`flex ${isMobile ? 'flex-col' : 'justify-between items-start'} gap-3 mb-4`}>
                     <div className="flex-1 w-full">

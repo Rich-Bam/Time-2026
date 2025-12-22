@@ -1396,7 +1396,7 @@ const Index = () => {
                     {t('nav.admin')}
                   </button>
                 )}
-                {currentUser?.email === SUPER_ADMIN_EMAIL && (
+                {currentUser?.isAdmin && (
                   <button
                     className={`text-sm sm:text-base md:text-lg font-medium px-2 sm:px-3 py-1.5 sm:py-1 rounded transition-colors ${activeTab === 'bugreports' ? 'bg-orange-600 text-white dark:bg-orange-500' : 'text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-700'}`}
                     onClick={() => setActiveTab('bugreports')}
@@ -1424,7 +1424,7 @@ const Index = () => {
                   {t('nav.welcome')}, {currentUser?.name || "User"}
                 </button>
               )}
-              {currentUser?.isAdmin && (
+              {currentUser && (
                 <ScreenshotButton currentUser={currentUser} />
               )}
               <Button 
@@ -1710,13 +1710,13 @@ const Index = () => {
         {activeTab === 'admin' && currentUser?.isAdmin && (
           <AdminPanel currentUser={currentUser} />
         )}
-        {activeTab === 'bugreports' && currentUser?.email === SUPER_ADMIN_EMAIL && (
+        {activeTab === 'bugreports' && currentUser?.isAdmin && (
           <BugReports currentUser={currentUser} />
         )}
       </div>
       
-      {/* Floating Report Bug Button - Always visible for admins */}
-      {currentUser?.isAdmin && (
+      {/* Floating Report Bug Button - Always visible for all users */}
+      {currentUser && (
         <div className="fixed bottom-6 right-6 z-50">
           <ScreenshotButton currentUser={currentUser} floating={true} />
         </div>
