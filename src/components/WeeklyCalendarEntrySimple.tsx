@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { supabase } from "@/integrations/supabase/client";
@@ -80,6 +81,7 @@ interface Entry {
   startTime: string;
   endTime: string;
   isSubmitted?: boolean;
+  fullDayOff?: boolean;
 }
 
 interface DayData {
@@ -99,7 +101,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
   const [days, setDays] = useState<DayData[]>(() => 
     getWeekDates(new Date()).map(date => ({ 
       date, 
-      entries: [{ workType: "", project: "", hours: "", startTime: "", endTime: "" }] 
+      entries: [{ workType: "", project: "", hours: "", startTime: "", endTime: "", fullDayOff: false }] 
     }))
   );
   const [projects, setProjects] = useState<{ id: number; name: string }[]>([]);
@@ -255,22 +257,24 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
   };
 
   // Fetch days off
+  const fetchDaysOff = async () => {
+    if (!currentUser) return;
+    const currentYear = new Date().getFullYear();
+    const { data } = await supabase
+      .from("timesheet")
+      .select("hours, description")
+      .eq("user_id", currentUser.id)
+      .eq("description", "31")
+      .gte("date", `${currentYear}-01-01`)
+      .lte("date", `${currentYear}-12-31`);
+    if (data) {
+      // Sum all entries with description "31" (both user entries and admin adjustments)
+      const totalHours = data.reduce((sum, e) => sum + (parseFloat(String(e.hours)) || 0), 0);
+      setDbDaysOff(totalHours / 8);
+    }
+  };
+
   useEffect(() => {
-    const fetchDaysOff = async () => {
-      if (!currentUser) return;
-      const currentYear = new Date().getFullYear();
-      const { data } = await supabase
-        .from("timesheet")
-        .select("hours, description")
-        .eq("user_id", currentUser.id)
-        .eq("description", "31")
-        .gte("date", `${currentYear}-01-01`)
-        .lte("date", `${currentYear}-12-31`);
-      if (data) {
-        const totalHours = data.reduce((sum, e) => sum + (parseFloat(e.hours) || 0), 0);
-        setDbDaysOff(totalHours / 8);
-      }
-    };
     fetchDaysOff();
   }, [currentUser]);
 
@@ -283,9 +287,14 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
       .eq("user_id", currentUser.id)
       .eq("date", dateStr);
     if (data) {
+      // Filter out admin adjustments (entries without startTime/endTime are admin adjustments)
+      // Only show entries that have both startTime and endTime - these are user-created entries
+      // Admin adjustments don't have startTime/endTime and should not be shown in weekly entry
+      const filteredData = data.filter(e => e.startTime && e.endTime);
+      
       setSubmittedEntries(prev => ({ 
         ...prev, 
-        [dateStr]: data.map(e => ({
+        [dateStr]: filteredData.map(e => ({
           id: e.id,
           workType: e.description || "",
           project: e.project || "",
@@ -347,7 +356,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
     setWeekStart(getWeekDates(newStart)[0]);
     setDays(getWeekDates(newStart).map(date => ({ 
       date, 
-      entries: [{ workType: "", project: "", hours: "", startTime: "", endTime: "" }] 
+      entries: [{ workType: "", project: "", hours: "", startTime: "", endTime: "", fullDayOff: false }] 
     })));
   };
 
@@ -442,18 +451,53 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
     // Validate required fields
     const isDayOff = entry.workType === "31";
     const requiresProject = workTypeRequiresProject(entry.workType);
-    if (!isDayOff && (!entry.workType || (!entry.project && requiresProject) || (!entry.startTime && !entry.endTime))) {
+    
+    // Validate work type is selected
+    if (!entry.workType) {
       toast({
         title: "Error",
-        description: "Please fill in all required fields",
+        description: "Please select a work type",
         variant: "destructive",
       });
       return;
     }
     
+    // For non-day-off entries, validate project and time fields
+    if (!isDayOff) {
+      if (requiresProject && !entry.project) {
+        toast({
+          title: "Error",
+          description: "Please select a project",
+          variant: "destructive",
+        });
+        return;
+      }
+      if (!entry.startTime || !entry.endTime) {
+        toast({
+          title: "Error",
+          description: "Please enter start and end times",
+          variant: "destructive",
+        });
+        return;
+      }
+    } else {
+      // For day off entries, either fullDayOff must be checked OR time fields must be filled
+      if (!entry.fullDayOff && !entry.startTime && !entry.endTime && !entry.hours) {
+        toast({
+          title: "Error",
+          description: "Please enter start and end times, or check 'Hele dag vrij'",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+    
     // Calculate hours
     let hoursToSave = 0;
-    if (entry.startTime && entry.endTime) {
+    // If full day off is checked, use 8 hours (08:00 to 16:30 minus 0.5 hour break)
+    if (isDayOff && entry.fullDayOff) {
+      hoursToSave = 8;
+    } else if (entry.startTime && entry.endTime) {
       const calculated = calculateHours(entry.startTime, entry.endTime);
       hoursToSave = parseFloat(calculated) || 0;
     } else if (entry.hours) {
@@ -469,19 +513,43 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
       return;
     }
     
+    // For day off, ensure we have at least some hours
+    if (isDayOff && hoursToSave <= 0) {
+      toast({
+        title: "Error",
+        description: "Please enter valid hours or check 'Hele dag vrij'",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     try {
       // Check if this entry is being edited (has an id)
       if (entry.id) {
         // Update existing entry in database
+        // For full day off, set startTime and endTime to null explicitly
+        const updateData: any = {
+          project: isDayOff ? null : entry.project,
+          hours: hoursToSave,
+          description: entry.workType,
+        };
+        
+        // Only include startTime/endTime if they are provided (not for full day off)
+        if (entry.startTime) {
+          updateData.startTime = entry.startTime;
+        } else {
+          updateData.startTime = null;
+        }
+        
+        if (entry.endTime) {
+          updateData.endTime = entry.endTime;
+        } else {
+          updateData.endTime = null;
+        }
+        
         const { error } = await supabase
           .from("timesheet")
-          .update({
-            project: isDayOff ? null : entry.project,
-            hours: hoursToSave,
-            description: entry.workType,
-            startTime: entry.startTime || null,
-            endTime: entry.endTime || null,
-          })
+          .update(updateData)
           .eq("id", entry.id);
         
         if (error) throw error;
@@ -501,18 +569,36 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
         }));
         
         setEditingEntry(null);
-        fetchSubmittedEntries(dateStr);
+        await fetchSubmittedEntries(dateStr);
+        // Refresh days off if this was a day off entry
+        if (isDayOff) {
+          await fetchDaysOff();
+        }
       } else {
         // Create new entry
-        const { data: newEntry, error } = await supabase.from("timesheet").insert([{
+        // For full day off, set startTime and endTime to null explicitly
+        const insertData: any = {
           project: isDayOff ? null : entry.project,
           user_id: currentUser.id,
           date: dateStr,
           hours: hoursToSave,
           description: entry.workType,
-          startTime: entry.startTime || null,
-          endTime: entry.endTime || null,
-        }]).select("id").single();
+        };
+        
+        // Only include startTime/endTime if they are provided (not for full day off)
+        if (entry.startTime) {
+          insertData.startTime = entry.startTime;
+        } else {
+          insertData.startTime = null;
+        }
+        
+        if (entry.endTime) {
+          insertData.endTime = entry.endTime;
+        } else {
+          insertData.endTime = null;
+        }
+        
+        const { data: newEntry, error } = await supabase.from("timesheet").insert([insertData]).select("id").single();
         
         if (error) throw error;
         
@@ -530,7 +616,11 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
           };
         }));
         
-        fetchSubmittedEntries(dateStr);
+        await fetchSubmittedEntries(dateStr);
+        // Refresh days off if this was a day off entry
+        if (isDayOff) {
+          await fetchDaysOff();
+        }
       }
       
       // Add a new empty entry
@@ -538,7 +628,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
         if (i !== dayIdx) return d;
         return {
           ...d,
-          entries: [...d.entries, { workType: "", project: "", hours: "", startTime: "", endTime: "" }]
+          entries: [...d.entries, { workType: "", project: "", hours: "", startTime: "", endTime: "", fullDayOff: false }]
         };
       }));
     } catch (error: any) {
@@ -741,7 +831,10 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
       
       // Calculate hours
       let hoursToSave = 0;
-      if (entry.startTime && entry.endTime) {
+      // If full day off is checked, use 8 hours
+      if (isDayOff && entry.fullDayOff) {
+        hoursToSave = 8;
+      } else if (entry.startTime && entry.endTime) {
         const calculated = calculateHours(entry.startTime, entry.endTime);
         hoursToSave = parseFloat(calculated) || 0;
       } else if (entry.hours) {
@@ -781,6 +874,12 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
       
       // Refresh submitted entries for the current day
       await fetchSubmittedEntries(currentDateStr);
+      
+      // Check if any copied entries were day off entries and refresh days off
+      const hasDayOffEntry = entriesToSave.some(e => e.description === "31");
+      if (hasDayOffEntry) {
+        await fetchDaysOff();
+      }
       
       toast({
         title: "Copied",
@@ -849,7 +948,10 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
         
         // Calculate hours from start/end time if available, otherwise use entered hours
         let hoursToSave = 0;
-        if (entry.startTime && entry.endTime) {
+        // If full day off is checked, use 8 hours
+        if (isDayOff && entry.fullDayOff) {
+          hoursToSave = 8;
+        } else if (entry.startTime && entry.endTime) {
           const calculated = calculateHours(entry.startTime, entry.endTime);
           hoursToSave = parseFloat(calculated) || 0;
         } else if (entry.hours) {
@@ -889,10 +991,15 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
       toast({ title: "Saved", description: `${entriesToSave.length} entries saved.` });
       // Refresh submitted entries
       weekDates.forEach(d => fetchSubmittedEntries(d.toISOString().split('T')[0]));
+      // Check if any saved entries were day off entries and refresh days off
+      const hasDayOffEntry = entriesToSave.some(e => e.description === "31");
+      if (hasDayOffEntry) {
+        await fetchDaysOff();
+      }
       // Reset entries
       setDays(getWeekDates(weekStart).map(date => ({ 
         date, 
-        entries: [{ workType: "", project: "", hours: "", startTime: "", endTime: "" }] 
+        entries: [{ workType: "", project: "", hours: "", startTime: "", endTime: "", fullDayOff: false }] 
       })));
     }
   };
@@ -903,8 +1010,17 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
       return;
     }
     
+    // Check if this is a day off entry before deleting
+    const { data: entry } = await supabase.from('timesheet').select('description').eq('id', entryId).single();
+    const isDayOff = entry?.description === "31";
+    
     await supabase.from('timesheet').delete().eq('id', entryId);
-    fetchSubmittedEntries(dateStr);
+    await fetchSubmittedEntries(dateStr);
+    
+    // Refresh days off if a day off entry was deleted
+    if (isDayOff) {
+      await fetchDaysOff();
+    }
   };
 
   const getWorkTypeLabel = (desc: string) => {
@@ -1196,7 +1312,9 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
             <CardTitle className="text-blue-900 text-sm sm:text-lg">{t('weekly.daysOffRemaining')}</CardTitle>
           </CardHeader>
           <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
-            <div className="text-2xl sm:text-3xl font-bold text-blue-700">{daysOffLeft} / {totalDaysOff}</div>
+            <div className="text-2xl sm:text-3xl font-bold text-blue-700">
+              {daysOffLeft} <span className="text-base sm:text-lg">({(parseFloat(daysOffLeft) * 8).toFixed(1)} {t('weekly.hours')})</span>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -1504,6 +1622,38 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                             </div>
                           </div>
 
+                          {/* Full Day Off checkbox for work type 31 */}
+                          {entry.workType === "31" && (
+                            <div className="flex items-center space-x-2">
+                              <Checkbox
+                                id={`fullDayOff-${dayIdx}-${entryIdx}`}
+                                checked={entry.fullDayOff || false}
+                                onCheckedChange={(checked) => {
+                                  const isFullDay = checked === true;
+                                  handleEntryChange(dayIdx, entryIdx, "fullDayOff", isFullDay);
+                                  if (isFullDay) {
+                                    // Set times to 08:00 - 16:30, but hours to 8 (minus 0.5 hour break)
+                                    handleEntryChange(dayIdx, entryIdx, "startTime", "08:00");
+                                    handleEntryChange(dayIdx, entryIdx, "endTime", "16:30");
+                                    handleEntryChange(dayIdx, entryIdx, "hours", "8");
+                                  } else {
+                                    // Clear times and hours when unchecking
+                                    handleEntryChange(dayIdx, entryIdx, "startTime", "");
+                                    handleEntryChange(dayIdx, entryIdx, "endTime", "");
+                                    handleEntryChange(dayIdx, entryIdx, "hours", "");
+                                  }
+                                }}
+                                disabled={isLocked}
+                              />
+                              <Label 
+                                htmlFor={`fullDayOff-${dayIdx}-${entryIdx}`}
+                                className="text-xs font-medium cursor-pointer"
+                              >
+                                {t('weekly.fullDayOff') || 'Hele dag vrij (8 uren)'}
+                              </Label>
+                            </div>
+                          )}
+
                           <div className="grid grid-cols-3 gap-2">
                             <div>
                               <Label className="text-xs font-semibold">{t('weekly.from')}</Label>
@@ -1531,6 +1681,10 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                               <Label className="text-xs font-semibold">{t('weekly.hours')}</Label>
                               <div className="h-10 flex items-center justify-center bg-gray-50 border rounded px-2 text-sm font-medium mt-1">
                                 {(() => {
+                                  // If full day off is checked, show 8 hours
+                                  if (entry.workType === "31" && entry.fullDayOff) {
+                                    return "8h";
+                                  }
                                   if (entry.startTime && entry.endTime) {
                                     const calculated = calculateHours(entry.startTime, entry.endTime);
                                     const hours = parseFloat(calculated);
@@ -1561,7 +1715,13 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                           </div>
                           <div className="text-xs text-gray-600">
                             <div><strong>{t('weekly.project')}:</strong> {submittedEntry.project || "-"}</div>
-                            <div><strong>{t('weekly.time')}:</strong> {submittedEntry.startTime || "-"} - {submittedEntry.endTime || "-"}</div>
+                            <div><strong>{t('weekly.time')}:</strong> {
+                              submittedEntry.startTime && submittedEntry.endTime 
+                                ? `${submittedEntry.startTime} - ${submittedEntry.endTime}`
+                                : submittedEntry.workType === "31" && parseFloat(submittedEntry.hours || "0") >= 8
+                                  ? t('weekly.fullDayOff') || "Hele dag vrij (8 uren)"
+                                  : "-"
+                            }</div>
                             <div><strong>{t('weekly.hours')}:</strong> {submittedEntry.hours || "0"}h</div>
                           </div>
                         </div>
@@ -1778,6 +1938,37 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                                     </Command>
                                   </PopoverContent>
                                 </Popover>
+                                {/* Full Day Off checkbox for work type 31 */}
+                                {entry.workType === "31" && (
+                                  <div className="flex items-center space-x-2 mt-2">
+                                    <Checkbox
+                                      id={`fullDayOff-desktop-${dayIdx}-${entryIdx}`}
+                                      checked={entry.fullDayOff || false}
+                                      onCheckedChange={(checked) => {
+                                        const isFullDay = checked === true;
+                                        handleEntryChange(dayIdx, entryIdx, "fullDayOff", isFullDay);
+                                        if (isFullDay) {
+                                          // Set times to 08:00 - 16:30, but hours to 8 (minus 0.5 hour break)
+                                          handleEntryChange(dayIdx, entryIdx, "startTime", "08:00");
+                                          handleEntryChange(dayIdx, entryIdx, "endTime", "16:30");
+                                          handleEntryChange(dayIdx, entryIdx, "hours", "8");
+                                        } else {
+                                          // Clear times and hours when unchecking
+                                          handleEntryChange(dayIdx, entryIdx, "startTime", "");
+                                          handleEntryChange(dayIdx, entryIdx, "endTime", "");
+                                          handleEntryChange(dayIdx, entryIdx, "hours", "");
+                                        }
+                                      }}
+                                      disabled={isLocked}
+                                    />
+                                    <Label 
+                                      htmlFor={`fullDayOff-desktop-${dayIdx}-${entryIdx}`}
+                                      className="text-xs font-medium cursor-pointer"
+                                    >
+                                      {t('weekly.fullDayOff') || 'Hele dag vrij (8 uren)'}
+                                    </Label>
+                                  </div>
+                                )}
                               </td>
                               <td className="border p-2">
                                 <Input
@@ -1802,6 +1993,10 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                               <td className="border p-2">
                                 <div className="h-9 flex items-center justify-center bg-gray-50 border rounded px-3 text-sm font-medium">
                                   {(() => {
+                                    // If full day off is checked, show 8 hours
+                                    if (entry.workType === "31" && entry.fullDayOff) {
+                                      return "8.00h";
+                                    }
                                     if (entry.startTime && entry.endTime) {
                                       const calculated = calculateHours(entry.startTime, entry.endTime);
                                       const hours = parseFloat(calculated);

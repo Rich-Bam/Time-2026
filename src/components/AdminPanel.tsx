@@ -138,7 +138,9 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
       if (data) {
         const map: Record<string, number> = {};
         data.forEach(e => {
-          map[e.user_id] = (map[e.user_id] || 0) + (parseFloat(e.hours) || 0);
+          // Handle both string and number user_id
+          const userId = String(e.user_id);
+          map[userId] = (map[userId] || 0) + (parseFloat(String(e.hours)) || 0);
         });
         setDaysOffMap(map);
       }
@@ -587,7 +589,9 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
       if (data) {
         const map: Record<string, number> = {};
         data.forEach(e => {
-          map[e.user_id] = (map[e.user_id] || 0) + (parseFloat(e.hours) || 0);
+          // Handle both string and number user_id
+          const userId = String(e.user_id);
+          map[userId] = (map[userId] || 0) + (parseFloat(String(e.hours)) || 0);
         });
         setDaysOffMap(map);
       }
@@ -1142,11 +1146,11 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600 dark:text-gray-400">{t('admin.approved')}:</span>
-                    <span className="text-gray-900 dark:text-gray-100">{user.approved !== false ? "Ja" : "Nee"}</span>
+                    <span className="text-gray-900 dark:text-gray-100">{user.approved !== false ? t('admin.yes') : t('admin.no')}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600 dark:text-gray-400">{t('admin.mustChangePassword')}:</span>
-                    <span className="text-gray-900 dark:text-gray-100">{user.must_change_password ? "Ja" : "Nee"}</span>
+                    <span className="text-gray-900 dark:text-gray-100">{user.must_change_password ? t('admin.yes') : t('admin.no')}</span>
                   </div>
                   {currentUser.email === SUPER_ADMIN_EMAIL && (
                     <div className="flex justify-between">
@@ -1158,13 +1162,19 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                           onChange={(e) => handleToggleTimebuzzer(user.id, user.email, e.target.checked)}
                           className="h-3 w-3"
                         />
-                        <span>{user.can_use_timebuzzer ? "Ja" : "Nee"}</span>
+                        <span>{user.can_use_timebuzzer ? t('admin.yes') : t('admin.no')}</span>
                       </div>
                     </div>
                   )}
                   <div className="flex justify-between">
                     <span className="text-gray-600 dark:text-gray-400">{t('admin.daysOffLeft')}:</span>
-                    <span className="font-semibold text-gray-900 dark:text-gray-100">{(totalDaysOff - ((daysOffMap[user.id] || 0) / 8)).toFixed(2)} / {totalDaysOff}</span>
+                    <span className="font-semibold text-gray-900 dark:text-gray-100">
+                      {(() => {
+                        const daysLeft = (totalDaysOff - ((daysOffMap[String(user.id)] || 0) / 8)).toFixed(2);
+                        const hoursLeft = (parseFloat(daysLeft) * 8).toFixed(1);
+                        return `${daysLeft} (${hoursLeft} ${t('admin.hours')})`;
+                      })()}
+                    </span>
                   </div>
                 </div>
                 <div className="mt-3 space-y-2">
@@ -1172,7 +1182,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                     <div className="space-y-2">
                       <Input
                         type="text"
-                        placeholder="Nieuw wachtwoord"
+                        placeholder={t('admin.newPassword')}
                         value={resetPassword}
                         onChange={e => setResetPassword(e.target.value)}
                         className="h-9 text-sm"
@@ -1201,20 +1211,20 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                       type="number"
                       min="0.25"
                       step="0.25"
-                      placeholder="Uren"
+                      placeholder={t('admin.hours')}
                       value={daysOffInput[user.id] || ""}
                       onChange={e => setDaysOffInput(prev => ({ ...prev, [user.id]: e.target.value }))}
                       className="h-9 text-sm"
                     />
                     <div className="flex gap-2">
                       <Button size="sm" onClick={() => handleAddOrDeductDaysOff(user.id, -Math.abs(parseFloat(daysOffInput[user.id] || "0")))} className="flex-1 h-9 text-xs">
-                        Toevoegen
+                        {t('admin.add')}
                       </Button>
                       <Button size="sm" variant="destructive" onClick={() => handleAddOrDeductDaysOff(user.id, Math.abs(parseFloat(daysOffInput[user.id] || "0")))} className="flex-1 h-9 text-xs">
-                        Aftrekken
+                        {t('admin.subtract')}
                       </Button>
                     </div>
-                    <span className="text-xs text-gray-500">(1 dag = 8 uren)</span>
+                    <span className="text-xs text-gray-500">{t('admin.oneDayEqualsEightHours')}</span>
                   </div>
                 </div>
               </div>
@@ -1351,11 +1361,11 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                           disabled={user.email === SUPER_ADMIN_EMAIL}
                           onChange={(e) => handleToggleAdmin(user.id, user.email, e.target.checked)}
                         />
-                        <span className="text-gray-900 dark:text-gray-100">{user.isAdmin ? "Ja" : "Nee"}</span>
+                        <span className="text-gray-900 dark:text-gray-100">{user.isAdmin ? t('admin.yes') : t('admin.no')}</span>
                       </div>
                     </td>
-                    <td className="p-2 text-gray-900 dark:text-gray-100">{user.approved !== false ? "Ja" : "Nee"}</td>
-                    <td className="p-2 text-gray-900 dark:text-gray-100">{user.must_change_password ? "Ja" : "Nee"}</td>
+                    <td className="p-2 text-gray-900 dark:text-gray-100">{user.approved !== false ? t('admin.yes') : t('admin.no')}</td>
+                    <td className="p-2 text-gray-900 dark:text-gray-100">{user.must_change_password ? t('admin.yes') : t('admin.no')}</td>
                     {currentUser.email === SUPER_ADMIN_EMAIL && (
                       <td className="p-2">
                         <div className="flex items-center gap-2">
@@ -1365,17 +1375,23 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                             onChange={(e) => handleToggleTimebuzzer(user.id, user.email, e.target.checked)}
                             className="h-4 w-4"
                           />
-                          <span className="text-gray-900 dark:text-gray-100">{user.can_use_timebuzzer ? "Ja" : "Nee"}</span>
+                          <span className="text-gray-900 dark:text-gray-100">{user.can_use_timebuzzer ? t('admin.yes') : t('admin.no')}</span>
                         </div>
                       </td>
                     )}
-                    <td className="p-2 text-gray-900 dark:text-gray-100">{(totalDaysOff - ((daysOffMap[user.id] || 0) / 8)).toFixed(2)} / {totalDaysOff}</td>
+                    <td className="p-2 text-gray-900 dark:text-gray-100">
+                      {(() => {
+                        const daysLeft = (totalDaysOff - ((daysOffMap[String(user.id)] || 0) / 8)).toFixed(2);
+                        const hoursLeft = (parseFloat(daysLeft) * 8).toFixed(1);
+                        return `${daysLeft} (${hoursLeft} ${t('admin.hours')})`;
+                      })()}
+                    </td>
                     <td className="p-2">
                       {resetUserId === user.id ? (
                         <div className="flex gap-2 items-center">
                           <Input
                             type="text"
-                            placeholder="Nieuw wachtwoord"
+                            placeholder={t('admin.newPassword')}
                             value={resetPassword}
                             onChange={e => setResetPassword(e.target.value)}
                             className="h-8"
@@ -1392,7 +1408,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                             className="ml-2"
                             onClick={() => handleDeleteUser(user.id, user.email)}
                             disabled={user.id === currentUser.id || user.email === SUPER_ADMIN_EMAIL}
-                            title={user.id === currentUser.id ? "Je kunt je eigen account niet verwijderen." : user.email === SUPER_ADMIN_EMAIL ? "Je kunt de super admin niet verwijderen." : "Verwijder gebruiker"}
+                            title={user.id === currentUser.id ? t('admin.youCannotDeleteOwnAccount') : user.email === SUPER_ADMIN_EMAIL ? t('admin.youCannotDeleteSuperAdmin') : t('admin.deleteUser')}
                           >
                             {t('common.delete')}
                           </Button>
@@ -1403,20 +1419,20 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                           type="number"
                           min="0.25"
                           step="0.25"
-                          placeholder="Uren"
+                          placeholder={t('admin.hours')}
                           value={daysOffInput[user.id] || ""}
                           onChange={e => setDaysOffInput(prev => ({ ...prev, [user.id]: e.target.value }))}
                           style={{ width: 70 }}
                           className="h-8"
                         />
                         <Button size="sm" onClick={() => handleAddOrDeductDaysOff(user.id, -Math.abs(parseFloat(daysOffInput[user.id] || "0")))}>
-                          Toevoegen
+                          {t('admin.add')}
                         </Button>
                         <Button size="sm" variant="destructive" onClick={() => handleAddOrDeductDaysOff(user.id, Math.abs(parseFloat(daysOffInput[user.id] || "0")))}>
-                          Aftrekken
+                          {t('admin.subtract')}
                         </Button>
                       </div>
-                      <span className="text-xs text-gray-500">(1 dag = 8 uren)</span>
+                      <span className="text-xs text-gray-500">{t('admin.oneDayEqualsEightHours')}</span>
                     </td>
                   </tr>
                 ))}
@@ -1615,6 +1631,18 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
               const week = getISOWeek(e.date);
               if (!weeks[week]) weeks[week] = [];
               weeks[week].push(e);
+            });
+            // Sort entries within each week by date, then by startTime
+            Object.keys(weeks).forEach(week => {
+              weeks[week].sort((a, b) => {
+                // First sort by date
+                const dateCompare = a.date.localeCompare(b.date);
+                if (dateCompare !== 0) return dateCompare;
+                // If same date, sort by startTime
+                const timeA = a.startTime || "00:00";
+                const timeB = b.startTime || "00:00";
+                return timeA.localeCompare(timeB);
+              });
             });
             // Sort weeks descending (most recent first)
             const weekKeys = Object.keys(weeks).sort((a, b) => b.localeCompare(a));

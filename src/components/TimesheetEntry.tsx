@@ -275,7 +275,9 @@ const TimesheetEntry = ({ currentUser }: TimesheetEntryProps) => {
             <CardTitle className="text-blue-900 text-base sm:text-lg">Days Off Remaining</CardTitle>
           </CardHeader>
           <CardContent className="p-4 sm:p-6 pt-0">
-            <div className="text-2xl sm:text-3xl font-bold text-blue-700">{daysOffLeft} / {totalDaysOff}</div>
+            <div className="text-2xl sm:text-3xl font-bold text-blue-700">
+              {daysOffLeft} <span className="text-lg">({(parseFloat(daysOffLeft) * 8).toFixed(1)} hours)</span>
+            </div>
             <div className="text-xs sm:text-sm text-blue-600 mt-2">You have {daysOffLeft} days off left this year.</div>
           </CardContent>
         </Card>
