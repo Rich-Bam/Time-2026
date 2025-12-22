@@ -84,7 +84,11 @@ Deno.serve(async (req) => {
     // Handle different actions
     if (action === "test-api") {
       // Test API connection - try multiple possible endpoints
+      const userId = body.userId; // Optional: filter by specific user
       console.log("Testing Timebuzzer API connection...");
+      if (userId) {
+        console.log(`Filtering by Timebuzzer user ID: ${userId}`);
+      }
       console.log(`API Key present: ${apiKey ? 'Yes' : 'No'}`);
       console.log(`API Key length: ${apiKey ? apiKey.length : 0}`);
       console.log(`API Key starts with: ${apiKey ? apiKey.substring(0, 20) + '...' : 'N/A'}`);
@@ -135,7 +139,8 @@ Deno.serve(async (req) => {
       
       // Use the correct endpoint from Timebuzzer API documentation
       // According to docs: https://my.timebuzzer.com/open-api/activities?count={count}&offset={offset}
-      const endpoint = "https://my.timebuzzer.com/open-api/activities?count=10&offset=0";
+      // If userId is provided, we'll filter the results after fetching
+      const endpoint = "https://my.timebuzzer.com/open-api/activities?count=100&offset=0"; // Increased count to get more activities for filtering
       
       try {
         // Use the correct endpoint from Timebuzzer API documentation
@@ -261,8 +266,16 @@ Deno.serve(async (req) => {
             console.error('Error fetching tiles:', e);
           }
           
+          // Filter activities by userId if specified
+          let activitiesToProcess = data.activities;
+          if (userId) {
+            const userIdNum = typeof userId === 'string' ? parseInt(userId, 10) : userId;
+            activitiesToProcess = data.activities.filter((activity: any) => activity.userId === userIdNum);
+            console.log(`Filtered activities: ${activitiesToProcess.length} of ${data.activities.length} match user ID ${userId}`);
+          }
+          
           // Enrich activities with user and tile names
-          const enrichedActivities = data.activities.map((activity: any) => {
+          const enrichedActivities = activitiesToProcess.map((activity: any) => {
             const user = usersMap.get(activity.userId);
             const tileNames = activity.tiles
               ? activity.tiles.map((tileId: number) => tilesMap.get(tileId) || `Tile ${tileId}`)
@@ -364,6 +377,23 @@ Deno.serve(async (req) => {
       try {
         // Use the filtered activities endpoint from Timebuzzer API documentation
         // POST https://my.timebuzzer.com/open-api/activities/filters
+        // Note: We don't filter by userId in the API request because:
+        // 1. The API may not support it
+        // 2. The API key may only have access to certain users
+        // 3. We'll filter client-side after fetching all available activities
+        const requestBody: any = {
+          startDate: `${startDate}T00:00:00.000`,
+          endDate: `${endDate}T23:59:59.999`,
+          strictDate: false,
+        };
+        
+        const requestedUserId = body.userId;
+        if (requestedUserId && action === "fetch-activities") {
+          console.log(`Will filter by user ID ${requestedUserId} after fetching activities from API`);
+        }
+        
+        console.log(`Fetching activities from Timebuzzer API with date range: ${requestBody.startDate} to ${requestBody.endDate}`);
+        
         const response = await fetch(
           "https://my.timebuzzer.com/open-api/activities/filters?offset=0&count=1000",
           {
@@ -372,11 +402,7 @@ Deno.serve(async (req) => {
               Authorization: `APIKey ${apiKey}`,
               "Content-Type": "application/json",
             },
-            body: JSON.stringify({
-              startDate: `${startDate}T00:00:00.000`,
-              endDate: `${endDate}T23:59:59.999`,
-              strictDate: false,
-            }),
+            body: JSON.stringify(requestBody),
           }
         );
 
@@ -433,7 +459,56 @@ Deno.serve(async (req) => {
         }
 
         // The filtered activities endpoint returns {totalCount, totalDuration, activities: [...]}
-        const activities: TimebuzzerActivity[] = responseData.activities || (Array.isArray(responseData) ? responseData : []);
+        let activities: TimebuzzerActivity[] = responseData.activities || (Array.isArray(responseData) ? responseData : []);
+
+        console.log(`Received ${activities.length} activities from Timebuzzer API (totalCount: ${responseData.totalCount || 'N/A'})`);
+        
+        // Log all unique user IDs in the response for debugging
+        if (activities.length > 0) {
+          const uniqueUserIds = [...new Set(activities.map((a: any) => a.userId))];
+          console.log(`Unique user IDs in API response: ${uniqueUserIds.join(', ')}`);
+          console.log(`Activity count per user:`, uniqueUserIds.map(uid => {
+            const count = activities.filter((a: any) => a.userId === uid).length;
+            return `${uid}: ${count}`;
+          }).join(', '));
+        }
+
+        // Client-side filtering by userId if specified (for fetch-activities action)
+        // This is necessary because the API may not support userId filtering in the request body
+        // or the API key may have limited access
+        if (requestedUserId && action === "fetch-activities") {
+          const userIdNum = typeof requestedUserId === 'string' ? parseInt(requestedUserId, 10) : requestedUserId;
+          const activitiesBeforeFilter = activities.length;
+          console.log(`Filtering activities by user ID: ${requestedUserId} (as number: ${userIdNum})`);
+          console.log(`Total activities before filter: ${activities.length}`);
+          
+          if (activities.length > 0) {
+            const sampleUserIds = activities.slice(0, 10).map((a: any) => a.userId);
+            console.log(`Sample activity userIds (first 10): ${sampleUserIds.join(', ')}`);
+          }
+          
+          activities = activities.filter((activity: TimebuzzerActivity) => {
+            const matches = activity.userId === userIdNum;
+            if (!matches && activitiesBeforeFilter <= 10) {
+              // Log first few non-matching activities for debugging
+              console.log(`Activity ${activity.id} has userId ${activity.userId}, not matching ${userIdNum}`);
+            }
+            return matches;
+          });
+          
+          console.log(`After filtering: ${activities.length} of ${activitiesBeforeFilter} activities match user ${userIdNum}`);
+          
+          if (activities.length === 0 && activitiesBeforeFilter > 0) {
+            const uniqueUserIds = [...new Set(responseData.activities?.map((a: any) => a.userId) || [])];
+            console.log(`⚠️ No activities found for user ${userIdNum}. Available user IDs in this date range: ${uniqueUserIds.join(', ')}`);
+            console.log(`This could mean:`);
+            console.log(`  1. The user has no activities in this date range`);
+            console.log(`  2. The API key doesn't have access to this user's activities`);
+            console.log(`  3. The userId mapping is incorrect`);
+          } else if (activities.length === 0 && activitiesBeforeFilter === 0) {
+            console.log(`No activities returned from API for this date range`);
+          }
+        }
 
         console.log(`Fetched ${activities.length} activities from Timebuzzer (totalCount: ${responseData.totalCount || 'N/A'})`);
 
@@ -511,6 +586,12 @@ Deno.serve(async (req) => {
           console.error('Error fetching tiles:', e);
         }
         
+        // Get available user IDs from the original API response (before filtering)
+        // This helps debug when a specific user has no activities
+        const availableUserIds = requestedUserId && action === "fetch-activities" && activities.length === 0
+          ? [...new Set((responseData.activities || []).map((a: any) => a.userId))]
+          : undefined;
+
         // Enrich activities with user and tile names
         const enrichedActivities = activities.map((activity: any) => {
           const user = usersMap.get(activity.userId);
@@ -533,6 +614,7 @@ Deno.serve(async (req) => {
             count: activities.length,
             totalCount: responseData.totalCount,
             totalDuration: responseData.totalDuration,
+            availableUserIds: availableUserIds, // Include available user IDs if filtering resulted in 0 activities
           }),
           {
             status: 200,
@@ -796,12 +878,13 @@ Deno.serve(async (req) => {
 
             // Insert or update timesheet entry
             // Note: timesheet table uses 'project' (name) not 'project_id'
+            // All Timebuzzer entries automatically get work type 100 (Remote)
             const insertData: any = {
               user_id: localUserId,
               project: localProjectName, // Use project name as the table expects
               date: dateStr,
               hours: hours,
-              description: activity.note || "", // API uses note, not description
+              description: "100", // All Timebuzzer entries get work type 100 (Remote)
               timebuzzer_activity_id: String(activity.id), // Prevent duplicates (convert to string for consistency)
             };
             
@@ -998,12 +1081,27 @@ Deno.serve(async (req) => {
           console.error('Error fetching tiles:', e);
         }
 
-        // Process selected activities and insert into timesheet
-        let inserted = 0;
+        // Process selected activities: first collect all valid activities, then group by (user, date, project) and combine
         let skipped = 0;
         let projectsCreated = 0;
         const errors: string[] = [];
         const skipReasons: { activityId: number; reason: string }[] = [];
+        
+        // First pass: collect all valid activities with their processed data
+        interface ProcessedActivity {
+          activity: any;
+          localUserId: string;
+          localProjectName: string;
+          localProjectId: number;
+          dateStr: string;
+          hours: number;
+          startTime: string;
+          endTime: string;
+          startDateTime: Date;
+          endDateTime: Date;
+        }
+        
+        const processedActivities: ProcessedActivity[] = [];
 
         for (const activity of activities) {
           try {
@@ -1119,72 +1217,206 @@ Deno.serve(async (req) => {
             
             // Extract time from startDate and endDate (format: HH:mm)
             // Timebuzzer returns dates in UTC, but we want local time for display
-            // Use the UTC offset from the activity if available, otherwise use UTC
+            // The Edge Function runs in UTC, so we need to convert to local time (CET/CEST = UTC+1 or UTC+2)
+            // Use the UTC offset from the activity if available, otherwise assume UTC+1 (CET)
             const startDateTime = new Date(activity.startDate);
             const endDateTime = new Date(activity.endDate);
             
-            // Convert to local time string (HH:mm format)
-            // getHours() and getMinutes() return local time
-            const startTime = `${String(startDateTime.getHours()).padStart(2, '0')}:${String(startDateTime.getMinutes()).padStart(2, '0')}`;
-            const endTime = `${String(endDateTime.getHours()).padStart(2, '0')}:${String(endDateTime.getMinutes()).padStart(2, '0')}`;
+            // Calculate UTC offset in hours (default to +1 for CET, +2 for CEST)
+            // Timebuzzer offset format: "+01:00" or "+02:00" or "-05:00" etc.
+            let utcOffsetHours = 1; // Default to CET (UTC+1)
+            if (activity.startUtcOffset) {
+              // Parse offset like "+01:00" or "+02:00"
+              const offsetMatch = activity.startUtcOffset.match(/([+-])(\d{2}):(\d{2})/);
+              if (offsetMatch) {
+                const sign = offsetMatch[1] === '+' ? 1 : -1;
+                const hours = parseInt(offsetMatch[2], 10);
+                const minutes = parseInt(offsetMatch[3], 10);
+                utcOffsetHours = sign * (hours + minutes / 60);
+              }
+            }
+            
+            // Convert UTC time to local time by adding the offset
+            const startLocalTime = new Date(startDateTime.getTime() + (utcOffsetHours * 60 * 60 * 1000));
+            const endLocalTime = new Date(endDateTime.getTime() + (utcOffsetHours * 60 * 60 * 1000));
+            
+            // Format as HH:mm (using UTC methods since we already applied the offset)
+            const startTime = `${String(startLocalTime.getUTCHours()).padStart(2, '0')}:${String(startLocalTime.getUTCMinutes()).padStart(2, '0')}`;
+            const endTime = `${String(endLocalTime.getUTCHours()).padStart(2, '0')}:${String(endLocalTime.getUTCMinutes()).padStart(2, '0')}`;
             
             console.log(`Activity ${activity.id}: ${dateStr} ${startTime} - ${endTime} (${hours} hours)`);
 
-            // Insert or update timesheet entry
-            const insertData: any = {
-              user_id: localUserId,
-              project: localProjectName,
-              date: dateStr,
-              hours: hours,
-              description: activity.note || "",
-              timebuzzer_activity_id: String(activity.id),
-              startTime: startTime,
-              endTime: endTime,
-            };
-
-            // Check if this activity already exists
-            const { data: existing, error: checkError } = await supabase
-              .from("timesheet")
-              .select("id")
-              .eq("timebuzzer_activity_id", String(activity.id))
-              .limit(1);
-
-            let insertError: any = null;
-
-            if (checkError) {
-              console.error(`Error checking for existing activity ${activity.id}:`, checkError);
-            }
-
-            if (existing && existing.length > 0) {
-              // Update existing entry
-              const { error: updateError } = await supabase
-                .from("timesheet")
-                .update(insertData)
-                .eq("timebuzzer_activity_id", String(activity.id));
-
-              insertError = updateError;
-              if (!updateError) {
-                console.log(`Updated existing activity ${activity.id} for user ${localUserId} on ${dateStr}`);
-              }
-            } else {
-              // Insert new entry
-              const { error: insertErr } = await supabase.from("timesheet").insert(insertData);
-
-              insertError = insertErr;
-              if (!insertErr) {
-                console.log(`Inserted new activity ${activity.id} for user ${localUserId} on ${dateStr}`);
-              }
-            }
-
-            if (insertError) {
-              console.error(`Error inserting/updating activity ${activity.id}:`, insertError);
-              errors.push(`Activity ${activity.id}: ${insertError.message}`);
-            } else {
-              inserted++;
+            // Collect the processed activity for later combining
+            // Only add if we have all required fields
+            if (localUserId && localProjectName && localProjectId) {
+              processedActivities.push({
+                activity,
+                localUserId,
+                localProjectName,
+                localProjectId,
+                dateStr,
+                hours,
+                startTime,
+                endTime,
+                startDateTime: startLocalTime,
+                endDateTime: endLocalTime,
+              });
             }
           } catch (error: any) {
             console.error(`Error processing activity ${activity.id}:`, error);
             errors.push(`Activity ${activity.id}: ${error.message}`);
+          }
+        }
+
+        // Second pass: group activities by (user, date, project) and combine only consecutive ones
+        // First, sort all activities by start time
+        processedActivities.sort((a, b) => a.startDateTime.getTime() - b.startDateTime.getTime());
+        
+        // Group by (user, date, project) and then split into consecutive groups
+        // Key format: "userId|date|projectName"
+        const groupedActivities = new Map<string, ProcessedActivity[]>();
+        
+        // First, group by key
+        const tempGroups = new Map<string, ProcessedActivity[]>();
+        for (const processed of processedActivities) {
+          const key = `${processed.localUserId}|${processed.dateStr}|${processed.localProjectName}`;
+          if (!tempGroups.has(key)) {
+            tempGroups.set(key, []);
+          }
+          tempGroups.get(key)!.push(processed);
+        }
+        
+        // Then, for each group, split into consecutive sub-groups
+        // Activities are consecutive if the end time of one is close to the start time of the next (within 1 minute)
+        for (const [key, group] of tempGroups.entries()) {
+          // Sort by start time (should already be sorted, but just to be sure)
+          group.sort((a, b) => a.startDateTime.getTime() - b.startDateTime.getTime());
+          
+          // Split into consecutive sub-groups
+          const consecutiveGroups: ProcessedActivity[][] = [];
+          let currentGroup: ProcessedActivity[] = [];
+          
+          for (let i = 0; i < group.length; i++) {
+            const current = group[i];
+            
+            if (currentGroup.length === 0) {
+              // Start a new group
+              currentGroup = [current];
+            } else {
+              // Check if this activity is consecutive to the last one in current group
+              const lastInGroup = currentGroup[currentGroup.length - 1];
+              const timeGap = current.startDateTime.getTime() - lastInGroup.endDateTime.getTime();
+              const gapMinutes = timeGap / (1000 * 60);
+              
+              // If gap is less than 30 minutes, consider it consecutive
+              // This allows combining entries that are close together (e.g., 08:42 and 08:50 = 8 min gap)
+              if (gapMinutes <= 30) {
+                currentGroup.push(current);
+              } else {
+                // Save current group and start a new one
+                consecutiveGroups.push(currentGroup);
+                currentGroup = [current];
+              }
+            }
+          }
+          
+          // Don't forget the last group
+          if (currentGroup.length > 0) {
+            consecutiveGroups.push(currentGroup);
+          }
+          
+          // Add each consecutive group as a separate entry
+          consecutiveGroups.forEach((subGroup, index) => {
+            const groupKey = index === 0 ? key : `${key}_${index}`;
+            groupedActivities.set(groupKey, subGroup);
+          });
+        }
+        
+        console.log(`Grouped ${processedActivities.length} activities into ${groupedActivities.size} combined entries (only consecutive activities are combined)`);
+        
+        // Third pass: combine activities in each group and insert
+        let inserted = 0;
+        for (const [key, group] of groupedActivities.entries()) {
+          try {
+            // Sort by start time (should already be sorted)
+            group.sort((a, b) => a.startDateTime.getTime() - b.startDateTime.getTime());
+            
+            // Get first start time and last end time
+            const firstActivity = group[0];
+            const lastActivity = group[group.length - 1];
+            
+            // Calculate total hours
+            const totalHours = group.reduce((sum, a) => sum + a.hours, 0);
+            const roundedHours = Math.round(totalHours * 100) / 100;
+            
+            // Use startTime from first activity and endTime from last activity
+            const combinedStartTime = firstActivity.startTime;
+            const combinedEndTime = lastActivity.endTime;
+            
+            // Combine notes (if any)
+            const combinedNotes = group
+              .map(a => a.activity.note)
+              .filter(note => note && note.trim())
+              .join('; ');
+            
+            // Create combined entry
+            // All Timebuzzer entries automatically get work type 100 (Remote)
+            const insertData: any = {
+              user_id: firstActivity.localUserId,
+              project: firstActivity.localProjectName || "",
+              date: firstActivity.dateStr,
+              hours: roundedHours,
+              description: "100", // All Timebuzzer entries get work type 100 (Remote)
+              startTime: combinedStartTime,
+              endTime: combinedEndTime,
+              // Store all activity IDs in a comma-separated string for reference
+              timebuzzer_activity_id: group.map(a => String(a.activity.id)).join(','),
+            };
+            
+            // Check if any of these activities already exist
+            const activityIds = group.map(a => String(a.activity.id));
+            const { data: existing, error: checkError } = await supabase
+              .from("timesheet")
+              .select("id, timebuzzer_activity_id")
+              .in("timebuzzer_activity_id", activityIds)
+              .limit(1);
+            
+            let insertError: any = null;
+            
+            if (checkError) {
+              console.error(`Error checking for existing activities:`, checkError);
+            }
+            
+            if (existing && existing.length > 0) {
+              // Update existing entry (use the first found entry's ID)
+              const { error: updateError } = await supabase
+                .from("timesheet")
+                .update(insertData)
+                .eq("id", existing[0].id);
+              
+              insertError = updateError;
+              if (!updateError) {
+                console.log(`Updated combined entry for user ${firstActivity.localUserId} on ${firstActivity.dateStr} (${group.length} activities combined)`);
+              }
+            } else {
+              // Insert new combined entry
+              const { error: insertErr } = await supabase.from("timesheet").insert(insertData);
+              
+              insertError = insertErr;
+              if (!insertErr) {
+                console.log(`Inserted combined entry for user ${firstActivity.localUserId} on ${firstActivity.dateStr} (${group.length} activities combined: ${combinedStartTime} - ${combinedEndTime}, ${roundedHours} hours)`);
+              }
+            }
+            
+            if (insertError) {
+              console.error(`Error inserting/updating combined entry for key ${key}:`, insertError);
+              errors.push(`Combined entry (${group.length} activities): ${insertError.message}`);
+            } else {
+              inserted++;
+            }
+          } catch (error: any) {
+            console.error(`Error combining activities for key ${key}:`, error);
+            errors.push(`Combined entry error: ${error.message}`);
           }
         }
 
