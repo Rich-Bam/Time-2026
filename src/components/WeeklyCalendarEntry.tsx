@@ -335,36 +335,78 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
     }
     
     // Create all custom projects in batch
-    if (customProjectsToCreate.size > 0 && currentUser?.id) {
+    if (customProjectsToCreate.size > 0) {
       for (const projectName of customProjectsToCreate) {
+        // Check if project already exists (by name only, since user_id might not exist)
         const { data: existingProject } = await supabase
           .from("projects")
           .select("id")
           .eq("name", projectName)
-          .eq("user_id", currentUser.id)
           .single();
         
         if (!existingProject) {
-          await supabase
-            .from("projects")
-            .insert([{
-              name: projectName,
-              user_id: currentUser.id,
-              description: null
-            }]);
+          // Try to insert with user_id first, if it fails, try without
+          const projectData: any = {
+            name: projectName,
+            status: "active",
+          };
+          
+          if (currentUser?.id) {
+            // First attempt: try with user_id
+            const result = await supabase
+              .from("projects")
+              .insert([{
+                ...projectData,
+                user_id: currentUser.id,
+              }]);
+            
+            // If error mentions user_id column doesn't exist, try without it
+            if (result.error && result.error.message?.includes("user_id")) {
+              await supabase
+                .from("projects")
+                .insert([projectData]);
+            }
+          } else {
+            // No user_id, insert without it
+            await supabase
+              .from("projects")
+              .insert([projectData]);
+          }
         }
       }
       
       // Refresh projects list once after creating all custom projects
-      const { data: updatedProjects } = await supabase
-        .from("projects")
-        .select("id, name, user_id")
-        .or(`user_id.is.null,user_id.eq.${currentUser.id}`);
+      // Try to fetch with user_id filter, if it fails, fetch all
+      let updatedProjects;
+      if (currentUser?.id) {
+        const result = await supabase
+          .from("projects")
+          .select("id, name, user_id")
+          .or(`user_id.is.null,user_id.eq.${currentUser.id}`);
+        
+        if (result.error && result.error.message?.includes("user_id")) {
+          // user_id column doesn't exist, fetch all projects
+          const allProjectsResult = await supabase
+            .from("projects")
+            .select("id, name");
+          updatedProjects = allProjectsResult.data;
+        } else {
+          updatedProjects = result.data;
+          if (updatedProjects) {
+            updatedProjects = updatedProjects.filter(
+              p => !p.user_id || p.user_id === currentUser.id
+            );
+          }
+        }
+      } else {
+        const result = await supabase
+          .from("projects")
+          .select("id, name");
+        updatedProjects = result.data;
+      }
+      
       if (updatedProjects) {
-        const filteredProjects = updatedProjects.filter(
-          p => !p.user_id || p.user_id === currentUser.id
-        );
-        setProjects(filteredProjects);
+        setProjects(updatedProjects);
       }
     }
     

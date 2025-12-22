@@ -180,15 +180,53 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
 
     try {
       // Add new project to database
-      const { data: newProject, error } = await supabase
-        .from("projects")
-        .insert([{
-          name: projectName.trim(),
-          status: "active",
-          user_id: currentUser?.id || null,
-        }])
-        .select("id, name")
-        .single();
+      // Only include fields that definitely exist in the schema
+      const projectData: any = {
+        name: projectName.trim(),
+        status: "active",
+      };
+      
+      // Only add user_id if it exists in the schema (optional)
+      // Try to insert with user_id first, if it fails, try without
+      let newProject;
+      let error;
+      
+      // First attempt: try with user_id
+      if (currentUser?.id) {
+        const result = await supabase
+          .from("projects")
+          .insert([{
+            ...projectData,
+            user_id: currentUser.id,
+          }])
+          .select("id, name")
+          .single();
+        
+        newProject = result.data;
+        error = result.error;
+        
+        // If error mentions user_id column doesn't exist, try without it
+        if (error && error.message?.includes("user_id")) {
+          const resultWithoutUserId = await supabase
+            .from("projects")
+            .insert([projectData])
+            .select("id, name")
+            .single();
+          
+          newProject = resultWithoutUserId.data;
+          error = resultWithoutUserId.error;
+        }
+      } else {
+        // No user_id, insert without it
+        const result = await supabase
+          .from("projects")
+          .insert([projectData])
+          .select("id, name")
+          .single();
+        
+        newProject = result.data;
+        error = result.error;
+      }
 
       if (error) throw error;
 
