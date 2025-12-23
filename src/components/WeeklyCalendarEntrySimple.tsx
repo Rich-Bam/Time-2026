@@ -366,9 +366,44 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
       return;
     }
     
+    // Find the last entry's endTime and project (from either editable entries or submitted entries)
+    const day = days[dayIdx];
+    const dateStr = day.date.toISOString().split('T')[0];
+    
+    // Get all entries for this day (editable + submitted)
+    const allEntries = [
+      ...day.entries.filter(e => e.endTime && e.endTime.trim() !== ""),
+      ...(submittedEntries[dateStr] || []).filter(e => e.endTime && e.endTime.trim() !== "")
+    ];
+    
+    // Sort by endTime to get the latest one
+    const sortedEntries = allEntries.sort((a, b) => {
+      const timeA = (a.endTime || "").trim();
+      const timeB = (b.endTime || "").trim();
+      if (!timeA && !timeB) return 0;
+      if (!timeA) return 1;
+      if (!timeB) return -1;
+      
+      // Convert time strings to comparable numbers (HH:MM -> minutes since midnight)
+      const parseTime = (timeStr: string): number => {
+        const parts = timeStr.split(':');
+        if (parts.length !== 2) return 0;
+        const hours = parseInt(parts[0], 10) || 0;
+        const minutes = parseInt(parts[1], 10) || 0;
+        return hours * 60 + minutes;
+      };
+      
+      return parseTime(timeA) - parseTime(timeB);
+    });
+    
+    // Get the endTime and project from the last entry (if any)
+    const lastEntry = sortedEntries.length > 0 ? sortedEntries[sortedEntries.length - 1] : null;
+    const lastEndTime = lastEntry?.endTime || "";
+    const lastProject = lastEntry?.project || "";
+    
     setDays(days.map((day, i) =>
       i === dayIdx 
-        ? { ...day, entries: [...day.entries, { workType: "", project: "", hours: "", startTime: "", endTime: "" }] }
+        ? { ...day, entries: [...day.entries, { workType: "", project: lastProject, hours: "", startTime: lastEndTime, endTime: "", fullDayOff: false }] }
         : day
     ));
   };
@@ -432,21 +467,6 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
     const entry = day.entries[entryIdx];
     if (!entry) return;
     const dateStr = day.date.toISOString().split('T')[0];
-    
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const entryDate = new Date(day.date);
-    entryDate.setHours(0, 0, 0, 0);
-    
-    // Don't save future dates
-    if (entryDate > today) {
-      toast({
-        title: "Error",
-        description: "Cannot save entries for future dates",
-        variant: "destructive",
-      });
-      return;
-    }
     
     // Validate required fields
     const isDayOff = entry.workType === "31";
@@ -623,12 +643,14 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
         }
       }
       
-      // Add a new empty entry
+      // Add a new empty entry with startTime set to the endTime of the saved entry and project copied
+      const nextStartTime = entry.endTime || "";
+      const nextProject = entry.project || "";
       setDays(prevDays => prevDays.map((d, i) => {
         if (i !== dayIdx) return d;
         return {
           ...d,
-          entries: [...d.entries, { workType: "", project: "", hours: "", startTime: "", endTime: "", fullDayOff: false }]
+          entries: [...d.entries, { workType: "", project: nextProject, hours: "", startTime: nextStartTime, endTime: "", fullDayOff: false }]
         };
       }));
     } catch (error: any) {
@@ -1366,6 +1388,20 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
           <div className="space-y-3 sm:space-y-4">
             {days.map((day, dayIdx) => {
               const dateStr = day.date.toISOString().split('T')[0];
+              
+              // Check if there's a fullDayOff entry for this day (in editable or submitted entries)
+              // A fullDayOff entry is either:
+              // 1. An editable entry with workType "31" and fullDayOff checked
+              // 2. A submitted entry with workType "31" and 8 hours (which indicates full day off)
+              const hasFullDayOff = day.entries.some(e => e.workType === "31" && e.fullDayOff) ||
+                (submittedEntries[dateStr] || []).some(e => {
+                  if (e.workType === "31") {
+                    // Check if it's a full day off: either has fullDayOff property or has 8 hours
+                    return e.fullDayOff || parseFloat(e.hours || "0") === 8;
+                  }
+                  return false;
+                });
+              
               const submitted = (submittedEntries[dateStr] || []).sort((a, b) => {
                 // Sort by startTime (ascending)
                 const timeA = (a.startTime || "").trim();
@@ -1423,6 +1459,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                             size={isMobile ? "sm" : "sm"}
                             className={`${isMobile ? 'h-8 text-xs flex-1' : 'h-7 text-xs'}`}
                             onClick={() => handleCopyFromPreviousDay(dayIdx)}
+                            disabled={hasFullDayOff}
                           >
                             {t('weekly.copyPrevious')}
                           </Button>
@@ -1432,6 +1469,8 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                           size={isMobile ? "sm" : "sm"}
                           className={`${isMobile ? 'h-8 text-xs flex-1' : 'h-7 text-xs'}`}
                           onClick={() => handleAddEntry(dayIdx)}
+                          disabled={hasFullDayOff}
+                          title={hasFullDayOff ? "Je hebt deze dag als volledige vrije dag gemarkeerd. Je kunt geen extra entries toevoegen." : ""}
                         >
                           <Plus className="h-3 w-3 mr-1" />
                           {t('weekly.addEntry')}
@@ -1444,7 +1483,16 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                   {isMobile ? (
                     <div className="p-2 sm:p-4 space-y-3">
                       {/* Editable entries - only show if week is not locked */}
-                      {!isLocked && day.entries.map((entry, entryIdx) => {
+                      {/* If there's a fullDayOff entry, only show that entry */}
+                      {!isLocked && day.entries
+                        .filter((entry, entryIdx) => {
+                          // If there's a fullDayOff entry, only show that one
+                          if (hasFullDayOff) {
+                            return entry.workType === "31" && entry.fullDayOff;
+                          }
+                          return true;
+                        })
+                        .map((entry, entryIdx) => {
                         const isNewEntry = !entry.id;
                         const isEditing = entry.id && editingEntry?.id === entry.id;
                         return (
@@ -1683,6 +1731,16 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                                     handleEntryChange(dayIdx, entryIdx, "startTime", "08:00");
                                     handleEntryChange(dayIdx, entryIdx, "endTime", "16:30");
                                     handleEntryChange(dayIdx, entryIdx, "hours", "8");
+                                    
+                                    // Remove all other entries for this day (keep only this fullDayOff entry)
+                                    setDays(prevDays => prevDays.map((d, i) => {
+                                      if (i !== dayIdx) return d;
+                                      // Keep only the current entry (the fullDayOff one)
+                                      return {
+                                        ...d,
+                                        entries: [d.entries[entryIdx]]
+                                      };
+                                    }));
                                   } else {
                                     // Clear times and hours when unchecking
                                     handleEntryChange(dayIdx, entryIdx, "startTime", "");
@@ -1800,7 +1858,16 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                         </thead>
                         <tbody>
                           {/* Editable entries - only show if week is not locked */}
-                          {!isLocked && day.entries.map((entry, entryIdx) => {
+                          {/* If there's a fullDayOff entry, only show that entry */}
+                          {!isLocked && day.entries
+                            .filter((entry, entryIdx) => {
+                              // If there's a fullDayOff entry, only show that one
+                              if (hasFullDayOff) {
+                                return entry.workType === "31" && entry.fullDayOff;
+                              }
+                              return true;
+                            })
+                            .map((entry, entryIdx) => {
                             const isNewEntry = !entry.id;
                             const isEditing = entry.id && editingEntry?.id === entry.id;
                             return (
@@ -2009,6 +2076,16 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                                           handleEntryChange(dayIdx, entryIdx, "startTime", "08:00");
                                           handleEntryChange(dayIdx, entryIdx, "endTime", "16:30");
                                           handleEntryChange(dayIdx, entryIdx, "hours", "8");
+                                          
+                                          // Remove all other entries for this day (keep only this fullDayOff entry)
+                                          setDays(prevDays => prevDays.map((d, i) => {
+                                            if (i !== dayIdx) return d;
+                                            // Keep only the current entry (the fullDayOff one)
+                                            return {
+                                              ...d,
+                                              entries: [d.entries[entryIdx]]
+                                            };
+                                          }));
                                         } else {
                                           // Clear times and hours when unchecking
                                           handleEntryChange(dayIdx, entryIdx, "startTime", "");

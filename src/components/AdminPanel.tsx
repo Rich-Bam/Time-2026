@@ -7,7 +7,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { User, Calendar, Pencil, Check, X, Download, FileText, FileDown, Calendar as CalendarIcon, Users } from "lucide-react";
+import { User, Calendar, Pencil, Check, X, Download, FileText, FileDown, Calendar as CalendarIcon, Users, Eye } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import * as XLSX from "xlsx";
 import { createPDF } from "@/utils/pdfExport";
 import { hashPassword } from "@/utils/password";
@@ -17,6 +18,45 @@ import { useLanguage } from "@/contexts/LanguageContext";
 interface AdminPanelProps {
   currentUser: any;
 }
+
+// Helper to get date range from week number and year (ISO week) - defined outside component to avoid duplicate definition
+const getWeekDateRange = (weekNumber: number, year: number) => {
+  try {
+    // Calculate the date of the first Thursday of the year (ISO week standard)
+    const jan4 = new Date(year, 0, 4);
+    const jan4Day = jan4.getDay() || 7; // Convert Sunday (0) to 7
+    const daysToMonday = jan4Day === 1 ? 0 : 1 - jan4Day;
+    
+    // Get the Monday of week 1
+    const week1Monday = new Date(year, 0, 4 + daysToMonday);
+    
+    // Calculate the Monday of the requested week
+    const weekMonday = new Date(week1Monday);
+    weekMonday.setDate(week1Monday.getDate() + (weekNumber - 1) * 7);
+    
+    // Calculate the Sunday of that week
+    const weekSunday = new Date(weekMonday);
+    weekSunday.setDate(weekMonday.getDate() + 6);
+    
+    return {
+      from: weekMonday.toISOString().split('T')[0],
+      to: weekSunday.toISOString().split('T')[0]
+    };
+  } catch (error) {
+    console.error("Error calculating week date range:", error);
+    // Fallback: return current week
+    const today = new Date();
+    const dayOfWeek = today.getDay();
+    const diff = today.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
+    const monday = new Date(today.setDate(diff));
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    return {
+      from: monday.toISOString().split('T')[0],
+      to: sunday.toISOString().split('T')[0]
+    };
+  }
+};
 
 const AdminPanel = ({ currentUser }: AdminPanelProps) => {
   const { t, language } = useLanguage();
@@ -74,6 +114,9 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
   const [overtimeSelectedMonth, setOvertimeSelectedMonth] = useState<string>(String(new Date().getMonth() + 1).padStart(2, '0'));
   const [overtimeSelectedYear, setOvertimeSelectedYear] = useState<string>(new Date().getFullYear().toString());
   
+  // State for viewing week details
+  const [selectedWeekForView, setSelectedWeekForView] = useState<{userId: string, weekStartDate: string} | null>(null);
+  
   // Helper function to get ISO week number
   const getISOWeekNumber = (date: Date) => {
     const tempDate = new Date(date.getTime());
@@ -87,6 +130,19 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
       )
     );
   };
+
+  // Helper to get the Monday of the ISO week for a given date
+  const getISOWeekMonday = (date: Date): Date => {
+    const tempDate = new Date(date.getTime());
+    tempDate.setHours(0, 0, 0, 0);
+    // Move to Thursday of the week (ISO week standard)
+    tempDate.setDate(tempDate.getDate() + 3 - ((tempDate.getDay() + 6) % 7));
+    // Get the Monday of that week (3 days before Thursday)
+    const monday = new Date(tempDate);
+    monday.setDate(tempDate.getDate() - 3);
+    return monday;
+  };
+
 
   // Helper to format date as DD/MM/YY
   const formatDateDDMMYY = (dateStr: string) => {
@@ -1172,7 +1228,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                 <SelectItem value="administratie">{t('admin.userType.administratie')}</SelectItem>
                 <SelectItem value="admin">{t('admin.userType.admin')}</SelectItem>
                 {currentUser?.email === SUPER_ADMIN_EMAIL && (
-                  <SelectItem value="super_admin" disabled>{t('admin.userType.superAdmin')}</SelectItem>
+                  <SelectItem value="super_admin">{t('admin.userType.superAdmin')}</SelectItem>
                 )}
               </SelectContent>
             </Select>
@@ -1766,97 +1822,6 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
       </div>
       )}
       
-      {/* Pending Week Confirmations Section - Available for admin and administratie */}
-      {isAdminOrAdministratie(currentUser) && confirmedWeeks.filter(cw => !cw.admin_reviewed || !cw.admin_approved).length > 0 && (
-        <div className="mt-6 sm:mt-8 mb-6 sm:mb-8">
-          <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4 text-orange-600 dark:text-orange-400">⚠️ {t('admin.weeksToReview')}</h3>
-          <div className="space-y-4">
-            {confirmedWeeks
-              .filter(cw => !cw.admin_reviewed || !cw.admin_approved)
-              .map((cw) => {
-                const weekStart = new Date(cw.week_start_date);
-                const weekEnd = new Date(weekStart);
-                weekEnd.setDate(weekEnd.getDate() + 6);
-                const weekNum = getISOWeek(cw.week_start_date);
-                const user = usersMap[cw.user_id];
-                const weekEntries = allEntries.filter(
-                  e => e.user_id === cw.user_id && 
-                  e.date >= cw.week_start_date && 
-                  e.date <= weekEnd.toISOString().split('T')[0]
-                );
-                const totalHours = weekEntries.reduce((sum, e) => sum + Number(e.hours || 0), 0);
-                
-                return (
-                  <div key={`${cw.user_id}-${cw.week_start_date}`} className="border rounded-lg p-3 sm:p-4 bg-orange-50 dark:bg-orange-900/30 border-orange-200 dark:border-orange-800 shadow">
-                    <div className={`flex ${isMobile ? 'flex-col' : 'flex-row sm:items-center sm:justify-between'} gap-3 sm:gap-4 mb-3 sm:mb-4`}>
-                      <div>
-                        <div className="font-semibold text-base sm:text-lg text-gray-900 dark:text-gray-100">
-                          {user?.name || user?.email || t('admin.unknownUser')} - {t('admin.week')} {weekNum}
-                        </div>
-                        <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
-                          {weekStart.toLocaleDateString('nl-NL')} - {weekEnd.toLocaleDateString('nl-NL')}
-                        </div>
-                        <div className="text-xs sm:text-sm font-medium mt-1 text-gray-700 dark:text-gray-300">
-                          {t('admin.total')}: {totalHours.toFixed(2)} {t('admin.hoursLower')} ({weekEntries.length} {t('admin.entries')})
-                        </div>
-                      </div>
-                      <div className={`flex ${isMobile ? 'flex-col' : 'flex-wrap'} gap-2`}>
-                        <Button
-                          size={isMobile ? "sm" : "sm"}
-                          variant="default"
-                          className={`${isMobile ? 'w-full' : ''} bg-green-600 hover:bg-green-700 h-9 sm:h-8`}
-                          onClick={() => handleApproveWeek(cw.user_id, cw.week_start_date)}
-                        >
-                          {t('admin.approveButton')}
-                        </Button>
-                        <Button
-                          size={isMobile ? "sm" : "sm"}
-                          variant="destructive"
-                          className={`${isMobile ? 'w-full' : ''} h-9 sm:h-8`}
-                          onClick={() => handleRejectWeek(cw.user_id, cw.week_start_date)}
-                        >
-                          {t('admin.rejectButton')}
-                        </Button>
-                        <Button
-                          size={isMobile ? "sm" : "sm"}
-                          variant="outline"
-                          className={`${isMobile ? 'w-full' : ''} border-orange-600 dark:border-orange-500 text-orange-600 dark:text-orange-400 hover:bg-orange-100 dark:hover:bg-orange-900/40 h-9 sm:h-8`}
-                          onClick={() => handleUnlockWeek(cw.user_id, cw.week_start_date)}
-                        >
-                          {t('admin.unlockButton')}
-                        </Button>
-                      </div>
-                    </div>
-                    <div className="overflow-x-auto">
-                      <table className="min-w-full text-xs border rounded border-gray-300 dark:border-gray-700">
-                        <thead className="bg-white dark:bg-gray-800">
-                          <tr>
-                            <th className="p-2 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">Datum</th>
-                            <th className="p-2 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">Project</th>
-                            <th className="p-2 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">Uren</th>
-                            <th className="p-2 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">Werk Type</th>
-                            <th className="p-2 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">Tijd</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {weekEntries.map((entry, idx) => (
-                            <tr key={entry.id || idx} className="border-t border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800">
-                              <td className="p-2 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">{entry.date}</td>
-                              <td className="p-2 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">{entry.projects?.name || projectsMap[entry.project_id] || entry.project || "-"}</td>
-                              <td className="p-2 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">{entry.hours}</td>
-                              <td className="p-2 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">{entry.description}</td>
-                              <td className="p-2 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">{entry.startTime && entry.endTime ? `${entry.startTime} - ${entry.endTime}` : '-'}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                );
-              })}
-          </div>
-        </div>
-      )}
       {/* All Confirmed Weeks Section - Available for admin and administratie */}
       {isAdminOrAdministratie(currentUser) && (
       <div className="mt-8 sm:mt-12">
@@ -1878,26 +1843,40 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                 </div>
                 <div className="space-y-2">
                   {userConfirmedWeeks.map((cw) => {
-                    const weekStart = new Date(cw.week_start_date);
+                    // Calculate the correct ISO week Monday based on the stored week_start_date
+                    // This ensures we get the correct week number even if week_start_date was stored incorrectly
+                    const storedDate = new Date(cw.week_start_date);
+                    const isoWeekMonday = getISOWeekMonday(storedDate);
+                    const weekStart = isoWeekMonday;
                     const weekEnd = new Date(weekStart);
                     weekEnd.setDate(weekEnd.getDate() + 6);
                     const weekNum = getISOWeekNumber(weekStart);
+                    // Use the ISO week date range for filtering entries, not the stored week_start_date
+                    const weekStartStr = weekStart.toISOString().split('T')[0];
+                    const weekEndStr = weekEnd.toISOString().split('T')[0];
                     const weekEntries = allEntries.filter(
                       e => e.user_id === cw.user_id && 
-                      e.date >= cw.week_start_date && 
-                      e.date <= weekEnd.toISOString().split('T')[0]
+                      e.date >= weekStartStr && 
+                      e.date <= weekEndStr
                     );
                     const totalHours = weekEntries.reduce((sum, e) => sum + Number(e.hours || 0), 0);
                     
+                    const isNotApproved = !cw.admin_approved;
+                    
                     return (
-                      <div key={`${cw.user_id}-${cw.week_start_date}`} className="border rounded p-2 bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600">
+                      <div 
+                        key={`${cw.user_id}-${cw.week_start_date}`} 
+                        className="border rounded p-2 bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
+                        onClick={() => setSelectedWeekForView({ userId: cw.user_id, weekStartDate: cw.week_start_date })}
+                      >
                         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                          <div>
-                            <div className="font-medium text-sm sm:text-base text-gray-900 dark:text-gray-100">
+                          <div className="flex-1">
+                            <div className="font-medium text-sm sm:text-base text-gray-900 dark:text-gray-100 flex items-center gap-2">
                               {t('admin.week')} {weekNum} ({weekStart.toLocaleDateString('nl-NL')} - {weekEnd.toLocaleDateString('nl-NL')})
+                              <Eye className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                             </div>
                             <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
-                              {t('admin.total')}: {totalHours.toFixed(2)} {t('admin.hoursLower')} ({weekEntries.length} {t('admin.entries')})
+                              {t('admin.total')}: {totalHours.toFixed(2)} ({weekEntries.length} {t('admin.entries')})
                             </div>
                             <div className="text-xs sm:text-sm mt-1 text-gray-700 dark:text-gray-300">
                               {t('admin.status')}: {cw.admin_approved ? (
@@ -1909,7 +1888,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                               )}
                             </div>
                           </div>
-                          <div className="flex gap-2">
+                          <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
                             {!cw.admin_approved && (
                               <Button
                                 size="sm"
@@ -1945,6 +1924,179 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
         </div>
       </div>
       )}
+      
+      {/* Week Details Dialog */}
+      {selectedWeekForView && (() => {
+        const cw = confirmedWeeks.find(
+          c => c.user_id === selectedWeekForView.userId && c.week_start_date === selectedWeekForView.weekStartDate
+        );
+        if (!cw) return null;
+        
+        // Calculate the correct ISO week Monday based on the stored week_start_date
+        // This ensures we get the correct week number even if week_start_date was stored incorrectly
+        const storedDate = new Date(cw.week_start_date);
+        const isoWeekMonday = getISOWeekMonday(storedDate);
+        const weekStart = isoWeekMonday;
+        const weekEnd = new Date(weekStart);
+        weekEnd.setDate(weekEnd.getDate() + 6);
+        const weekNum = getISOWeekNumber(weekStart);
+        const user = usersMap[cw.user_id];
+        // Use the ISO week date range for filtering entries, not the stored week_start_date
+        const weekStartStr = weekStart.toISOString().split('T')[0];
+        const weekEndStr = weekEnd.toISOString().split('T')[0];
+        let weekEntries = allEntries.filter(
+          e => e.user_id === cw.user_id && 
+          e.date >= weekStartStr && 
+          e.date <= weekEndStr
+        );
+        
+        // Sort entries by date (Monday to Sunday), then by startTime
+        weekEntries.sort((a, b) => {
+          // First sort by date
+          const dateA = new Date(a.date);
+          const dateB = new Date(b.date);
+          if (dateA.getTime() !== dateB.getTime()) {
+            return dateA.getTime() - dateB.getTime();
+          }
+          // If same date, sort by startTime
+          const timeA = a.startTime || "00:00";
+          const timeB = b.startTime || "00:00";
+          return timeA.localeCompare(timeB);
+        });
+        
+        // Group entries by day
+        const entriesByDay: Record<string, typeof weekEntries> = {};
+        weekEntries.forEach(entry => {
+          const dateKey = entry.date;
+          if (!entriesByDay[dateKey]) {
+            entriesByDay[dateKey] = [];
+          }
+          entriesByDay[dateKey].push(entry);
+        });
+        
+        // Get all days in the week (Monday to Sunday)
+        const weekDays: string[] = [];
+        for (let i = 0; i < 7; i++) {
+          const day = new Date(weekStart);
+          day.setDate(day.getDate() + i);
+          weekDays.push(day.toISOString().split('T')[0]);
+        }
+        
+        const totalHours = weekEntries.reduce((sum, e) => sum + Number(e.hours || 0), 0);
+        
+        return (
+          <Dialog open={!!selectedWeekForView} onOpenChange={(open) => !open && setSelectedWeekForView(null)}>
+            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>
+                  {user?.name || user?.email || t('admin.unknownUser')} - {t('admin.week')} {weekNum}
+                </DialogTitle>
+                <DialogDescription>
+                  {weekStart.toLocaleDateString('nl-NL')} - {weekEnd.toLocaleDateString('nl-NL')}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                  <div>
+                    <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                      {t('admin.total')}: {totalHours.toFixed(2)} ({weekEntries.length} {t('admin.entries')})
+                    </div>
+                    <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                      {t('admin.status')}: {cw.admin_approved ? (
+                        <span className="text-green-600 dark:text-green-400 font-semibold">{t('admin.approvedStatus')}</span>
+                      ) : cw.admin_reviewed ? (
+                        <span className="text-red-600 dark:text-red-400 font-semibold">{t('admin.rejectedStatus')}</span>
+                      ) : (
+                        <span className="text-orange-600 dark:text-orange-400 font-semibold">{t('admin.pendingReviewStatus')}</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    {!cw.admin_approved && (
+                      <Button
+                        size="sm"
+                        variant="default"
+                        className="bg-green-600 hover:bg-green-700"
+                        onClick={() => {
+                          handleApproveWeek(cw.user_id, cw.week_start_date);
+                          setSelectedWeekForView(null);
+                        }}
+                      >
+                        {t('admin.approveButton')}
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="border-orange-600 dark:border-orange-500 text-orange-600 dark:text-orange-400 hover:bg-orange-100 dark:hover:bg-orange-900/40"
+                      onClick={() => {
+                        handleUnlockWeek(cw.user_id, cw.week_start_date);
+                        setSelectedWeekForView(null);
+                      }}
+                    >
+                      {t('admin.unlockButton')}
+                    </Button>
+                  </div>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-sm border rounded-lg shadow-sm border-gray-300 dark:border-gray-700">
+                    <thead className="sticky top-0 bg-orange-100 dark:bg-orange-900/50 z-10">
+                      <tr>
+                        <th className="p-2 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">{t('admin.date')}</th>
+                        <th className="p-2 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">{t('weekly.project')}</th>
+                        <th className="p-2 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">{t('weekly.hours')}</th>
+                        <th className="p-2 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">{t('admin.workType')}</th>
+                        <th className="p-2 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">{t('admin.description')}</th>
+                        <th className="p-1 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">{t('admin.startEnd')}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {weekEntries.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="p-4 text-center text-gray-500 dark:text-gray-400">
+                            Geen entries gevonden
+                          </td>
+                        </tr>
+                      ) : (
+                        weekDays.map((dayDate, dayIdx) => {
+                          const dayEntries = entriesByDay[dayDate] || [];
+                          const dayTotal = dayEntries.reduce((sum, e) => sum + Number(e.hours || 0), 0);
+                          const day = new Date(dayDate);
+                          const dayName = getDayNameNL(dayDate);
+                          
+                          return (
+                            <React.Fragment key={dayDate}>
+                              {/* Day header row */}
+                              {dayEntries.length > 0 && (
+                                <tr className="bg-blue-50 dark:bg-blue-900/30 border-t-2 border-blue-200 dark:border-blue-700">
+                                  <td colSpan={6} className="p-2 font-semibold text-blue-900 dark:text-blue-100 border border-gray-300 dark:border-gray-700">
+                                    {formatDateWithDayName(dayDate)} - Totaal: {dayTotal.toFixed(2)} ({dayEntries.length} {dayEntries.length === 1 ? 'entry' : 'entries'})
+                                  </td>
+                                </tr>
+                              )}
+                              {/* Day entries */}
+                              {dayEntries.map((entry, idx) => (
+                                <tr key={entry.id || `${dayDate}-${idx}`} className="border-t border-gray-300 dark:border-gray-700 hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-colors bg-white dark:bg-gray-800">
+                                  <td className="p-2 border border-gray-300 dark:border-gray-700 whitespace-nowrap text-gray-900 dark:text-gray-100">{formatDateWithDayName(entry.date)}</td>
+                                  <td className="p-2 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">{entry.projects?.name || projectsMap[entry.project_id] || entry.project || "-"}</td>
+                                  <td className="p-2 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">{entry.hours}</td>
+                                  <td className="p-2 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">{entry.description}</td>
+                                  <td className="p-2 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">{entry.notes || ""}</td>
+                                  <td className="p-1 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">{entry.startTime && entry.endTime ? `${entry.startTime} - ${entry.endTime}` : '-'}</td>
+                                </tr>
+                              ))}
+                            </React.Fragment>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+        );
+      })()}
       
       {/* Below user table: User Weekly Entries Accordion - Only for admins, not for administratie */}
       {currentUser?.isAdmin && !isAdministratie(currentUser) && (
