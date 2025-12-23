@@ -7,7 +7,9 @@ import { useToast } from "@/hooks/use-toast";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { User, Calendar, Pencil, Check, X } from "lucide-react";
+import { User, Calendar, Pencil, Check, X, Download, FileText, FileDown, Calendar as CalendarIcon, Users } from "lucide-react";
+import * as XLSX from "xlsx";
+import { createPDF } from "@/utils/pdfExport";
 import { hashPassword } from "@/utils/password";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -17,16 +19,26 @@ interface AdminPanelProps {
 }
 
 const AdminPanel = ({ currentUser }: AdminPanelProps) => {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const { toast } = useToast();
   const isMobile = useIsMobile();
+  
+  // Helper function to check if user is admin or administratie
+  const isAdminOrAdministratie = (user: any): boolean => {
+    return user?.isAdmin || user?.userType === 'administratie';
+  };
+  
+  // Helper function to check if user is administratie type
+  const isAdministratie = (user: any): boolean => {
+    return user?.userType === 'administratie';
+  };
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
     email: "",
     name: "",
     password: "",
-    isAdmin: false,
+    userType: "user", // "super_admin", "admin", "user"
     must_change_password: true,
   });
   const [resetPassword, setResetPassword] = useState("");
@@ -45,6 +57,23 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
   const [reminderWeekNumber, setReminderWeekNumber] = useState<string>("");
   const [reminderYear, setReminderYear] = useState<string>(new Date().getFullYear().toString());
   const [timebuzzerSyncing, setTimebuzzerSyncing] = useState(false);
+  
+  // Export state
+  const [exporting, setExporting] = useState(false);
+  const [dateRange, setDateRange] = useState({ from: "", to: "" });
+  const [selectedExportUserId, setSelectedExportUserId] = useState<string>("");
+  const [selectedWeekNumber, setSelectedWeekNumber] = useState<string>("");
+  const [selectedYear, setSelectedYear] = useState<string>(new Date().getFullYear().toString());
+  
+  // Overtime tracking state
+  const [overtimePeriod, setOvertimePeriod] = useState<"week" | "month" | "year" | "all">("month");
+  const [overtimeSelectedUserId, setOvertimeSelectedUserId] = useState<string>("all");
+  const [overtimeData, setOvertimeData] = useState<any[]>([]);
+  const [overtimeLoading, setOvertimeLoading] = useState(false);
+  const [overtimeSelectedWeek, setOvertimeSelectedWeek] = useState<string>("");
+  const [overtimeSelectedMonth, setOvertimeSelectedMonth] = useState<string>(String(new Date().getMonth() + 1).padStart(2, '0'));
+  const [overtimeSelectedYear, setOvertimeSelectedYear] = useState<string>(new Date().getFullYear().toString());
+  
   // Helper function to get ISO week number
   const getISOWeekNumber = (date: Date) => {
     const tempDate = new Date(date.getTime());
@@ -57,6 +86,73 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
         ((tempDate.getTime() - week1.getTime()) / 86400000 - 3 + ((week1.getDay() + 6) % 7)) / 7
       )
     );
+  };
+
+  // Helper to format date as DD/MM/YY
+  const formatDateDDMMYY = (dateStr: string) => {
+    const date = new Date(dateStr);
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = String(date.getFullYear()).slice(-2);
+    return `${day}/${month}/${year}`;
+  };
+
+  // Helper to format hours as HH:MM
+  const formatHoursHHMM = (hours: number | string) => {
+    const numHours = typeof hours === 'string' ? parseFloat(hours) : hours;
+    if (isNaN(numHours)) return "00:00";
+    const h = Math.floor(numHours);
+    const m = Math.round((numHours - h) * 60);
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  };
+
+  // Helper to get day name in Dutch
+  const getDayNameNL = (dateStr: string) => {
+    const date = new Date(dateStr);
+    const days = ['Zondag', 'Maandag', 'Dinsdag', 'Woensdag', 'Donderdag', 'Vrijdag', 'Zaterdag'];
+    return days[date.getDay()];
+  };
+
+  // Helper to format date with day name (DD-MM-YYYY Dagnaam)
+  const formatDateWithDayName = (dateStr: string) => {
+    const date = new Date(dateStr);
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    const dayName = getDayNameNL(dateStr);
+    return `${day}-${month}-${year} ${dayName}`;
+  };
+
+  // Helper to get work type label with code
+  const getWorkTypeLabel = (desc: string) => {
+    const workTypes = [
+      { value: 10, label: "Work" },
+      { value: 11, label: "Production" },
+      { value: 12, label: "Administration" },
+      { value: 13, label: "Drawing" },
+      { value: 14, label: "Trade Fair" },
+      { value: 15, label: "Commercial" },
+      { value: 16, label: "Telephone Support" },
+      { value: 17, label: "Internal BAMPRO" },
+      { value: 20, label: "Commute: Home - Work" },
+      { value: 21, label: "Commute: Work - Work" },
+      { value: 22, label: "Loading / Unloading" },
+      { value: 23, label: "Waiting" },
+      { value: 30, label: "Sick" },
+      { value: 31, label: "Day Off / Vacation" },
+      { value: 32, label: "Doctor/Dentist/Hospital" },
+      { value: 33, label: "Funeral/Wedding" },
+      { value: 34, label: "Warehouse" },
+      { value: 35, label: "Break" },
+      { value: 36, label: "Course/Training" },
+      { value: 37, label: "Meeting" },
+      { value: 38, label: "Public Holiday" },
+      { value: 39, label: "Time Off in Lieu (ADV)" },
+      { value: 40, label: "Taken Time-for-Time (TFT)" },
+      { value: 100, label: "Remote" },
+    ];
+    const workType = workTypes.find(wt => String(wt.value) === String(desc));
+    return workType ? `${workType.value} - ${workType.label}` : desc;
   };
 
   const [timebuzzerSyncWeekNumber, setTimebuzzerSyncWeekNumber] = useState<number>(() => {
@@ -86,7 +182,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
   // Fetch users
   const fetchUsers = async () => {
     setLoading(true);
-    const { data, error } = await supabase.from("users").select("id, email, name, isAdmin, must_change_password, approved, can_use_timebuzzer, timebuzzer_user_id");
+    const { data, error } = await supabase.from("users").select("id, email, name, isAdmin, must_change_password, approved, can_use_timebuzzer, timebuzzer_user_id, userType");
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
@@ -165,6 +261,166 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
     fetchAllEntries();
   }, [users]);
 
+  // Calculate overtime hours
+  const calculateOvertime = async () => {
+    setOvertimeLoading(true);
+    try {
+      // Determine date range based on period
+      let fromDate = "";
+      let toDate = "";
+      const now = new Date();
+      
+      if (overtimePeriod === "week") {
+        if (!overtimeSelectedWeek || !overtimeSelectedYear) {
+          toast({
+            title: "Missing Information",
+            description: "Please select a week and year.",
+            variant: "destructive",
+          });
+          setOvertimeLoading(false);
+          return;
+        }
+        const weekNum = parseInt(overtimeSelectedWeek);
+        const year = parseInt(overtimeSelectedYear);
+        const { from, to } = getWeekDateRange(weekNum, year);
+        fromDate = from;
+        toDate = to;
+      } else if (overtimePeriod === "month") {
+        const month = parseInt(overtimeSelectedMonth);
+        const year = parseInt(overtimeSelectedYear);
+        fromDate = `${year}-${String(month).padStart(2, '0')}-01`;
+        const lastDay = new Date(year, month, 0).getDate();
+        toDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+      } else if (overtimePeriod === "year") {
+        const year = parseInt(overtimeSelectedYear);
+        fromDate = `${year}-01-01`;
+        toDate = `${year}-12-31`;
+      } else {
+        // All time - no date filter
+        fromDate = "";
+        toDate = "";
+      }
+
+      // Build query - include more fields for detailed breakdown
+      let queryBuilder = supabase
+        .from("timesheet")
+        .select("user_id, date, hours, description, project, startTime, endTime, notes")
+        .order("date", { ascending: true });
+      
+      if (fromDate && toDate) {
+        queryBuilder = queryBuilder.gte("date", fromDate).lte("date", toDate);
+      }
+      
+      if (overtimeSelectedUserId && overtimeSelectedUserId !== "all") {
+        queryBuilder = queryBuilder.eq("user_id", overtimeSelectedUserId);
+      }
+
+      const { data, error } = await queryBuilder;
+      
+      if (error) {
+        toast({
+          title: "Error",
+          description: error.message,
+          variant: "destructive",
+        });
+        setOvertimeLoading(false);
+        return;
+      }
+
+      // Group entries by user and date, and store detailed entry information
+      const userDateMap: Record<string, Record<string, { totalHours: number; entries: any[] }>> = {};
+      
+      (data || []).forEach((entry: any) => {
+        const userId = String(entry.user_id);
+        const date = entry.date;
+        
+        if (!userDateMap[userId]) {
+          userDateMap[userId] = {};
+        }
+        if (!userDateMap[userId][date]) {
+          userDateMap[userId][date] = { totalHours: 0, entries: [] };
+        }
+        
+        // Only count work hours (not day off, sick, etc.)
+        // Work types 10-29 and 100 are work hours
+        const workType = parseInt(entry.description || "0");
+        if ((workType >= 10 && workType <= 29) || workType === 100) {
+          const hours = parseFloat(entry.hours || 0);
+          userDateMap[userId][date].totalHours += hours;
+          // Store entry details for breakdown
+          userDateMap[userId][date].entries.push({
+            project: entry.project || "-",
+            workType: entry.description || "",
+            workTypeLabel: getWorkTypeLabel(entry.description || ""),
+            hours: hours.toFixed(2),
+            startTime: entry.startTime || "-",
+            endTime: entry.endTime || "-",
+            notes: entry.notes || ""
+          });
+        }
+      });
+
+      // Calculate overtime per day (more than 8 hours = overtime)
+      const overtimeResults: any[] = [];
+      
+      Object.keys(userDateMap).forEach(userId => {
+        const user = users.find(u => String(u.id) === userId);
+        if (!user) return;
+        
+        let totalOvertime = 0;
+        const dailyOvertime: any[] = [];
+        
+        Object.keys(userDateMap[userId]).forEach(date => {
+          const dayData = userDateMap[userId][date];
+          const totalHours = dayData.totalHours;
+          const normalHours = 8;
+          const overtime = totalHours > normalHours ? totalHours - normalHours : 0;
+          
+          if (overtime > 0) {
+            // Sort entries by startTime for better readability
+            const sortedEntries = [...dayData.entries].sort((a, b) => {
+              const timeA = a.startTime === "-" ? "99:99" : a.startTime;
+              const timeB = b.startTime === "-" ? "99:99" : b.startTime;
+              return timeA.localeCompare(timeB);
+            });
+            
+            dailyOvertime.push({
+              date,
+              totalHours: totalHours.toFixed(2),
+              normalHours: normalHours.toFixed(2),
+              overtime: overtime.toFixed(2),
+              entries: sortedEntries
+            });
+            totalOvertime += overtime;
+          }
+        });
+        
+        if (totalOvertime > 0 || dailyOvertime.length > 0) {
+          overtimeResults.push({
+            userId,
+            userName: user.name || user.email,
+            userEmail: user.email,
+            totalOvertime: totalOvertime.toFixed(2),
+            dailyOvertime: dailyOvertime.sort((a, b) => a.date.localeCompare(b.date))
+          });
+        }
+      });
+      
+      // Sort by total overtime (descending)
+      overtimeResults.sort((a, b) => parseFloat(b.totalOvertime) - parseFloat(a.totalOvertime));
+      
+      setOvertimeData(overtimeResults);
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to calculate overtime",
+        variant: "destructive",
+      });
+    } finally {
+      setOvertimeLoading(false);
+    }
+  };
+
   // Add user (with optional invite via Supabase Edge Function)
   const handleAddUser = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -209,16 +465,17 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
       console.log("🔵 Calling Edge Function via Supabase client...");
       console.log("🔵 Email:", form.email);
       console.log("🔵 Name:", form.name || form.email);
-      console.log("🔵 IsAdmin:", form.isAdmin);
+      console.log("🔵 UserType:", form.userType);
       
       // Use Supabase client's functions.invoke() method - this handles auth and CORS automatically
       console.log("🔵 Calling supabase.functions.invoke('invite-user')...");
       
+      const isAdmin = form.userType === 'admin' || form.userType === 'super_admin';
       const { data, error } = await supabase.functions.invoke('invite-user', {
         body: {
           email: form.email,
           name: form.name || form.email,
-          isAdmin: form.isAdmin,
+          isAdmin: isAdmin,
         },
       });
       
@@ -238,7 +495,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
           title: "Uitnodiging verstuurd",
           description: `Een uitnodigingsemail is verstuurd naar ${form.email}. Check je inbox (en spam folder) voor de uitnodigingslink.`,
       });
-      setForm({ email: "", name: "", password: "", isAdmin: false, must_change_password: true });
+      setForm({ email: "", name: "", password: "", userType: "user", must_change_password: true });
       fetchUsers();
         return;
       }
@@ -317,12 +574,14 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
     // Fallback: create user directly (no email sent)
     // Hash password before storing
     const hashedPassword = await hashPassword(form.password);
+    const isAdmin = form.userType === 'admin' || form.userType === 'super_admin';
     const { error: insertError } = await supabase.from("users").insert([
       {
         email: form.email,
         name: form.name || form.email,
         password: hashedPassword, // Store hashed password
-        isAdmin: form.isAdmin,
+        isAdmin: isAdmin,
+        userType: form.userType, // Store user type
         must_change_password: form.must_change_password,
         approved: true, // Admins can create users directly, so they're auto-approved
       },
@@ -340,7 +599,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
         description: `${form.email} is aangemaakt. Let op: er is geen email verstuurd. De gebruiker kan direct inloggen met het wachtwoord.`,
         variant: "default",
       });
-      setForm({ email: "", name: "", password: "", isAdmin: false, must_change_password: true });
+      setForm({ email: "", name: "", password: "", userType: "user", must_change_password: true });
       fetchUsers();
     }
   };
@@ -447,6 +706,18 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
 
   const SUPER_ADMIN_EMAIL = "r.blance@bampro.nl";
 
+  // Get current user type
+  const getUserType = (user: any): string => {
+    if (user.email === SUPER_ADMIN_EMAIL) {
+      return 'super_admin';
+    }
+    // Check if user has userType field (new field), otherwise fall back to isAdmin
+    if (user.userType) {
+      return user.userType;
+    }
+    return user.isAdmin ? 'admin' : 'user';
+  };
+
   // Reset password
   const handleResetPassword = async (userId: string) => {
     if (!resetPassword) {
@@ -465,17 +736,17 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
       fetchUsers();
     }
   };
-  // Toggle admin flag for an existing user
-  const handleToggleAdmin = async (userId: string, userEmail: string, makeAdmin: boolean) => {
-    if (userEmail === SUPER_ADMIN_EMAIL && !makeAdmin) {
+  // Change user type (super admin, admin, or user)
+  const handleChangeUserType = async (userId: string, userEmail: string, newUserType: string) => {
+    if (userEmail === SUPER_ADMIN_EMAIL && newUserType !== 'super_admin') {
       toast({
         title: "Action not allowed",
-        description: "You cannot remove admin rights from the super admin.",
+        description: "You cannot change the super admin's user type.",
         variant: "destructive",
       });
       return;
     }
-    if (userId === currentUser.id && !makeAdmin) {
+    if (userId === currentUser.id && newUserType !== 'admin' && newUserType !== 'super_admin') {
       toast({
         title: "Action not allowed",
         description: "You cannot remove your own admin rights.",
@@ -483,16 +754,32 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
       });
       return;
     }
-    const { error } = await supabase.from("users").update({ isAdmin: makeAdmin }).eq("id", userId);
+    
+    const isAdmin = newUserType === 'admin' || newUserType === 'super_admin';
+    const { error } = await supabase.from("users").update({ 
+      isAdmin: isAdmin,
+      userType: newUserType 
+    }).eq("id", userId);
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
+      const typeLabels: Record<string, string> = {
+        'super_admin': t('admin.userType.superAdmin'),
+        'admin': t('admin.userType.admin'),
+        'user': t('admin.userType.user')
+      };
       toast({
-        title: "Admin status updated",
-        description: `${userEmail} is now ${makeAdmin ? "an admin" : "a regular user"}.`,
+        title: "User type updated",
+        description: `${userEmail} is now ${typeLabels[newUserType] || newUserType}.`,
       });
       fetchUsers();
     }
+  };
+
+  // Toggle admin flag for an existing user (kept for backward compatibility)
+  const handleToggleAdmin = async (userId: string, userEmail: string, makeAdmin: boolean) => {
+    const newUserType = makeAdmin ? 'admin' : 'user';
+    await handleChangeUserType(userId, userEmail, newUserType);
   };
 
   // Toggle Timebuzzer access for a user (only super admin can do this)
@@ -608,6 +895,15 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
       String(1 + Math.round(((date.getTime() - week1.getTime()) / 86400000 - 3 + ((week1.getDay() + 6) % 7)) / 7)).padStart(2, '0')
     );
   }
+
+
+  // Get day of week index (Monday = 0, Sunday = 6)
+  const getDayOfWeekIndex = (dateStr: string): number => {
+    const date = new Date(dateStr + 'T00:00:00');
+    const day = date.getDay();
+    // Convert: Sunday (0) -> 6, Monday (1) -> 0, Tuesday (2) -> 1, etc.
+    return day === 0 ? 6 : day - 1;
+  };
 
   // Helper to get week date range from week number and year
   function getWeekDateRange(weekNumber: number, year: number) {
@@ -797,22 +1093,16 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
 
   // Timebuzzer Sync
   const handleTimebuzzerSync = async () => {
-    if (!timebuzzerSyncStartDate || !timebuzzerSyncEndDate) {
-      toast({
-        title: "Error",
-        description: "Please select both start and end dates",
-        variant: "destructive",
-      });
-      return;
-    }
-
+    // Get week date range from week number and year
+    const { from, to } = getWeekDateRange(timebuzzerSyncWeekNumber, timebuzzerSyncYear);
+    
     setTimebuzzerSyncing(true);
     try {
       const { data, error } = await supabase.functions.invoke('timebuzzer-sync', {
         body: {
           action: 'sync-to-timesheet',
-          startDate: timebuzzerSyncStartDate,
-          endDate: timebuzzerSyncEndDate,
+          startDate: from,
+          endDate: to,
         },
       });
 
@@ -825,10 +1115,6 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
           title: "Sync Successful",
           description: `Synced ${data.inserted || 0} time entries from Timebuzzer`,
         });
-        
-        // Reset dates
-        setTimebuzzerSyncStartDate("");
-        setTimebuzzerSyncEndDate("");
       } else {
         throw new Error(data.error || "Sync failed");
       }
@@ -847,6 +1133,8 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
     <div className="p-3 sm:p-4 md:p-8 bg-white dark:bg-gray-800 rounded shadow w-full max-w-full">
       <h2 className="text-xl sm:text-2xl font-bold mb-3 sm:mb-4 text-gray-900 dark:text-gray-100">{t('admin.title')}</h2>
       
+      {/* Add User Section - Only for admins, not for administratie */}
+      {currentUser?.isAdmin && !isAdministratie(currentUser) && (
       <div className="mb-6 sm:mb-8">
         <h3 className="text-base sm:text-lg font-semibold mb-2 text-gray-900 dark:text-gray-100">{t('admin.addUser')}</h3>
         <form onSubmit={handleAddUser} className={`flex ${isMobile ? 'flex-col' : 'flex-row flex-wrap'} gap-3 sm:gap-4 ${isMobile ? '' : 'items-end'} w-full`}>
@@ -873,9 +1161,21 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
               <p className="text-xs text-red-500 mt-1">{t('admin.passwordMinLength')}</p>
             )}
           </div>
-          <div className={`flex items-center gap-2 ${isMobile ? 'w-full' : ''}`}>
-            <input type="checkbox" id="isAdmin" checked={form.isAdmin} onChange={e => setForm(f => ({ ...f, isAdmin: e.target.checked }))} className="h-4 w-4" />
-            <Label htmlFor="isAdmin" className="text-sm">{t('admin.isAdmin')}</Label>
+          <div className={isMobile ? 'w-full' : ''}>
+            <Label className="text-sm">{t('admin.userType')}</Label>
+            <Select value={form.userType} onValueChange={(value) => setForm(f => ({ ...f, userType: value }))}>
+              <SelectTrigger className="h-10 sm:h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="user">{t('admin.userType.user')}</SelectItem>
+                <SelectItem value="administratie">{t('admin.userType.administratie')}</SelectItem>
+                <SelectItem value="admin">{t('admin.userType.admin')}</SelectItem>
+                {currentUser?.email === SUPER_ADMIN_EMAIL && (
+                  <SelectItem value="super_admin" disabled>{t('admin.userType.superAdmin')}</SelectItem>
+                )}
+              </SelectContent>
+            </Select>
           </div>
           <div className={`flex items-center gap-2 ${isMobile ? 'w-full' : ''}`}>
             <input type="checkbox" id="must_change_password" checked={form.must_change_password} onChange={e => setForm(f => ({ ...f, must_change_password: e.target.checked }))} className="h-4 w-4" />
@@ -884,8 +1184,9 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
           <Button type="submit" className={`${isMobile ? 'w-full' : ''} h-10 sm:h-9`} size={isMobile ? "lg" : "default"}>{t('admin.createUser')}</Button>
         </form>
       </div>
+      )}
       
-      {/* Send Reminder Section */}
+      {/* Send Reminder Section - Available for admin and administratie */}
       <div className="mb-6 sm:mb-8 p-4 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg">
         <h3 className="text-base sm:text-lg font-semibold mb-3 text-blue-800 dark:text-blue-200">{t('admin.sendReminder')}</h3>
         <p className="text-xs sm:text-sm text-blue-700 dark:text-blue-300 mb-4">{t('admin.sendReminderDescription')}</p>
@@ -953,8 +1254,8 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
         </div>
       </div>
       
-      {/* Pending Users Section */}
-      {users.filter(u => u.approved === false).length > 0 && (
+      {/* Pending Users Section - Only for admins, not for administratie */}
+      {currentUser?.isAdmin && !isAdministratie(currentUser) && users.filter(u => u.approved === false).length > 0 && (
         <div className="mb-6 sm:mb-8">
           <h3 className="text-base sm:text-lg font-semibold mb-2 text-orange-600 dark:text-orange-400">{t('admin.pendingApproval')}</h3>
           {isMobile ? (
@@ -983,19 +1284,19 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
             </div>
           ) : (
             <div className="overflow-x-auto w-full">
-              <table className="min-w-full border mt-2 text-sm">
+              <table className="min-w-full border mt-2 text-sm border-gray-300 dark:border-gray-700">
                 <thead>
                   <tr className="bg-orange-100 dark:bg-orange-900/30">
-                    <th className="p-2 text-left text-gray-900 dark:text-gray-100">{t('admin.email')}</th>
-                    <th className="p-2 text-left text-gray-900 dark:text-gray-100">{t('admin.name')}</th>
-                    <th className="p-2 text-left text-gray-900 dark:text-gray-100">{t('admin.actions')}</th>
+                    <th className="p-2 text-left text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700">{t('admin.email')}</th>
+                    <th className="p-2 text-left text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700">{t('admin.name')}</th>
+                    <th className="p-2 text-left text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700">{t('admin.actions')}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {users.filter(u => u.approved === false).map(user => (
-                    <tr key={user.id} className="border-t dark:border-gray-700">
-                      <td className="p-2 text-gray-900 dark:text-gray-100">{user.email}</td>
-                      <td className="p-2 text-gray-900 dark:text-gray-100">{user.name || "-"}</td>
+                    <tr key={user.id} className="border-t border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800">
+                      <td className="p-2 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700">{user.email}</td>
+                      <td className="p-2 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700">{user.name || "-"}</td>
                       <td className="p-2">
                         <Button size="sm" variant="default" onClick={() => handleApproveUser(user.id, user.email)}>
                           {t('admin.approve')}
@@ -1017,6 +1318,9 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
           )}
         </div>
       )}
+      
+      {/* Existing Users Section - Only for admins, not for administratie */}
+      {currentUser?.isAdmin && !isAdministratie(currentUser) && (
       <div>
         <h3 className="text-base sm:text-lg font-semibold mb-2 text-gray-900 dark:text-gray-100">{t('admin.existingUsers')}</h3>
         {loading ? (
@@ -1131,18 +1435,27 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                   </div>
                 </div>
                 <div className="space-y-2 text-xs">
-                  <div className="flex justify-between">
-                    <span className="text-gray-600 dark:text-gray-400">{t('admin.isAdmin')}:</span>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={!!user.isAdmin}
-                        disabled={user.email === SUPER_ADMIN_EMAIL}
-                        onChange={(e) => handleToggleAdmin(user.id, user.email, e.target.checked)}
-                        className="h-3 w-3"
-                      />
-                      <span>{user.isAdmin ? "Ja" : "Nee"}</span>
-                    </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600 dark:text-gray-400">{t('admin.userType')}:</span>
+                    <Select 
+                      value={getUserType(user)} 
+                      onValueChange={(value) => handleChangeUserType(user.id, user.email, value)}
+                      disabled={user.email === SUPER_ADMIN_EMAIL && currentUser.email !== SUPER_ADMIN_EMAIL}
+                    >
+                      <SelectTrigger className="h-8 w-28 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="user">{t('admin.userType.user')}</SelectItem>
+                        <SelectItem value="administratie">{t('admin.userType.administratie')}</SelectItem>
+                        <SelectItem value="admin">{t('admin.userType.admin')}</SelectItem>
+                        {currentUser.email === SUPER_ADMIN_EMAIL && (
+                          <SelectItem value="super_admin" disabled={user.email !== SUPER_ADMIN_EMAIL}>
+                            {t('admin.userType.superAdmin')}
+                          </SelectItem>
+                        )}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600 dark:text-gray-400">{t('admin.approved')}:</span>
@@ -1224,7 +1537,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                         {t('admin.subtract')}
                       </Button>
                     </div>
-                    <span className="text-xs text-gray-500">{t('admin.oneDayEqualsEightHours')}</span>
+                    <span className="text-xs text-gray-500 dark:text-gray-400">{t('admin.oneDayEqualsEightHours')}</span>
                   </div>
                 </div>
               </div>
@@ -1232,25 +1545,25 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
           </div>
         ) : (
           /* Desktop: Table Layout */
-          <div className="overflow-x-auto w-full">
-            <table className="min-w-full border mt-2 text-sm">
-              <thead>
-                <tr className="bg-gray-100 dark:bg-gray-700">
-                  <th className="p-2 text-left text-gray-900 dark:text-gray-100">{t('admin.email')}</th>
-                  <th className="p-2 text-left text-gray-900 dark:text-gray-100">{t('admin.name')}</th>
-                  <th className="p-2 text-left text-gray-900 dark:text-gray-100">{t('admin.isAdmin')}</th>
-                  <th className="p-2 text-left text-gray-900 dark:text-gray-100">{t('admin.approved')}</th>
-                  <th className="p-2 text-left text-gray-900 dark:text-gray-100">{t('admin.mustChangePassword')}</th>
-                  {currentUser.email === SUPER_ADMIN_EMAIL && (
-                    <th className="p-2 text-left text-gray-900 dark:text-gray-100">Timebuzzer</th>
-                  )}
-                  <th className="p-2 text-left text-gray-900 dark:text-gray-100">{t('admin.daysOffLeft')}</th>
-                  <th className="p-2 text-left text-gray-900 dark:text-gray-100">{t('admin.actions')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.filter(u => u.approved !== false).map(user => (
-                  <tr key={user.id} className="border-t dark:border-gray-700">
+            <div className="overflow-x-auto w-full">
+              <table className="min-w-full border mt-2 text-sm border-gray-300 dark:border-gray-700">
+                <thead>
+                  <tr className="bg-gray-100 dark:bg-gray-700">
+                    <th className="p-2 text-left text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700">{t('admin.email')}</th>
+                    <th className="p-2 text-left text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700">{t('admin.name')}</th>
+                    <th className="p-2 text-left text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700">{t('admin.isAdmin')}</th>
+                    <th className="p-2 text-left text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700">{t('admin.approved')}</th>
+                    <th className="p-2 text-left text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700">{t('admin.mustChangePassword')}</th>
+                    {currentUser.email === SUPER_ADMIN_EMAIL && (
+                      <th className="p-2 text-left text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700">Timebuzzer</th>
+                    )}
+                    <th className="p-2 text-left text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700">{t('admin.daysOffLeft')}</th>
+                    <th className="p-2 text-left text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700">{t('admin.actions')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {users.filter(u => u.approved !== false).map(user => (
+                    <tr key={user.id} className="border-t border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800">
                     <td className="p-2">
                       {editingUserId === user.id && editingField === 'email' ? (
                         <div className="flex items-center gap-2">
@@ -1303,7 +1616,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                         </div>
                       )}
                     </td>
-                    <td className="p-2">
+                    <td className="p-2 border border-gray-300 dark:border-gray-700">
                       {editingUserId === user.id && editingField === 'name' ? (
                         <div className="flex items-center gap-2">
                           <Input
@@ -1353,21 +1666,31 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                         </div>
                       )}
                     </td>
-                    <td className="p-2">
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          checked={!!user.isAdmin}
-                          disabled={user.email === SUPER_ADMIN_EMAIL}
-                          onChange={(e) => handleToggleAdmin(user.id, user.email, e.target.checked)}
-                        />
-                        <span className="text-gray-900 dark:text-gray-100">{user.isAdmin ? t('admin.yes') : t('admin.no')}</span>
-                      </div>
+                    <td className="p-2 border border-gray-300 dark:border-gray-700">
+                      <Select 
+                        value={getUserType(user)} 
+                        onValueChange={(value) => handleChangeUserType(user.id, user.email, value)}
+                        disabled={user.email === SUPER_ADMIN_EMAIL && currentUser.email !== SUPER_ADMIN_EMAIL}
+                      >
+                        <SelectTrigger className="h-9 w-32">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="user">{t('admin.userType.user')}</SelectItem>
+                          <SelectItem value="administratie">{t('admin.userType.administratie')}</SelectItem>
+                          <SelectItem value="admin">{t('admin.userType.admin')}</SelectItem>
+                          {currentUser.email === SUPER_ADMIN_EMAIL && (
+                            <SelectItem value="super_admin" disabled={user.email !== SUPER_ADMIN_EMAIL}>
+                              {t('admin.userType.superAdmin')}
+                            </SelectItem>
+                          )}
+                        </SelectContent>
+                      </Select>
                     </td>
-                    <td className="p-2 text-gray-900 dark:text-gray-100">{user.approved !== false ? t('admin.yes') : t('admin.no')}</td>
-                    <td className="p-2 text-gray-900 dark:text-gray-100">{user.must_change_password ? t('admin.yes') : t('admin.no')}</td>
+                    <td className="p-2 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700">{user.approved !== false ? t('admin.yes') : t('admin.no')}</td>
+                    <td className="p-2 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700">{user.must_change_password ? t('admin.yes') : t('admin.no')}</td>
                     {currentUser.email === SUPER_ADMIN_EMAIL && (
-                      <td className="p-2">
+                      <td className="p-2 border border-gray-300 dark:border-gray-700">
                         <div className="flex items-center gap-2">
                           <input
                             type="checkbox"
@@ -1379,14 +1702,14 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                         </div>
                       </td>
                     )}
-                    <td className="p-2 text-gray-900 dark:text-gray-100">
+                    <td className="p-2 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700">
                       {(() => {
                         const daysLeft = (totalDaysOff - ((daysOffMap[String(user.id)] || 0) / 8)).toFixed(2);
                         const hoursLeft = (parseFloat(daysLeft) * 8).toFixed(1);
                         return `${daysLeft} (${hoursLeft} ${t('admin.hours')})`;
                       })()}
                     </td>
-                    <td className="p-2">
+                    <td className="p-2 border border-gray-300 dark:border-gray-700">
                       {resetUserId === user.id ? (
                         <div className="flex gap-2 items-center">
                           <Input
@@ -1432,7 +1755,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                           {t('admin.subtract')}
                         </Button>
                       </div>
-                      <span className="text-xs text-gray-500">{t('admin.oneDayEqualsEightHours')}</span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400">{t('admin.oneDayEqualsEightHours')}</span>
                     </td>
                   </tr>
                 ))}
@@ -1441,10 +1764,12 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
           </div>
         )}
       </div>
-      {/* Pending Week Confirmations Section */}
-      {confirmedWeeks.filter(cw => !cw.admin_reviewed || !cw.admin_approved).length > 0 && (
+      )}
+      
+      {/* Pending Week Confirmations Section - Available for admin and administratie */}
+      {isAdminOrAdministratie(currentUser) && confirmedWeeks.filter(cw => !cw.admin_reviewed || !cw.admin_approved).length > 0 && (
         <div className="mt-6 sm:mt-8 mb-6 sm:mb-8">
-          <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4 text-orange-600">⚠️ {t('admin.weeksToReview')}</h3>
+          <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4 text-orange-600 dark:text-orange-400">⚠️ {t('admin.weeksToReview')}</h3>
           <div className="space-y-4">
             {confirmedWeeks
               .filter(cw => !cw.admin_reviewed || !cw.admin_approved)
@@ -1462,16 +1787,16 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                 const totalHours = weekEntries.reduce((sum, e) => sum + Number(e.hours || 0), 0);
                 
                 return (
-                  <div key={`${cw.user_id}-${cw.week_start_date}`} className="border rounded-lg p-3 sm:p-4 bg-orange-50 shadow">
+                  <div key={`${cw.user_id}-${cw.week_start_date}`} className="border rounded-lg p-3 sm:p-4 bg-orange-50 dark:bg-orange-900/30 border-orange-200 dark:border-orange-800 shadow">
                     <div className={`flex ${isMobile ? 'flex-col' : 'flex-row sm:items-center sm:justify-between'} gap-3 sm:gap-4 mb-3 sm:mb-4`}>
                       <div>
-                        <div className="font-semibold text-base sm:text-lg">
+                        <div className="font-semibold text-base sm:text-lg text-gray-900 dark:text-gray-100">
                           {user?.name || user?.email || t('admin.unknownUser')} - {t('admin.week')} {weekNum}
                         </div>
-                        <div className="text-xs sm:text-sm text-gray-600">
+                        <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
                           {weekStart.toLocaleDateString('nl-NL')} - {weekEnd.toLocaleDateString('nl-NL')}
                         </div>
-                        <div className="text-xs sm:text-sm font-medium mt-1">
+                        <div className="text-xs sm:text-sm font-medium mt-1 text-gray-700 dark:text-gray-300">
                           {t('admin.total')}: {totalHours.toFixed(2)} {t('admin.hoursLower')} ({weekEntries.length} {t('admin.entries')})
                         </div>
                       </div>
@@ -1495,7 +1820,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                         <Button
                           size={isMobile ? "sm" : "sm"}
                           variant="outline"
-                          className={`${isMobile ? 'w-full' : ''} border-orange-600 text-orange-600 hover:bg-orange-100 h-9 sm:h-8`}
+                          className={`${isMobile ? 'w-full' : ''} border-orange-600 dark:border-orange-500 text-orange-600 dark:text-orange-400 hover:bg-orange-100 dark:hover:bg-orange-900/40 h-9 sm:h-8`}
                           onClick={() => handleUnlockWeek(cw.user_id, cw.week_start_date)}
                         >
                           {t('admin.unlockButton')}
@@ -1503,24 +1828,24 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                       </div>
                     </div>
                     <div className="overflow-x-auto">
-                      <table className="min-w-full text-xs border rounded">
-                        <thead className="bg-white">
+                      <table className="min-w-full text-xs border rounded border-gray-300 dark:border-gray-700">
+                        <thead className="bg-white dark:bg-gray-800">
                           <tr>
-                            <th className="p-2 border">Datum</th>
-                            <th className="p-2 border">Project</th>
-                            <th className="p-2 border">Uren</th>
-                            <th className="p-2 border">Werk Type</th>
-                            <th className="p-2 border">Tijd</th>
+                            <th className="p-2 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">Datum</th>
+                            <th className="p-2 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">Project</th>
+                            <th className="p-2 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">Uren</th>
+                            <th className="p-2 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">Werk Type</th>
+                            <th className="p-2 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">Tijd</th>
                           </tr>
                         </thead>
                         <tbody>
                           {weekEntries.map((entry, idx) => (
-                            <tr key={entry.id || idx} className="border-t">
-                              <td className="p-2 border">{entry.date}</td>
-                              <td className="p-2 border">{entry.projects?.name || projectsMap[entry.project_id] || entry.project || "-"}</td>
-                              <td className="p-2 border">{entry.hours}</td>
-                              <td className="p-2 border">{entry.description}</td>
-                              <td className="p-2 border">{entry.startTime && entry.endTime ? `${entry.startTime} - ${entry.endTime}` : '-'}</td>
+                            <tr key={entry.id || idx} className="border-t border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800">
+                              <td className="p-2 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">{entry.date}</td>
+                              <td className="p-2 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">{entry.projects?.name || projectsMap[entry.project_id] || entry.project || "-"}</td>
+                              <td className="p-2 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">{entry.hours}</td>
+                              <td className="p-2 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">{entry.description}</td>
+                              <td className="p-2 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">{entry.startTime && entry.endTime ? `${entry.startTime} - ${entry.endTime}` : '-'}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -1532,9 +1857,10 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
           </div>
         </div>
       )}
-      {/* All Confirmed Weeks Section */}
+      {/* All Confirmed Weeks Section - Available for admin and administratie */}
+      {isAdminOrAdministratie(currentUser) && (
       <div className="mt-8 sm:mt-12">
-        <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4 text-green-600">{t('admin.allConfirmedWeeks')}</h3>
+        <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4 text-green-600 dark:text-green-400">{t('admin.allConfirmedWeeks')}</h3>
         <div className="space-y-3">
           {users.map(user => {
             const userConfirmedWeeks = confirmedWeeks.filter(
@@ -1546,8 +1872,8 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
             }
             
             return (
-              <div key={user.id} className="border rounded-lg p-3 sm:p-4 bg-white shadow">
-                <div className="font-semibold text-base sm:text-lg mb-3">
+              <div key={user.id} className="border rounded-lg p-3 sm:p-4 bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 shadow">
+                <div className="font-semibold text-base sm:text-lg mb-3 text-gray-900 dark:text-gray-100">
                   {user.name || user.email}
                 </div>
                 <div className="space-y-2">
@@ -1564,22 +1890,22 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                     const totalHours = weekEntries.reduce((sum, e) => sum + Number(e.hours || 0), 0);
                     
                     return (
-                      <div key={`${cw.user_id}-${cw.week_start_date}`} className="border rounded p-2 bg-gray-50">
+                      <div key={`${cw.user_id}-${cw.week_start_date}`} className="border rounded p-2 bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600">
                         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                           <div>
-                            <div className="font-medium text-sm sm:text-base">
+                            <div className="font-medium text-sm sm:text-base text-gray-900 dark:text-gray-100">
                               {t('admin.week')} {weekNum} ({weekStart.toLocaleDateString('nl-NL')} - {weekEnd.toLocaleDateString('nl-NL')})
                             </div>
-                            <div className="text-xs sm:text-sm text-gray-600">
+                            <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
                               {t('admin.total')}: {totalHours.toFixed(2)} {t('admin.hoursLower')} ({weekEntries.length} {t('admin.entries')})
                             </div>
-                            <div className="text-xs sm:text-sm mt-1">
+                            <div className="text-xs sm:text-sm mt-1 text-gray-700 dark:text-gray-300">
                               {t('admin.status')}: {cw.admin_approved ? (
-                                <span className="text-green-600 font-semibold">{t('admin.approvedStatus')}</span>
+                                <span className="text-green-600 dark:text-green-400 font-semibold">{t('admin.approvedStatus')}</span>
                               ) : cw.admin_reviewed ? (
-                                <span className="text-red-600 font-semibold">{t('admin.rejectedStatus')}</span>
+                                <span className="text-red-600 dark:text-red-400 font-semibold">{t('admin.rejectedStatus')}</span>
                               ) : (
-                                <span className="text-orange-600 font-semibold">{t('admin.pendingReviewStatus')}</span>
+                                <span className="text-orange-600 dark:text-orange-400 font-semibold">{t('admin.pendingReviewStatus')}</span>
                               )}
                             </div>
                           </div>
@@ -1597,7 +1923,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                             <Button
                               size="sm"
                               variant="outline"
-                              className="border-orange-600 text-orange-600 hover:bg-orange-100 h-8"
+                              className="border-orange-600 dark:border-orange-500 text-orange-600 dark:text-orange-400 hover:bg-orange-100 dark:hover:bg-orange-900/40 h-8"
                               onClick={() => handleUnlockWeek(cw.user_id, cw.week_start_date)}
                             >
                               {t('admin.unlockButton')}
@@ -1612,14 +1938,16 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
             );
           })}
           {confirmedWeeks.filter(cw => cw.confirmed).length === 0 && (
-            <div className="text-gray-400 text-center italic p-6 border rounded-lg bg-gray-50">
+            <div className="text-gray-400 dark:text-gray-500 text-center italic p-6 border rounded-lg bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700">
               {t('admin.noConfirmedWeeks')}
             </div>
           )}
         </div>
       </div>
+      )}
       
-      {/* Below user table: User Weekly Entries Accordion */}
+      {/* Below user table: User Weekly Entries Accordion - Only for admins, not for administratie */}
+      {currentUser?.isAdmin && !isAdministratie(currentUser) && (
       <div className="mt-8 sm:mt-12">
         <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4">{t('admin.viewUserWeeklyEntries')}</h3>
         <Accordion type="multiple" className="w-full">
@@ -1632,13 +1960,14 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
               if (!weeks[week]) weeks[week] = [];
               weeks[week].push(e);
             });
-            // Sort entries within each week by date, then by startTime
+            // Sort entries within each week by day of week (Monday to Sunday), then by startTime
             Object.keys(weeks).forEach(week => {
               weeks[week].sort((a, b) => {
-                // First sort by date
-                const dateCompare = a.date.localeCompare(b.date);
-                if (dateCompare !== 0) return dateCompare;
-                // If same date, sort by startTime
+                // First sort by day of week (Monday = 0, Sunday = 6)
+                const dayA = getDayOfWeekIndex(a.date);
+                const dayB = getDayOfWeekIndex(b.date);
+                if (dayA !== dayB) return dayA - dayB;
+                // If same day, sort by startTime
                 const timeA = a.startTime || "00:00";
                 const timeB = b.startTime || "00:00";
                 return timeA.localeCompare(timeB);
@@ -1647,44 +1976,44 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
             // Sort weeks descending (most recent first)
             const weekKeys = Object.keys(weeks).sort((a, b) => b.localeCompare(a));
             return (
-              <AccordionItem key={user.id} value={user.id} className="border rounded-lg mb-4 shadow bg-white">
-                <AccordionTrigger className="px-4 py-3 font-medium bg-gray-50 flex items-center gap-2">
-                  <User className="h-6 w-6 text-orange-600" />
-                  <span className="text-base font-semibold">{user.name || user.email}</span>
+              <AccordionItem key={user.id} value={user.id} className="border rounded-lg mb-4 shadow bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700">
+                <AccordionTrigger className="px-4 py-3 font-medium bg-gray-50 dark:bg-gray-700 flex items-center gap-2">
+                  <User className="h-6 w-6 text-orange-600 dark:text-orange-400" />
+                  <span className="text-base font-semibold text-gray-900 dark:text-gray-100">{user.name || user.email}</span>
                 </AccordionTrigger>
-                <AccordionContent className="bg-white">
+                <AccordionContent className="bg-white dark:bg-gray-800">
                   <Accordion type="multiple">
                     {weekKeys.length === 0 ? (
-                      <div className="p-6 text-gray-400 text-center italic">{t('admin.noEntriesForUser')}</div>
+                      <div className="p-6 text-gray-400 dark:text-gray-500 text-center italic">{t('admin.noEntriesForUser')}</div>
                     ) : (
                       weekKeys.map(week => (
-                        <AccordionItem key={week} value={week} className="border rounded mb-3 shadow-sm bg-orange-50">
-                          <AccordionTrigger className="px-4 py-2 font-semibold flex items-center gap-2">
-                            <Calendar className="h-4 w-4 text-orange-500" />
+                        <AccordionItem key={week} value={week} className="border rounded mb-3 shadow-sm bg-orange-50 dark:bg-orange-900/30 border-orange-200 dark:border-orange-800">
+                          <AccordionTrigger className="px-4 py-2 font-semibold flex items-center gap-2 text-gray-900 dark:text-gray-100">
+                            <Calendar className="h-4 w-4 text-orange-500 dark:text-orange-400" />
                             <span>{week}</span>
                           </AccordionTrigger>
-                          <AccordionContent className="bg-white rounded-b-lg">
+                          <AccordionContent className="bg-white dark:bg-gray-800 rounded-b-lg">
                             <div className="overflow-x-auto">
-                              <table className="min-w-full text-sm border rounded-lg shadow-sm">
-                                <thead className="sticky top-0 bg-orange-100 z-10">
+                              <table className="min-w-full text-sm border rounded-lg shadow-sm border-gray-300 dark:border-gray-700">
+                                <thead className="sticky top-0 bg-orange-100 dark:bg-orange-900/50 z-10">
                                   <tr>
-                                    <th className="p-2 border">{t('admin.date')}</th>
-                                    <th className="p-2 border">{t('weekly.project')}</th>
-                                    <th className="p-2 border">{t('weekly.hours')}</th>
-                                    <th className="p-2 border">{t('admin.workType')}</th>
-                                    <th className="p-2 border">Beschrijving</th>
-                                    <th className="p-1 border">Start - Eind</th>
+                                    <th className="p-2 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">{t('admin.date')}</th>
+                                    <th className="p-2 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">{t('weekly.project')}</th>
+                                    <th className="p-2 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">{t('weekly.hours')}</th>
+                                    <th className="p-2 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">{t('admin.workType')}</th>
+                                    <th className="p-2 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">{t('admin.description')}</th>
+                                    <th className="p-1 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">{t('admin.startEnd')}</th>
                                   </tr>
                                 </thead>
                                 <tbody>
                                   {weeks[week].map((entry, idx) => (
-                                    <tr key={entry.id || idx} className="border-t hover:bg-orange-50 transition-colors">
-                                      <td className="p-2 border whitespace-nowrap">{entry.date}</td>
-                                      <td className="p-2 border">{entry.projects?.name || projectsMap[entry.project_id] || entry.project || "-"}</td>
-                                      <td className="p-2 border">{entry.hours}</td>
-                                      <td className="p-2 border">{entry.description}</td>
-                                      <td className="p-2 border">{entry.notes || ""}</td>
-                                      <td className="p-1 border">{entry.startTime && entry.endTime ? `${entry.startTime} - ${entry.endTime}` : '-'}</td>
+                                    <tr key={entry.id || idx} className="border-t border-gray-300 dark:border-gray-700 hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-colors bg-white dark:bg-gray-800">
+                                      <td className="p-2 border border-gray-300 dark:border-gray-700 whitespace-nowrap text-gray-900 dark:text-gray-100">{formatDateWithDayName(entry.date)}</td>
+                                      <td className="p-2 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">{entry.projects?.name || projectsMap[entry.project_id] || entry.project || "-"}</td>
+                                      <td className="p-2 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">{entry.hours}</td>
+                                      <td className="p-2 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">{entry.description}</td>
+                                      <td className="p-2 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">{entry.notes || ""}</td>
+                                      <td className="p-1 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">{entry.startTime && entry.endTime ? `${entry.startTime} - ${entry.endTime}` : '-'}</td>
                                     </tr>
                                   ))}
                                 </tbody>
@@ -1701,8 +2030,738 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
           })}
         </Accordion>
       </div>
+      )}
 
-      {/* Timebuzzer Sync Section */}
+      {/* Export Section - Available for admin and administratie */}
+      {isAdminOrAdministratie(currentUser) && (
+      <div className="mt-8 sm:mt-12 mb-6 sm:mb-8 p-4 bg-orange-50 dark:bg-orange-900/30 border border-orange-200 dark:border-orange-800 rounded-lg">
+        <h3 className="text-base sm:text-lg font-semibold mb-3 text-orange-800 dark:text-orange-200 flex items-center gap-2">
+          <Download className="h-5 w-5" />
+          {t('export.title')}
+        </h3>
+        <p className="text-xs sm:text-sm text-orange-700 dark:text-orange-300 mb-4">
+          {t('export.description')}
+        </p>
+        
+        {/* User Selection Dropdown */}
+        <div className="mb-4 bg-white dark:bg-gray-700 p-4 rounded-lg border border-orange-200 dark:border-orange-800">
+          <Label className="block text-sm font-medium text-orange-900 dark:text-orange-100 mb-2">
+            {t('export.selectUser')}
+          </Label>
+          <Select value={selectedExportUserId || "all"} onValueChange={(value) => setSelectedExportUserId(value === "all" ? "" : value)}>
+            <SelectTrigger className="w-full bg-white dark:bg-gray-800">
+              <SelectValue placeholder={t('export.allUsers')} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t('export.allUsers')}</SelectItem>
+              {users && users.length > 0 && users.map((user) => (
+                <SelectItem key={user.id} value={user.id}>
+                  {user.name || user.email}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-orange-700 dark:text-orange-300 mt-2">
+            {t('export.selectUserHelp')}
+          </p>
+        </div>
+
+        {/* Export Buttons */}
+        <div className={`grid ${isMobile ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-4'} gap-4`}>
+          <div className="flex flex-col gap-2">
+            <Button 
+              className="h-20 flex flex-col items-center justify-center bg-orange-600 hover:bg-orange-700 text-white shadow-lg rounded-lg transition-all" 
+              onClick={async () => {
+                setExporting(true);
+                const { data, error } = await supabase
+                  .from("timesheet")
+                  .select("*, projects(name)");
+                if (error) {
+                  toast({
+                    title: "Export Failed",
+                    description: error.message,
+                    variant: "destructive",
+                  });
+                  setExporting(false);
+                  return;
+                }
+                const rows = (data || []).map((row: any) => ({ 
+                  ...row, 
+                  project: row.projects?.name || "",
+                  user_name: users.find((u: any) => u.id === row.user_id)?.name || "",
+                  user_email: users.find((u: any) => u.id === row.user_id)?.email || ""
+                }));
+                // Simple Excel export for now
+                const wb = XLSX.utils.book_new();
+                const ws = XLSX.utils.json_to_sheet(rows.map((row: any) => ({
+                  Date: formatDateDDMMYY(row.date),
+                  Day: getDayNameNL(row.date),
+                  'Work Type': getWorkTypeLabel(row.description || ""),
+                  Project: row.projects?.name || row.project || "",
+                  'Start Time': row.startTime || "",
+                  'End Time': row.endTime || "",
+                  Hours: parseFloat(row.hours || 0),
+                  'Hours (HH:MM)': formatHoursHHMM(row.hours || 0),
+                  Notes: row.notes || "",
+                  'User Name': row.user_name || "",
+                  'User Email': row.user_email || ""
+                })));
+                XLSX.utils.book_append_sheet(wb, ws, "Timesheet");
+                XLSX.writeFile(wb, "timesheet_all.xlsx");
+                setExporting(false);
+                toast({
+                  title: "Export Successful",
+                  description: "All timesheet data exported.",
+                });
+              }}
+              disabled={exporting}
+            >
+              <FileText className="h-6 w-6 mb-2" />
+              <span className="text-sm font-medium">{t('export.allData')} (Excel)</span>
+            </Button>
+            <Button 
+              className="h-20 flex flex-col items-center justify-center bg-red-600 hover:bg-red-700 text-white shadow-lg rounded-lg transition-all" 
+              onClick={async () => {
+                setExporting(true);
+                const { data, error } = await supabase
+                  .from("timesheet")
+                  .select("*, projects(name)")
+                  .order("date", { ascending: true });
+                if (error) {
+                  toast({
+                    title: "Export Failed",
+                    description: error.message,
+                    variant: "destructive",
+                  });
+                  setExporting(false);
+                  return;
+                }
+                const formattedData = (data || []).map((row: any) => {
+                  const user = users.find((u: any) => u.id === row.user_id);
+                  return {
+                    Date: formatDateDDMMYY(row.date),
+                    Day: getDayNameNL(row.date),
+                    'Work Type': getWorkTypeLabel(row.description || ""),
+                    Project: row.projects?.name || row.project || "",
+                    'Start Time': row.startTime || "",
+                    'End Time': row.endTime || "",
+                    Hours: typeof row.hours === 'number' ? row.hours : parseFloat(row.hours || 0),
+                    'Hours (HH:MM)': formatHoursHHMM(row.hours || 0),
+                    Notes: row.notes || "",
+                    'User Name': user?.name || "",
+                    'User Email': user?.email || "",
+                  };
+                });
+                createPDF({
+                  period: "All Data",
+                  data: formattedData
+                }, "timesheet_all.pdf");
+                setExporting(false);
+                toast({
+                  title: "PDF Export Successful",
+                  description: "All timesheet data exported to PDF.",
+                });
+              }}
+              disabled={exporting}
+            >
+              <FileDown className="h-6 w-6 mb-2" />
+              <span className="text-sm font-medium">{t('export.allData')} (PDF)</span>
+            </Button>
+          </div>
+          
+          <div className="flex flex-col items-center justify-center gap-2">
+            <div className="flex gap-2 w-full">
+              <Input 
+                type="number" 
+                min="1" 
+                max="53" 
+                placeholder={t('export.weekPlaceholder') || "Week (1-53)"} 
+                value={selectedWeekNumber} 
+                onChange={e => setSelectedWeekNumber(e.target.value)} 
+                className="flex-1 border rounded px-2 py-1 text-center bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100" 
+              />
+              <Input 
+                type="number" 
+                min="2020" 
+                max="2100" 
+                placeholder={t('export.yearPlaceholder') || "Year"} 
+                value={selectedYear} 
+                onChange={e => setSelectedYear(e.target.value)} 
+                className="flex-1 border rounded px-2 py-1 text-center bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100" 
+              />
+            </div>
+            <div className="flex flex-col gap-2 w-full">
+              <Button 
+                variant="outline" 
+                className="h-14 w-full flex flex-col items-center justify-center border-orange-200 dark:border-orange-700 text-orange-700 dark:text-orange-300 hover:bg-orange-50 dark:hover:bg-orange-900/40 shadow-lg rounded-lg transition-all" 
+                onClick={async () => {
+                  if (!selectedWeekNumber || !selectedYear) {
+                    toast({
+                      title: "Missing Information",
+                      description: "Please select a week number and year.",
+                      variant: "destructive",
+                    });
+                    return;
+                  }
+                  const weekNum = parseInt(selectedWeekNumber);
+                  const year = parseInt(selectedYear);
+                  if (isNaN(weekNum) || weekNum < 1 || weekNum > 53) {
+                    toast({
+                      title: "Invalid Week Number",
+                      description: "Week number must be between 1 and 53.",
+                      variant: "destructive",
+                    });
+                    return;
+                  }
+                  setExporting(true);
+                  const { from, to } = getWeekDateRange(weekNum, year);
+                  let queryBuilder = supabase
+                    .from("timesheet")
+                    .select("*, projects(name)")
+                    .gte("date", from)
+                    .lte("date", to);
+                  if (selectedExportUserId && selectedExportUserId !== "all") {
+                    queryBuilder = queryBuilder.eq("user_id", selectedExportUserId);
+                  }
+                  const { data, error } = await queryBuilder;
+                  if (error) {
+                    toast({
+                      title: "Export Failed",
+                      description: error.message,
+                      variant: "destructive",
+                    });
+                    setExporting(false);
+                    return;
+                  }
+                  const rows = (data || []).map((row: any) => ({ 
+                    ...row, 
+                    project: row.projects?.name || "",
+                    user_name: users.find((u: any) => u.id === row.user_id)?.name || "",
+                    user_email: users.find((u: any) => u.id === row.user_id)?.email || ""
+                  }));
+                  const selectedUser = users.find((u: any) => u.id === selectedExportUserId);
+                  const userName = selectedUser ? (selectedUser.name || selectedUser.email || "User").replace(/[^a-zA-Z0-9]/g, '_') : "All_Users";
+                  const filename = `${userName}_Week${weekNum}_${year}.xlsx`;
+                  const wb = XLSX.utils.book_new();
+                  const ws = XLSX.utils.json_to_sheet(rows.map((row: any) => ({
+                    Date: formatDateDDMMYY(row.date),
+                    Day: getDayNameNL(row.date),
+                    'Work Type': getWorkTypeLabel(row.description || ""),
+                    Project: row.projects?.name || row.project || "",
+                    'Start Time': row.startTime || "",
+                    'End Time': row.endTime || "",
+                    Hours: parseFloat(row.hours || 0),
+                    'Hours (HH:MM)': formatHoursHHMM(row.hours || 0),
+                    Notes: row.notes || "",
+                    'User Name': row.user_name || "",
+                    'User Email': row.user_email || ""
+                  })));
+                  XLSX.utils.book_append_sheet(wb, ws, "Timesheet");
+                  XLSX.writeFile(wb, filename);
+                  setExporting(false);
+                  toast({
+                    title: "Export Successful",
+                    description: `Week ${weekNum} (${year}) exported${selectedUser ? ` for ${selectedUser.name || selectedUser.email}` : ""}.`,
+                  });
+                }}
+                disabled={exporting || !selectedWeekNumber || !selectedYear}
+              >
+                <CalendarIcon className="h-6 w-6 mb-2" />
+                <span className="text-sm font-medium">{t('export.weekNumber')} (Excel)</span>
+              </Button>
+              <Button 
+                variant="outline" 
+                className="h-14 w-full flex flex-col items-center justify-center border-red-200 dark:border-red-700 text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/40 shadow-lg rounded-lg transition-all" 
+                onClick={async () => {
+                  if (!selectedWeekNumber || !selectedYear) {
+                    toast({
+                      title: "Missing Information",
+                      description: "Please select a week number and year.",
+                      variant: "destructive",
+                    });
+                    return;
+                  }
+                  const weekNum = parseInt(selectedWeekNumber);
+                  const year = parseInt(selectedYear);
+                  if (isNaN(weekNum) || weekNum < 1 || weekNum > 53) {
+                    toast({
+                      title: "Invalid Week Number",
+                      description: "Week number must be between 1 and 53.",
+                      variant: "destructive",
+                    });
+                    return;
+                  }
+                  setExporting(true);
+                  const { from, to } = getWeekDateRange(weekNum, year);
+                  let queryBuilder = supabase
+                    .from("timesheet")
+                    .select("*, projects(name)")
+                    .gte("date", from)
+                    .lte("date", to)
+                    .order("date", { ascending: true });
+                  if (selectedExportUserId && selectedExportUserId !== "all") {
+                    queryBuilder = queryBuilder.eq("user_id", selectedExportUserId);
+                  }
+                  const { data, error } = await queryBuilder;
+                  if (error) {
+                    toast({
+                      title: "Export Failed",
+                      description: error.message,
+                      variant: "destructive",
+                    });
+                    setExporting(false);
+                    return;
+                  }
+                  const selectedUser = users.find((u: any) => u.id === selectedExportUserId);
+                  const userLabel = selectedUser ? `_${selectedUser.name || selectedUser.email}` : "";
+                  const formattedData = (data || []).map((row: any) => {
+                    const user = users.find((u: any) => u.id === row.user_id);
+                    return {
+                      Date: formatDateDDMMYY(row.date),
+                      Day: getDayNameNL(row.date),
+                      'Work Type': getWorkTypeLabel(row.description || ""),
+                      Project: row.projects?.name || row.project || "",
+                      'Start Time': row.startTime || "",
+                      'End Time': row.endTime || "",
+                      Hours: typeof row.hours === 'number' ? row.hours : parseFloat(row.hours || 0),
+                      'Hours (HH:MM)': formatHoursHHMM(row.hours || 0),
+                      Notes: row.notes || "",
+                      'User Name': user?.name || "",
+                      'User Email': user?.email || "",
+                    };
+                  });
+                  createPDF({
+                    userName: selectedUser?.name || selectedUser?.email,
+                    dateRange: { from: formatDateDDMMYY(from), to: formatDateDDMMYY(to) },
+                    period: `Week ${weekNum}, ${year}`,
+                    data: formattedData
+                  }, `timesheet_Week${weekNum}_${year}${userLabel}.pdf`);
+                  setExporting(false);
+                  toast({
+                    title: "PDF Export Successful",
+                    description: `Week ${weekNum} (${year}) exported to PDF${selectedUser ? ` for ${selectedUser.name || selectedUser.email}` : ""}.`,
+                  });
+                }}
+                disabled={exporting || !selectedWeekNumber || !selectedYear}
+              >
+                <FileDown className="h-6 w-6 mb-2" />
+                <span className="text-sm font-medium">{t('export.weekNumber')} (PDF)</span>
+              </Button>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <Button 
+              variant="outline" 
+              className="h-20 flex flex-col items-center justify-center border-orange-200 dark:border-orange-700 text-orange-700 dark:text-orange-300 hover:bg-orange-50 dark:hover:bg-orange-900/40 shadow-lg rounded-lg transition-all" 
+              onClick={async () => {
+                if (!selectedExportUserId || selectedExportUserId === "all") {
+                  toast({
+                    title: "No User Selected",
+                    description: "Please select a user to export.",
+                    variant: "destructive",
+                  });
+                  return;
+                }
+                setExporting(true);
+                const { data, error } = await supabase
+                  .from("timesheet")
+                  .select("*, projects(name)")
+                  .eq("user_id", selectedExportUserId)
+                  .order("date", { ascending: true });
+                if (error) {
+                  toast({
+                    title: "Export Failed",
+                    description: error.message,
+                    variant: "destructive",
+                  });
+                  setExporting(false);
+                  return;
+                }
+                const selectedUser = users.find((u: any) => u.id === selectedExportUserId);
+                const rows = (data || []).map((row: any) => ({ 
+                  ...row, 
+                  project: row.projects?.name || "",
+                  user_name: selectedUser?.name || selectedUser?.email || "",
+                  user_email: selectedUser?.email || ""
+                }));
+                const userName = selectedUser?.name || selectedUser?.email || "user";
+                const wb = XLSX.utils.book_new();
+                const ws = XLSX.utils.json_to_sheet(rows.map((row: any) => ({
+                  Date: formatDateDDMMYY(row.date),
+                  Day: getDayNameNL(row.date),
+                  'Work Type': getWorkTypeLabel(row.description || ""),
+                  Project: row.projects?.name || row.project || "",
+                  'Start Time': row.startTime || "",
+                  'End Time': row.endTime || "",
+                  Hours: parseFloat(row.hours || 0),
+                  'Hours (HH:MM)': formatHoursHHMM(row.hours || 0),
+                  Notes: row.notes || ""
+                })));
+                XLSX.utils.book_append_sheet(wb, ws, "Timesheet");
+                XLSX.writeFile(wb, `timesheet_${userName.replace(/[^a-zA-Z0-9]/g, '_')}.xlsx`);
+                setExporting(false);
+                toast({
+                  title: "Export Successful",
+                  description: `All data exported for ${userName}.`,
+                });
+              }}
+              disabled={exporting || !selectedExportUserId || selectedExportUserId === "all"}
+            >
+              <Users className="h-6 w-6 mb-2" />
+              <span className="text-sm font-medium">{t('export.perUser')} (Excel)</span>
+            </Button>
+            <Button 
+              variant="outline" 
+              className="h-20 flex flex-col items-center justify-center border-red-200 dark:border-red-700 text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/40 shadow-lg rounded-lg transition-all" 
+              onClick={async () => {
+                if (!selectedExportUserId || selectedExportUserId === "all") {
+                  toast({
+                    title: "No User Selected",
+                    description: "Please select a user to export.",
+                    variant: "destructive",
+                  });
+                  return;
+                }
+                setExporting(true);
+                const { data, error } = await supabase
+                  .from("timesheet")
+                  .select("*, projects(name)")
+                  .eq("user_id", selectedExportUserId)
+                  .order("date", { ascending: true });
+                if (error) {
+                  toast({
+                    title: "Export Failed",
+                    description: error.message,
+                    variant: "destructive",
+                  });
+                  setExporting(false);
+                  return;
+                }
+                const selectedUser = users.find((u: any) => u.id === selectedExportUserId);
+                const userName = selectedUser?.name || selectedUser?.email || "user";
+                const formattedData = (data || []).map((row: any) => {
+                  return {
+                    Date: formatDateDDMMYY(row.date),
+                    Day: getDayNameNL(row.date),
+                    'Work Type': getWorkTypeLabel(row.description || ""),
+                    Project: row.projects?.name || row.project || "",
+                    'Start Time': row.startTime || "",
+                    'End Time': row.endTime || "",
+                    Hours: typeof row.hours === 'number' ? row.hours : parseFloat(row.hours || 0),
+                    'Hours (HH:MM)': formatHoursHHMM(row.hours || 0),
+                    Notes: row.notes || "",
+                  };
+                });
+                createPDF({
+                  userName: userName,
+                  period: "All Data",
+                  data: formattedData
+                }, `timesheet_${userName.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`);
+                setExporting(false);
+                toast({
+                  title: "PDF Export Successful",
+                  description: `All data exported for ${userName}.`,
+                });
+              }}
+              disabled={exporting || !selectedExportUserId || selectedExportUserId === "all"}
+            >
+              <FileDown className="h-6 w-6 mb-2" />
+              <span className="text-sm font-medium">{t('export.perUser')} (PDF)</span>
+            </Button>
+          </div>
+        </div>
+        
+        <div className="text-sm text-orange-800 dark:text-orange-200 bg-orange-50 dark:bg-orange-900/30 p-4 rounded-lg border border-orange-200 dark:border-orange-800 mt-4">
+          <strong className="text-orange-900 dark:text-orange-100">{t('export.note')}</strong> {t('export.adminNote')}
+        </div>
+      </div>
+      )}
+
+      {/* Overtime Tracking Section - Available for admin and administratie */}
+      {isAdminOrAdministratie(currentUser) && (
+      <div className="mt-8 sm:mt-12 mb-6 sm:mb-8 p-4 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg">
+        <h3 className="text-base sm:text-lg font-semibold mb-3 text-blue-800 dark:text-blue-200 flex items-center gap-2">
+          <Calendar className="h-5 w-5" />
+          Overuren Tracking
+        </h3>
+        <p className="text-xs sm:text-sm text-blue-700 dark:text-blue-300 mb-4">
+          Bekijk overuren per gebruiker. Een normale werkdag is 8 uur. Alles wat meer is gewerkt wordt als overuren geteld.
+        </p>
+        
+        {/* Filters */}
+        <div className="mb-4 bg-white dark:bg-gray-700 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
+          <div className={`grid ${isMobile ? 'grid-cols-1' : 'grid-cols-2 md:grid-cols-4'} gap-4 mb-4`}>
+            <div>
+              <Label className="block text-sm font-medium text-blue-900 dark:text-blue-100 mb-2">
+                Periode
+              </Label>
+              <Select value={overtimePeriod} onValueChange={(value: any) => setOvertimePeriod(value)}>
+                <SelectTrigger className="w-full bg-white dark:bg-gray-800">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="week">Week</SelectItem>
+                  <SelectItem value="month">Maand</SelectItem>
+                  <SelectItem value="year">Jaar</SelectItem>
+                  <SelectItem value="all">Alles</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+            {overtimePeriod === "week" && (
+              <>
+                <div>
+                  <Label className="block text-sm font-medium text-blue-900 dark:text-blue-100 mb-2">
+                    Week
+                  </Label>
+                  <Input 
+                    type="number" 
+                    min="1" 
+                    max="53" 
+                    placeholder="Week (1-53)" 
+                    value={overtimeSelectedWeek} 
+                    onChange={e => setOvertimeSelectedWeek(e.target.value)} 
+                    className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100" 
+                  />
+                </div>
+                <div>
+                  <Label className="block text-sm font-medium text-blue-900 dark:text-blue-100 mb-2">
+                    Jaar
+                  </Label>
+                  <Input 
+                    type="number" 
+                    min="2020" 
+                    max="2100" 
+                    placeholder="Jaar" 
+                    value={overtimeSelectedYear} 
+                    onChange={e => setOvertimeSelectedYear(e.target.value)} 
+                    className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100" 
+                  />
+                </div>
+              </>
+            )}
+            
+            {(overtimePeriod === "month" || overtimePeriod === "year") && (
+              <div>
+                <Label className="block text-sm font-medium text-blue-900 dark:text-blue-100 mb-2">
+                  {overtimePeriod === "month" ? "Maand" : "Jaar"}
+                </Label>
+                {overtimePeriod === "month" ? (
+                  <Select value={overtimeSelectedMonth} onValueChange={setOvertimeSelectedMonth}>
+                    <SelectTrigger className="w-full bg-white dark:bg-gray-800">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Array.from({ length: 12 }, (_, i) => {
+                        const monthNum = String(i + 1).padStart(2, '0');
+                        const monthName = new Date(2000, i, 1).toLocaleDateString('nl-NL', { month: 'long' });
+                        return (
+                          <SelectItem key={monthNum} value={monthNum}>
+                            {monthName}
+                          </SelectItem>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input 
+                    type="number" 
+                    min="2020" 
+                    max="2100" 
+                    placeholder="Jaar" 
+                    value={overtimeSelectedYear} 
+                    onChange={e => setOvertimeSelectedYear(e.target.value)} 
+                    className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100" 
+                  />
+                )}
+              </div>
+            )}
+            
+            {overtimePeriod === "year" && (
+              <div>
+                <Label className="block text-sm font-medium text-blue-900 dark:text-blue-100 mb-2">
+                  Jaar
+                </Label>
+                <Input 
+                  type="number" 
+                  min="2020" 
+                  max="2100" 
+                  placeholder="Jaar" 
+                  value={overtimeSelectedYear} 
+                  onChange={e => setOvertimeSelectedYear(e.target.value)} 
+                  className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100" 
+                />
+              </div>
+            )}
+            
+            <div>
+              <Label className="block text-sm font-medium text-blue-900 dark:text-blue-100 mb-2">
+                Gebruiker
+              </Label>
+              <Select value={overtimeSelectedUserId} onValueChange={setOvertimeSelectedUserId}>
+                <SelectTrigger className="w-full bg-white dark:bg-gray-800">
+                  <SelectValue placeholder="Alle gebruikers" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Alle gebruikers</SelectItem>
+                  {users && users.length > 0 && users.map((user) => (
+                    <SelectItem key={user.id} value={user.id}>
+                      {user.name || user.email}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          
+          <Button 
+            onClick={calculateOvertime}
+            disabled={overtimeLoading || (overtimePeriod === "week" && (!overtimeSelectedWeek || !overtimeSelectedYear))}
+            className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white"
+          >
+            {overtimeLoading ? "Berekenen..." : "Bereken Overuren"}
+          </Button>
+        </div>
+
+        {/* Results */}
+        {overtimeData.length > 0 && (
+          <div className="mt-4 space-y-4">
+            {overtimeData.map((userData) => (
+              <div key={userData.userId} className="bg-white dark:bg-gray-800 rounded-lg border border-blue-200 dark:border-blue-800 p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <h4 className="font-semibold text-base text-gray-900 dark:text-gray-100">
+                      {userData.userName}
+                    </h4>
+                    <p className="text-xs text-gray-600 dark:text-gray-400">{userData.userEmail}</p>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-sm text-gray-600 dark:text-gray-400">Totaal Overuren</div>
+                    <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                      {userData.totalOvertime}h
+                    </div>
+                  </div>
+                </div>
+                
+                <Accordion type="multiple" className="w-full">
+                  {userData.dailyOvertime.map((day: any, idx: number) => (
+                    <AccordionItem key={idx} value={`day-${userData.userId}-${idx}`} className="border border-gray-200 dark:border-gray-700 rounded-lg mb-2">
+                      <AccordionTrigger className="px-4 py-3 hover:no-underline">
+                        <div className="flex items-center justify-between w-full pr-4">
+                          <div className="text-left">
+                            <div className="font-semibold text-sm text-gray-900 dark:text-gray-100">
+                              {formatDateWithDayName(day.date)}
+                            </div>
+                            <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                              {day.totalHours}h totaal - {day.normalHours}h normaal
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-lg font-bold text-blue-600 dark:text-blue-400">
+                              +{day.overtime}h overuren
+                            </div>
+                          </div>
+                        </div>
+                      </AccordionTrigger>
+                      <AccordionContent className="px-4 pb-4">
+                        <div className="mt-3">
+                          <h5 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2">
+                            Details ({day.entries?.length || 0} entries):
+                          </h5>
+                          {isMobile ? (
+                            <div className="space-y-2">
+                              {day.entries?.map((entry: any, entryIdx: number) => (
+                                <div key={entryIdx} className="bg-gray-50 dark:bg-gray-700 rounded p-3 border border-gray-200 dark:border-gray-600">
+                                  <div className="grid grid-cols-2 gap-2 text-xs">
+                                    <div>
+                                      <span className="font-semibold text-gray-700 dark:text-gray-300">Project:</span>
+                                      <div className="text-gray-900 dark:text-gray-100">{entry.project}</div>
+                                    </div>
+                                    <div>
+                                      <span className="font-semibold text-gray-700 dark:text-gray-300">Werk Type:</span>
+                                      <div className="text-gray-900 dark:text-gray-100">{entry.workTypeLabel}</div>
+                                    </div>
+                                    <div>
+                                      <span className="font-semibold text-gray-700 dark:text-gray-300">Tijd:</span>
+                                      <div className="text-gray-900 dark:text-gray-100">
+                                        {entry.startTime !== "-" && entry.endTime !== "-" 
+                                          ? `${entry.startTime} - ${entry.endTime}`
+                                          : "-"}
+                                      </div>
+                                    </div>
+                                    <div>
+                                      <span className="font-semibold text-gray-700 dark:text-gray-300">Uren:</span>
+                                      <div className="text-gray-900 dark:text-gray-100 font-semibold">{entry.hours}h</div>
+                                    </div>
+                                    {entry.notes && (
+                                      <div className="col-span-2">
+                                        <span className="font-semibold text-gray-700 dark:text-gray-300">Notities:</span>
+                                        <div className="text-gray-900 dark:text-gray-100">{entry.notes}</div>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="overflow-x-auto">
+                              <table className="min-w-full text-xs border border-gray-300 dark:border-gray-700">
+                                <thead className="bg-gray-100 dark:bg-gray-700">
+                                  <tr>
+                                    <th className="p-2 text-left border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">Project</th>
+                                    <th className="p-2 text-left border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">Werk Type</th>
+                                    <th className="p-2 text-left border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">Tijd</th>
+                                    <th className="p-2 text-right border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">Uren</th>
+                                    <th className="p-2 text-left border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">Notities</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {day.entries?.map((entry: any, entryIdx: number) => (
+                                    <tr key={entryIdx} className="border-t border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800">
+                                      <td className="p-2 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">
+                                        {entry.project}
+                                      </td>
+                                      <td className="p-2 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">
+                                        {entry.workTypeLabel}
+                                      </td>
+                                      <td className="p-2 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">
+                                        {entry.startTime !== "-" && entry.endTime !== "-" 
+                                          ? `${entry.startTime} - ${entry.endTime}`
+                                          : "-"}
+                                      </td>
+                                      <td className="p-2 text-right border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100 font-semibold">
+                                        {entry.hours}h
+                                      </td>
+                                      <td className="p-2 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100 text-xs">
+                                        {entry.notes || "-"}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+                      </AccordionContent>
+                    </AccordionItem>
+                  ))}
+                </Accordion>
+              </div>
+            ))}
+          </div>
+        )}
+        
+        {overtimeData.length === 0 && !overtimeLoading && (
+          <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+            Klik op "Bereken Overuren" om de overuren te berekenen.
+          </div>
+        )}
+      </div>
+      )}
+
+      {/* Timebuzzer Sync Section - Only for admins, not for administratie */}
+      {currentUser?.isAdmin && !isAdministratie(currentUser) && (
       <div className="mb-6 sm:mb-8 p-4 bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 rounded-lg">
         <h3 className="text-base sm:text-lg font-semibold mb-3 text-green-800">Timebuzzer Integration</h3>
         <p className="text-xs sm:text-sm text-green-700 mb-4">
@@ -2500,6 +3559,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
           )}
         </div>
       </div>
+      )}
     </div>
   );
 };

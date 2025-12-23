@@ -90,7 +90,7 @@ interface DayData {
 }
 
 const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const { toast } = useToast();
   const isMobile = useIsMobile();
   const [weekStart, setWeekStart] = useState(() => {
@@ -716,6 +716,42 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
     }
   };
 
+  // Calculate total hours for a day
+  const calculateDayTotal = (dayIdx: number, dateStr: string): number => {
+    let total = 0;
+    
+    // Add hours from editable entries
+    const day = days[dayIdx];
+    if (day && day.entries) {
+      day.entries.forEach(entry => {
+        let hours = 0;
+        
+        // If full day off is checked, add 8 hours
+        if (entry.workType === "31" && entry.fullDayOff) {
+          hours = 8;
+        } else if (entry.startTime && entry.endTime) {
+          // Calculate from start/end time
+          const calculated = calculateHours(entry.startTime, entry.endTime);
+          hours = parseFloat(calculated) || 0;
+        } else if (entry.hours) {
+          // Use direct hours value
+          hours = parseFloat(entry.hours) || 0;
+        }
+        
+        total += hours;
+      });
+    }
+    
+    // Add hours from submitted entries
+    const submitted = submittedEntries[dateStr] || [];
+    submitted.forEach(submittedEntry => {
+      const hours = parseFloat(submittedEntry.hours || "0") || 0;
+      total += hours;
+    });
+    
+    return total;
+  };
+
   // Copy entries from previous day to current day and save them immediately
   const handleCopyFromPreviousDay = async (dayIdx: number) => {
     if (dayIdx === 0) {
@@ -1332,23 +1368,34 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
               const dateStr = day.date.toISOString().split('T')[0];
               const submitted = (submittedEntries[dateStr] || []).sort((a, b) => {
                 // Sort by startTime (ascending)
-                const timeA = (a.startTime || "00:00").trim();
-                const timeB = (b.startTime || "00:00").trim();
+                const timeA = (a.startTime || "").trim();
+                const timeB = (b.startTime || "").trim();
                 
-                // Convert time strings to comparable numbers (HH:MM -> minutes since midnight)
-                const parseTime = (timeStr: string): number => {
-                  const parts = timeStr.split(':');
-                  if (parts.length !== 2) return 0;
-                  const hours = parseInt(parts[0], 10) || 0;
-                  const minutes = parseInt(parts[1], 10) || 0;
-                  return hours * 60 + minutes;
-                };
+                // If both have startTime, sort by time
+                if (timeA && timeB) {
+                  // Convert time strings to comparable numbers (HH:MM -> minutes since midnight)
+                  const parseTime = (timeStr: string): number => {
+                    const parts = timeStr.split(':');
+                    if (parts.length !== 2) return 0;
+                    const hours = parseInt(parts[0], 10) || 0;
+                    const minutes = parseInt(parts[1], 10) || 0;
+                    return hours * 60 + minutes;
+                  };
+                  
+                  return parseTime(timeA) - parseTime(timeB);
+                }
                 
-                return parseTime(timeA) - parseTime(timeB);
+                // If only one has startTime, put the one with startTime first
+                if (timeA && !timeB) return -1;
+                if (!timeA && timeB) return 1;
+                
+                // If neither has startTime, maintain original order
+                return 0;
               });
               const isDayLocked = isLocked;
-              const dayName = day.date.toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' });
-              const dayShort = day.date.toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short' });
+              const locale = language === 'nl' ? 'nl-NL' : 'en-GB';
+              const dayName = day.date.toLocaleDateString(locale, { weekday: 'long', day: 'numeric', month: 'long' });
+              const dayShort = day.date.toLocaleDateString(locale, { weekday: 'short', day: 'numeric', month: 'short' });
               const dayColors = [
                 'bg-blue-50 border-blue-200', // Monday
                 'bg-green-50 border-green-200', // Tuesday
@@ -1662,7 +1709,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                                 value={entry.startTime || ""}
                                 onChange={e => handleEntryChange(dayIdx, entryIdx, "startTime", roundToQuarterHour(e.target.value))}
                                 placeholder="08:00"
-                                className="h-10 text-sm bg-white mt-1"
+                                className="h-10 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 mt-1"
                                 disabled={isLocked}
                               />
                             </div>
@@ -1673,13 +1720,13 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                                 value={entry.endTime || ""}
                                 onChange={e => handleEntryChange(dayIdx, entryIdx, "endTime", roundToQuarterHour(e.target.value))}
                                 placeholder="17:00"
-                                className="h-10 text-sm bg-white mt-1"
+                                className="h-10 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 mt-1"
                                 disabled={isLocked}
                               />
                             </div>
                             <div>
                               <Label className="text-xs font-semibold">{t('weekly.hours')}</Label>
-                              <div className="h-10 flex items-center justify-center bg-gray-50 border rounded px-2 text-sm font-medium mt-1">
+                              <div className="h-10 flex items-center justify-center bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded px-2 text-sm font-medium text-gray-900 dark:text-gray-100 mt-1">
                                 {(() => {
                                   // If full day off is checked, show 8 hours
                                   if (entry.workType === "31" && entry.fullDayOff) {
@@ -1709,36 +1756,46 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                       
                       {/* Submitted entries (read-only with edit option) */}
                       {submitted.map((submittedEntry, subIdx) => (
-                        <div key={`submitted-${dayIdx}-${subIdx}`} className="bg-gray-100 rounded-lg border p-3 space-y-2">
+                        <div key={`submitted-${dayIdx}-${subIdx}`} className="bg-gray-100 dark:bg-gray-800 rounded-lg border border-gray-300 dark:border-gray-700 p-3 space-y-2">
                           <div className="flex items-center justify-between">
-                            <span className="text-sm font-semibold">{getWorkTypeLabel(submittedEntry.workType || "")}</span>
+                            <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">{getWorkTypeLabel(submittedEntry.workType || "")}</span>
                           </div>
-                          <div className="text-xs text-gray-600">
-                            <div><strong>{t('weekly.project')}:</strong> {submittedEntry.project || "-"}</div>
-                            <div><strong>{t('weekly.time')}:</strong> {
+                          <div className="text-xs text-gray-600 dark:text-gray-400">
+                            <div><strong className="text-gray-900 dark:text-gray-200">{t('weekly.project')}:</strong> {submittedEntry.project || "-"}</div>
+                            <div><strong className="text-gray-900 dark:text-gray-200">{t('weekly.time')}:</strong> {
                               submittedEntry.startTime && submittedEntry.endTime 
                                 ? `${submittedEntry.startTime} - ${submittedEntry.endTime}`
                                 : submittedEntry.workType === "31" && parseFloat(submittedEntry.hours || "0") >= 8
                                   ? t('weekly.fullDayOff') || "Hele dag vrij (8 uren)"
                                   : "-"
                             }</div>
-                            <div><strong>{t('weekly.hours')}:</strong> {submittedEntry.hours || "0"}h</div>
+                            <div><strong className="text-gray-900 dark:text-gray-200">{t('weekly.hours')}:</strong> {submittedEntry.hours || "0"}h</div>
                           </div>
                         </div>
                       ))}
+                      
+                      {/* Total for mobile */}
+                      <div className="bg-gray-200 dark:bg-gray-700 rounded-lg border-2 border-gray-400 dark:border-gray-600 p-3 font-bold">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm sm:text-base text-gray-900 dark:text-gray-100">{t('weekly.total') || 'Totaal per dag'}:</span>
+                          <span className="text-sm sm:text-base text-gray-900 dark:text-gray-100">
+                            {calculateDayTotal(dayIdx, dateStr).toFixed(2)}h
+                          </span>
+                        </div>
+                      </div>
                     </div>
                   ) : (
                     /* Desktop: Table Layout */
                     <div className="overflow-x-auto">
                       <table className="min-w-full border-collapse">
                         <thead>
-                          <tr className="bg-white/50">
-                            <th className="border p-2 text-left min-w-[120px]">{t('weekly.workType')}</th>
-                            <th className="border p-2 text-left min-w-[150px]">{t('weekly.project')}</th>
-                            <th className="border p-2 text-left min-w-[80px]">{t('weekly.from')}</th>
-                            <th className="border p-2 text-left min-w-[80px]">{t('weekly.to')}</th>
-                            <th className="border p-2 text-left min-w-[80px]">{t('weekly.hours')}</th>
-                            {!isLocked && <th className="border p-2 text-center min-w-[50px]">{t('weekly.action')}</th>}
+                          <tr className="bg-white/50 dark:bg-gray-800/50">
+                            <th className="border border-gray-300 dark:border-gray-700 p-2 text-left min-w-[120px] text-gray-900 dark:text-gray-100">{t('weekly.workType')}</th>
+                            <th className="border border-gray-300 dark:border-gray-700 p-2 text-left min-w-[150px] text-gray-900 dark:text-gray-100">{t('weekly.project')}</th>
+                            <th className="border border-gray-300 dark:border-gray-700 p-2 text-left min-w-[80px] text-gray-900 dark:text-gray-100">{t('weekly.from')}</th>
+                            <th className="border border-gray-300 dark:border-gray-700 p-2 text-left min-w-[80px] text-gray-900 dark:text-gray-100">{t('weekly.to')}</th>
+                            <th className="border border-gray-300 dark:border-gray-700 p-2 text-left min-w-[80px] text-gray-900 dark:text-gray-100">{t('weekly.hours')}</th>
+                            {!isLocked && <th className="border border-gray-300 dark:border-gray-700 p-2 text-center min-w-[50px] text-gray-900 dark:text-gray-100">{t('weekly.actions')}</th>}
                           </tr>
                         </thead>
                         <tbody>
@@ -1747,8 +1804,8 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                             const isNewEntry = !entry.id;
                             const isEditing = entry.id && editingEntry?.id === entry.id;
                             return (
-                            <tr key={`edit-${dayIdx}-${entryIdx}`} className={`border-t hover:bg-white/50 ${isEditing ? 'bg-yellow-50/50' : 'bg-white/30'}`}>
-                              <td className="border p-2">
+                            <tr key={`edit-${dayIdx}-${entryIdx}`} className={`border-t border-gray-300 dark:border-gray-700 hover:bg-white/50 dark:hover:bg-gray-700/50 ${isEditing ? 'bg-yellow-50/50 dark:bg-yellow-900/20' : 'bg-white/30 dark:bg-gray-800/30'}`}>
+                              <td className="border border-gray-300 dark:border-gray-700 p-2">
                                 <div className="flex flex-col gap-2">
                                   <div className="flex items-center gap-2">
                                     {isEditing && (
@@ -1824,7 +1881,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                                   </Popover>
                                 </div>
                               </td>
-                              <td className="border p-2">
+                              <td className="border border-gray-300 dark:border-gray-700 p-2">
                                 <Popover
                                   open={openProjectPopovers[`${dayIdx}-${entryIdx}`] || false}
                                   onOpenChange={(open) => {
@@ -1839,7 +1896,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                                     <Button
                                       variant="outline"
                                       role="combobox"
-                                      className="w-full justify-between h-9 text-sm bg-white"
+                                      className="w-full justify-between h-9 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
                                       disabled={!workTypeRequiresProject(entry.workType) || isLocked}
                                     >
                                       {entry.project || t('weekly.selectProject')}
@@ -1970,28 +2027,28 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                                   </div>
                                 )}
                               </td>
-                              <td className="border p-2">
+                              <td className="border border-gray-300 dark:border-gray-700 p-2">
                                 <Input
                                   type="text"
                                   value={entry.startTime || ""}
                                   onChange={e => handleEntryChange(dayIdx, entryIdx, "startTime", roundToQuarterHour(e.target.value))}
                                   placeholder="08:00"
-                                  className="h-9 text-sm w-24 bg-white"
+                                  className="h-9 text-sm w-24 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
                                   disabled={isLocked}
                                 />
                               </td>
-                              <td className="border p-2">
+                              <td className="border border-gray-300 dark:border-gray-700 p-2">
                                 <Input
                                   type="text"
                                   value={entry.endTime || ""}
                                   onChange={e => handleEntryChange(dayIdx, entryIdx, "endTime", roundToQuarterHour(e.target.value))}
                                   placeholder="17:00"
-                                  className="h-9 text-sm w-24 bg-white"
+                                  className="h-9 text-sm w-24 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
                                   disabled={isLocked}
                                 />
                               </td>
-                              <td className="border p-2">
-                                <div className="h-9 flex items-center justify-center bg-gray-50 border rounded px-3 text-sm font-medium">
+                              <td className="border border-gray-300 dark:border-gray-700 p-2">
+                                <div className="h-9 flex items-center justify-center bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded px-3 text-sm font-medium text-gray-900 dark:text-gray-100">
                                   {(() => {
                                     // If full day off is checked, show 8 hours
                                     if (entry.workType === "31" && entry.fullDayOff) {
@@ -2014,7 +2071,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                                   })()}
                                 </div>
                               </td>
-                              <td className="border p-2 text-center">
+                              <td className="border border-gray-300 dark:border-gray-700 p-2 text-center">
                                 <div className="flex items-center justify-center gap-1">
                                   <Button 
                                     variant="default" 
@@ -2044,24 +2101,24 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                           
                           {/* Submitted entries (read-only with edit option) */}
                           {submitted.map((submittedEntry, subIdx) => (
-                            <tr key={`submitted-${dayIdx}-${subIdx}`} className="border-t bg-gray-100/50">
-                              <td className="border p-2">
-                                <span className="text-sm font-medium">{getWorkTypeLabel(submittedEntry.workType || "")}</span>
+                            <tr key={`submitted-${dayIdx}-${subIdx}`} className="border-t bg-gray-100/50 dark:bg-gray-800/50 border-gray-300 dark:border-gray-700">
+                              <td className="border border-gray-300 dark:border-gray-700 p-2">
+                                <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{getWorkTypeLabel(submittedEntry.workType || "")}</span>
                               </td>
-                              <td className="border p-2">
-                                <span className="text-sm">{submittedEntry.project || "-"}</span>
+                              <td className="border border-gray-300 dark:border-gray-700 p-2">
+                                <span className="text-sm text-gray-900 dark:text-gray-100">{submittedEntry.project || "-"}</span>
                               </td>
-                              <td className="border p-2">
-                                <span className="text-sm">{submittedEntry.startTime || "-"}</span>
+                              <td className="border border-gray-300 dark:border-gray-700 p-2">
+                                <span className="text-sm text-gray-900 dark:text-gray-100">{submittedEntry.startTime || "-"}</span>
                               </td>
-                              <td className="border p-2">
-                                <span className="text-sm">{submittedEntry.endTime || "-"}</span>
+                              <td className="border border-gray-300 dark:border-gray-700 p-2">
+                                <span className="text-sm text-gray-900 dark:text-gray-100">{submittedEntry.endTime || "-"}</span>
                               </td>
-                              <td className="border p-2">
-                                <span className="text-sm font-medium">{submittedEntry.hours || "0"}</span>
+                              <td className="border border-gray-300 dark:border-gray-700 p-2">
+                                <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{submittedEntry.hours || "0"}</span>
                               </td>
                               {!isLocked && (
-                                <td className="border p-2 text-center">
+                                <td className="border border-gray-300 dark:border-gray-700 p-2 text-center">
                                   <div className="flex justify-center gap-1">
                                     <Button 
                                       size="icon" 
@@ -2088,6 +2145,19 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
                               )}
                             </tr>
                           ))}
+                          
+                          {/* Total row */}
+                          <tr className="border-t-2 border-gray-400 bg-gray-100 font-bold">
+                            <td className="border p-2 text-right" colSpan={4}>
+                              <span className="text-sm sm:text-base">{t('weekly total') || 'Totaal per dag'}:</span>
+                            </td>
+                            <td className="border p-2">
+                              <span className="text-sm sm:text-base">
+                                {calculateDayTotal(dayIdx, dateStr).toFixed(2)}h
+                              </span>
+                            </td>
+                            {!isLocked && <td className="border p-2"></td>}
+                          </tr>
                         </tbody>
                       </table>
                     </div>

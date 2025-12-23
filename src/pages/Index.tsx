@@ -27,6 +27,16 @@ import { createPDF } from "@/utils/pdfExport";
 
 const Index = () => {
   const [searchParams] = useSearchParams();
+  
+  // Helper function to check if user is administratie type
+  const isAdministratie = (user: any): boolean => {
+    return user?.userType === 'administratie';
+  };
+  
+  // Helper function to check if user can see projects (admin or administratie)
+  const canSeeProjects = (user: any): boolean => {
+    return user?.isAdmin || isAdministratie(user);
+  };
   const navigate = useNavigate();
   const { t } = useLanguage();
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -118,7 +128,7 @@ const Index = () => {
           const verifyUser = async () => {
             const { data: user, error } = await supabase
               .from("users")
-              .select("id, email, name, isAdmin, must_change_password, approved, created_at, photo_url, phone_number")
+              .select("id, email, name, isAdmin, must_change_password, approved, created_at, photo_url, phone_number, userType")
               .eq("email", sessionData.user.email)
               .single();
             
@@ -1323,21 +1333,21 @@ const Index = () => {
       <Dialog open={showReminderDialog} onOpenChange={setShowReminderDialog}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-orange-700">
-              <AlertTriangle className="h-6 w-6 text-orange-500" />
+            <DialogTitle className="flex items-center gap-2 text-orange-700 dark:text-orange-400">
+              <AlertTriangle className="h-6 w-6 text-orange-500 dark:text-orange-400" />
               Timesheet Reminder
             </DialogTitle>
           </DialogHeader>
-          <div className="py-4 text-base text-gray-700">
+          <div className="py-4 text-base text-gray-700 dark:text-gray-300">
             {userReminder && (
               <>
                 <p className="mb-3">
-                  You have a reminder to fill in your hours for <strong>week {userReminder.week_number} of {userReminder.year}</strong>.
+                  You have a reminder to fill in your hours for <strong className="text-gray-900 dark:text-gray-100">week {userReminder.week_number} of {userReminder.year}</strong>.
                 </p>
                 {userReminder.message && (
-                  <p className="mb-3 text-sm text-gray-600">{userReminder.message}</p>
+                  <p className="mb-3 text-sm text-gray-600 dark:text-gray-400">{userReminder.message}</p>
                 )}
-                <p className="text-sm font-semibold text-orange-700">
+                <p className="text-sm font-semibold text-orange-700 dark:text-orange-400">
                   Please fill in your timesheet for this week.
                 </p>
               </>
@@ -1368,13 +1378,15 @@ const Index = () => {
                 />
               </button>
               <nav className="flex flex-wrap md:flex-nowrap items-center gap-1.5 sm:gap-2 md:gap-4 lg:gap-8 justify-center md:justify-start">
-                <button
-                  className={`text-sm sm:text-base md:text-lg font-medium px-2 sm:px-3 py-1.5 sm:py-1 rounded transition-colors ${activeTab === 'weekly' ? 'bg-orange-600 text-white dark:bg-orange-500' : 'text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-700'}`}
-                  onClick={() => setActiveTab('weekly')}
-                >
-                  {t('nav.weekly')}
-                </button>
-                {currentUser?.isAdmin && (
+                {!isAdministratie(currentUser) && (
+                  <button
+                    className={`text-sm sm:text-base md:text-lg font-medium px-2 sm:px-3 py-1.5 sm:py-1 rounded transition-colors ${activeTab === 'weekly' ? 'bg-orange-600 text-white dark:bg-orange-500' : 'text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-700'}`}
+                    onClick={() => setActiveTab('weekly')}
+                  >
+                    {t('nav.weekly')}
+                  </button>
+                )}
+                {canSeeProjects(currentUser) && (
                   <button
                     className={`text-sm sm:text-base md:text-lg font-medium px-2 sm:px-3 py-1.5 sm:py-1 rounded transition-colors ${activeTab === 'projects' ? 'bg-orange-600 text-white dark:bg-orange-500' : 'text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-700'}`}
                     onClick={() => setActiveTab('projects')}
@@ -1382,21 +1394,16 @@ const Index = () => {
                     {t('nav.projects')}
                   </button>
                 )}
-                <button
-                  className={`text-sm sm:text-base md:text-lg font-medium px-2 sm:px-3 py-1.5 sm:py-1 rounded transition-colors ${activeTab === 'export' ? 'bg-orange-600 text-white dark:bg-orange-500' : 'text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-700'}`}
-                  onClick={() => setActiveTab('export')}
-                >
-                  {t('nav.export')}
-                </button>
-                {currentUser?.isAdmin && (
+                {/* Export - Visible for regular users, not for admin/administratie (they have it in Admin Panel) */}
+                {currentUser && !currentUser?.isAdmin && !isAdministratie(currentUser) && (
                   <button
-                    className={`text-sm sm:text-base md:text-lg font-medium px-2 sm:px-3 py-1.5 sm:py-1 rounded transition-colors ${activeTab === 'admin' ? 'bg-orange-600 text-white dark:bg-orange-500' : 'text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-700'}`}
-                    onClick={() => setActiveTab('admin')}
+                    className={`text-sm sm:text-base md:text-lg font-medium px-2 sm:px-3 py-1.5 sm:py-1 rounded transition-colors ${activeTab === 'export' ? 'bg-orange-600 text-white dark:bg-orange-500' : 'text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-700'}`}
+                    onClick={() => setActiveTab('export')}
                   >
-                    {t('nav.admin')}
+                    {t('nav.export')}
                   </button>
                 )}
-                {currentUser?.isAdmin && (
+                {currentUser?.isAdmin && !isAdministratie(currentUser) && (
                   <button
                     className={`text-sm sm:text-base md:text-lg font-medium px-2 sm:px-3 py-1.5 sm:py-1 rounded transition-colors ${activeTab === 'bugreports' ? 'bg-orange-600 text-white dark:bg-orange-500' : 'text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-700'}`}
                     onClick={() => setActiveTab('bugreports')}
@@ -1410,6 +1417,14 @@ const Index = () => {
                 >
                   {t('nav.overview')}
                 </button>
+                {(currentUser?.isAdmin || isAdministratie(currentUser)) && (
+                  <button
+                    className={`text-sm sm:text-base md:text-lg font-medium px-2 sm:px-3 py-1.5 sm:py-1 rounded transition-colors ${activeTab === 'admin' ? 'bg-orange-600 text-white dark:bg-orange-500' : 'text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-700'}`}
+                    onClick={() => setActiveTab('admin')}
+                  >
+                    {t('nav.admin')}
+                  </button>
+                )}
               </nav>
             </div>
             <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-3 md:gap-6 justify-center md:justify-end">
@@ -1455,7 +1470,7 @@ const Index = () => {
         {activeTab === 'timesheet' && (
           <TimesheetEntry currentUser={currentUser} />
         )}
-        {activeTab === 'weekly' && (
+        {activeTab === 'weekly' && !isAdministratie(currentUser) && (
           <div className="space-y-4">
             <div className="flex justify-end">
               <Button
@@ -1485,7 +1500,7 @@ const Index = () => {
           </div>
         )}
         {activeTab === 'projects' && (
-          currentUser?.isAdmin ? (
+          canSeeProjects(currentUser) ? (
             <ProjectManagement currentUser={currentUser} />
           ) : (
             <div className="p-8 text-center text-red-600 font-semibold">You do not have permission to view this page.</div>
@@ -1494,7 +1509,7 @@ const Index = () => {
         {activeTab === 'overview' && (
           <TimeOverview currentUser={currentUser} />
         )}
-        {activeTab === 'export' && (
+        {activeTab === 'export' && !currentUser?.isAdmin && !isAdministratie(currentUser) && (
           <Card className="shadow-lg border-orange-100 w-full overflow-x-auto">
             <CardHeader className="bg-gradient-to-r from-orange-50 to-orange-100 rounded-t-lg">
               <CardTitle className="flex items-center text-orange-900">
@@ -1704,10 +1719,15 @@ const Index = () => {
             </CardContent>
           </Card>
         )}
+        {activeTab === 'export' && (currentUser?.isAdmin || isAdministratie(currentUser)) && (
+          <div className="text-center p-8 text-orange-600 font-semibold">
+            {t('export.title')} is now available in the Admin Panel.
+          </div>
+        )}
         {activeTab === 'profile' && (
           <Profile currentUser={currentUser} setCurrentUser={setCurrentUser} />
         )}
-        {activeTab === 'admin' && currentUser?.isAdmin && (
+        {activeTab === 'admin' && (currentUser?.isAdmin || isAdministratie(currentUser)) && (
           <AdminPanel currentUser={currentUser} />
         )}
         {activeTab === 'bugreports' && currentUser?.isAdmin && (

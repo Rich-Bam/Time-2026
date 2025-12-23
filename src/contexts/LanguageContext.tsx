@@ -146,6 +146,7 @@ const translations: Record<Language, Record<string, string>> = {
     'weekly.editEntry': 'Bewerk invoer',
     'weekly.deleteEntry': 'Verwijder invoer',
     'weekly.fullDayOff': 'Hele dag vrij (8 uren)',
+    'weekly.total': 'Totaal per dag',
     
     // Admin Panel
     'admin.title': 'Beheer Paneel',
@@ -227,6 +228,16 @@ const translations: Record<Language, Record<string, string>> = {
     'admin.subtract': 'Aftrekken',
     'admin.hours': 'Uren',
     'admin.newPassword': 'Nieuw wachtwoord',
+    'admin.date': 'Datum',
+    'admin.workType': 'Werk Type',
+    'admin.description': 'Beschrijving',
+    'admin.startEnd': 'Start - Eind',
+    'admin.total': 'Totaal per dag',
+    'admin.userType': 'Gebruiker Type',
+    'admin.userType.user': 'Normale gebruiker',
+    'admin.userType.administratie': 'Administratie',
+    'admin.userType.admin': 'Normale admin',
+    'admin.userType.superAdmin': 'Super admin',
     
     // Common
     'common.loading': 'Laden...',
@@ -372,6 +383,7 @@ const translations: Record<Language, Record<string, string>> = {
     'weekly.editEntry': 'Edit entry',
     'weekly.deleteEntry': 'Delete entry',
     'weekly.fullDayOff': 'Full day off (8 hours)',
+    'weekly.total': 'Total per day',
     
     // Admin Panel
     'admin.title': 'Admin Panel',
@@ -451,6 +463,16 @@ const translations: Record<Language, Record<string, string>> = {
     'admin.subtract': 'Subtract',
     'admin.hours': 'Hours',
     'admin.newPassword': 'New password',
+    'admin.date': 'Date',
+    'admin.workType': 'Work Type',
+    'admin.description': 'Description',
+    'admin.startEnd': 'Start - End',
+    'admin.total': 'Total per day',
+    'admin.userType': 'User Type',
+    'admin.userType.user': 'Normal user',
+    'admin.userType.administratie': 'Administratie',
+    'admin.userType.admin': 'Normal admin',
+    'admin.userType.superAdmin': 'Super admin',
     
     // Common
     'common.loading': 'Loading...',

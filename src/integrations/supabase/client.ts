@@ -4,10 +4,10 @@ import type { Database } from './types';
 
 // Prefer environment variables so you can point the app at your own Supabase project
 const supabaseUrl =
-  import.meta.env.VITE_SUPABASE_URL || 'https://xnypbrdgskmdmpwanfnc.supabase.co';
+  import.meta.env.VITE_SUPABASE_URL || 'https://bgddtkiekjcdhcmrnxsi.supabase.co';
 const supabaseKey =
   import.meta.env.VITE_SUPABASE_ANON_KEY ||
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhueXBicmRnc2ttZG1wd2FuZm5jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTA3NzEyODQsImV4cCI6MjA2NjM0NzI4NH0.K1sc99LqDRSY5BwTaBtKrZX1XXmf-_-EJlYczrS-8_E';
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJnZGR0a2lla2pjZGhjbXJueHNpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYxMDUzNDAsImV4cCI6MjA2NjM0NzI4NH0.CRQWYmCm0PnqcKiJC_5215Z5TxQcNJqfBE0URUW_a9o';
 
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
