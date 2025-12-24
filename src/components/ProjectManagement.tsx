@@ -5,6 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Plus, FileText, Users, Clock, Trash2, Lock, LockOpen, Pencil, Check, X, Search } from "lucide-react";
@@ -51,6 +52,8 @@ const ProjectManagement = ({ currentUser }: ProjectManagementProps) => {
   const [editedProjectName, setEditedProjectName] = useState<string>("");
   // Search state
   const [searchQuery, setSearchQuery] = useState<string>("");
+  // Filter state for project status
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "closed">("all");
 
   // Fetch projects from Supabase on mount
   useEffect(() => {
@@ -445,7 +448,7 @@ const ProjectManagement = ({ currentUser }: ProjectManagementProps) => {
           </CardHeader>
           <CardContent className="p-4 sm:p-6">
             {/* Search Input */}
-            <div className="mb-4 sm:mb-6">
+            <div className="mb-4 sm:mb-6 space-y-3">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <Input
@@ -456,17 +459,43 @@ const ProjectManagement = ({ currentUser }: ProjectManagementProps) => {
                   className="pl-10 h-10 sm:h-9 border-blue-200 dark:border-blue-700 focus:border-blue-500 dark:focus:border-blue-400 focus:ring-blue-500 dark:focus:ring-blue-400"
                 />
               </div>
+              <div className="flex items-center gap-2">
+                <Label htmlFor="status-filter" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Filter:
+                </Label>
+                <Select value={statusFilter} onValueChange={(value: "all" | "active" | "closed") => setStatusFilter(value)}>
+                  <SelectTrigger id="status-filter" className="w-40 h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Alle projecten</SelectItem>
+                    <SelectItem value="active">Actieve projecten</SelectItem>
+                    <SelectItem value="closed">Gesloten projecten</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <div className="space-y-4 sm:space-y-6">
               {projects
                 .filter((project) => {
-                  if (!searchQuery.trim()) return true;
-                  const query = searchQuery.toLowerCase();
-                  return (
-                    project.name?.toLowerCase().includes(query) ||
-                    project.client?.toLowerCase().includes(query) ||
-                    project.description?.toLowerCase().includes(query)
-                  );
+                  // Filter by search query
+                  if (searchQuery.trim()) {
+                    const query = searchQuery.toLowerCase();
+                    const matchesSearch = (
+                      project.name?.toLowerCase().includes(query) ||
+                      project.client?.toLowerCase().includes(query) ||
+                      project.description?.toLowerCase().includes(query)
+                    );
+                    if (!matchesSearch) return false;
+                  }
+                  // Filter by status
+                  if (statusFilter === "active") {
+                    return !project.status || project.status !== "closed";
+                  } else if (statusFilter === "closed") {
+                    return project.status === "closed";
+                  }
+                  // statusFilter === "all"
+                  return true;
                 })
                 .map((project) => (
                 <div key={project.id} className="border border-blue-100 dark:border-blue-800 rounded-xl p-4 sm:p-6 hover:shadow-md transition-all bg-gradient-to-r from-white to-blue-50 dark:from-gray-800 dark:to-blue-900/20">

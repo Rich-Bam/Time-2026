@@ -12,9 +12,10 @@ import { supabase } from "@/integrations/supabase/client";
 
 interface TimesheetEntryProps {
   currentUser: any;
+  hasUnreadDaysOffNotification?: boolean;
 }
 
-const TimesheetEntry = ({ currentUser }: TimesheetEntryProps) => {
+const TimesheetEntry = ({ currentUser, hasUnreadDaysOffNotification = false }: TimesheetEntryProps) => {
   const [entry, setEntry] = useState({
     date: new Date().toISOString().split('T')[0],
     project: "",
@@ -27,11 +28,21 @@ const TimesheetEntry = ({ currentUser }: TimesheetEntryProps) => {
   const { toast } = useToast();
   const isMobile = useIsMobile();
 
-  // Fetch projects from Supabase (id and name) - only active projects
+  // Fetch projects from Supabase (id and name) - only active projects for dropdown
   const [projects, setProjects] = useState<{ id: number; name: string }[]>([]);
+  // ALWAYS fetch ALL projects (including closed) for validation
+  const [projectsWithStatus, setProjectsWithStatus] = useState<{ id: number; name: string; status: string | null }[]>([]);
   useEffect(() => {
     const fetchProjects = async () => {
-      // Only fetch active projects (not closed) for time entry
+      // First, fetch ALL projects with status for validation (including closed ones)
+      const { data: allData } = await supabase
+        .from("projects")
+        .select("id, name, status");
+      if (allData) {
+        setProjectsWithStatus(allData.map(p => ({ id: p.id, name: p.name, status: p.status || null })));
+      }
+      
+      // Now fetch only active projects (not closed) for time entry dropdown
       const { data, error } = await supabase
         .from("projects")
         .select("id, name, status")
@@ -64,13 +75,37 @@ const TimesheetEntry = ({ currentUser }: TimesheetEntryProps) => {
     fetchEntries();
   }, [currentUser]);
 
-  // Count days off taken (work type 31) by hours, 8 hours = 1 day, using allYearEntries
+  // Fetch all days off entries for the current year (for accurate calculation)
+  const [allYearDaysOffEntries, setAllYearDaysOffEntries] = useState<any[]>([]);
+  useEffect(() => {
+    const fetchDaysOffEntries = async () => {
+      if (!currentUser) return;
+      const currentYear = new Date().getFullYear();
+      const fromDate = `${currentYear}-01-01`;
+      const toDate = `${currentYear}-12-31`;
+      const { data, error } = await supabase
+        .from("timesheet")
+        .select("hours, description")
+        .eq("user_id", currentUser.id)
+        .eq("description", "31")
+        .gte("date", fromDate)
+        .lte("date", toDate);
+      if (data) {
+        setAllYearDaysOffEntries(data || []);
+      }
+    };
+    fetchDaysOffEntries();
+  }, [currentUser]);
+
+  // Count days off taken (work type 31) by hours, 8 hours = 1 day, using allYearDaysOffEntries
   const totalDaysOff = 25;
-  const totalHoursOff = recentEntries
-    .filter(e => String(e.description) === "31")
-    .reduce((sum, e) => sum + (parseFloat(e.hours) || 0), 0);
-  const daysOffTaken = totalHoursOff / 8;
-  const daysOffLeft = (totalDaysOff - daysOffTaken).toFixed(1);
+  const totalHoursOff = allYearDaysOffEntries
+    .reduce((sum, e) => sum + (parseFloat(String(e.hours)) || 0), 0);
+  // Calculate hours left first (more accurate), then convert to days
+  const totalHoursAvailable = totalDaysOff * 8;
+  const hoursLeft = totalHoursAvailable - totalHoursOff;
+  const daysOffLeft = (hoursLeft / 8).toFixed(1);
+  const hoursLeftRounded = hoursLeft.toFixed(1);
 
   const workTypes = [
     { value: 10, label: "Work" },
@@ -111,6 +146,42 @@ const TimesheetEntry = ({ currentUser }: TimesheetEntryProps) => {
         variant: "destructive",
       });
       return;
+    }
+
+    // Validate that project is not closed - check directly from database for most up-to-date status
+    if (entry.project && !isDayOff) {
+      // First check local cache
+      const selectedProject = projectsWithStatus.find(p => p.name === entry.project);
+      if (selectedProject && selectedProject.status === "closed") {
+        toast({
+          title: "Project Closed",
+          description: `The project "${entry.project}" is closed and cannot be used for time entries.`,
+          variant: "destructive",
+        });
+        return;
+      }
+      // Also check directly from database to ensure we have the latest status
+      const { data: projectData } = await supabase
+        .from("projects")
+        .select("id, name, status")
+        .eq("name", entry.project)
+        .maybeSingle();
+      
+      if (projectData && projectData.status === "closed") {
+        toast({
+          title: "Project Closed",
+          description: `The project "${entry.project}" is closed and cannot be used for time entries.`,
+          variant: "destructive",
+        });
+        // Refresh projectsWithStatus
+        const { data: allProjects } = await supabase
+          .from("projects")
+          .select("id, name, status");
+        if (allProjects) {
+          setProjectsWithStatus(allProjects.map(p => ({ id: p.id, name: p.name, status: p.status || null })));
+        }
+        return;
+      }
     }
 
     let hoursToSave = Number(entry.hours);
@@ -270,15 +341,28 @@ const TimesheetEntry = ({ currentUser }: TimesheetEntryProps) => {
 
       {/* Days Off Banner */}
       <div className="flex flex-col gap-4 sm:gap-6">
-        <Card className="bg-blue-50 border-blue-200">
+        <Card className={`bg-blue-50 border-blue-200 ${hasUnreadDaysOffNotification ? 'ring-2 ring-orange-400 ring-offset-2' : ''}`}>
           <CardHeader className="p-4 sm:p-6">
-            <CardTitle className="text-blue-900 text-base sm:text-lg">Days Off Remaining</CardTitle>
+            <CardTitle className="text-blue-900 text-base sm:text-lg flex items-center justify-between">
+              <span>Days Off Remaining</span>
+              {hasUnreadDaysOffNotification && (
+                <div className="flex items-center gap-2 bg-orange-100 text-orange-700 px-2 py-1 rounded-full text-xs font-semibold animate-pulse">
+                  <AlertCircle className="h-4 w-4" />
+                  <span>Update</span>
+                </div>
+              )}
+            </CardTitle>
           </CardHeader>
           <CardContent className="p-4 sm:p-6 pt-0">
             <div className="text-2xl sm:text-3xl font-bold text-blue-700">
-              {daysOffLeft} <span className="text-lg">({(parseFloat(daysOffLeft) * 8).toFixed(1)} hours)</span>
+              {daysOffLeft} <span className="text-lg">({hoursLeftRounded} hours)</span>
             </div>
-            <div className="text-xs sm:text-sm text-blue-600 mt-2">You have {daysOffLeft} days off left this year.</div>
+            <div className="text-xs sm:text-sm text-blue-600 mt-2">
+              You have {daysOffLeft} days off left this year.
+              {hasUnreadDaysOffNotification && (
+                <span className="block mt-1 text-orange-600 font-semibold">⚠️ Your days off have been updated!</span>
+              )}
+            </div>
           </CardContent>
         </Card>
         {/* Recent Entries */}

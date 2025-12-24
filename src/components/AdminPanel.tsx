@@ -3,12 +3,15 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { User, Calendar, Pencil, Check, X, Download, FileText, FileDown, Calendar as CalendarIcon, Users, Eye } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { User, Calendar, Pencil, Check, X, Download, FileText, FileDown, Calendar as CalendarIcon, Users, Eye, AlertTriangle, Trash2, BarChart3, RefreshCw, Clock } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import * as XLSX from "xlsx";
 import { createPDF } from "@/utils/pdfExport";
 import { hashPassword } from "@/utils/password";
@@ -89,6 +92,9 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
   const [editedName, setEditedName] = useState<string>("");
   const [daysOffMap, setDaysOffMap] = useState<Record<string, number>>({});
   const [daysOffInput, setDaysOffInput] = useState<Record<string, string>>({});
+  const [daysOffReasonInput, setDaysOffReasonInput] = useState<Record<string, string>>({});
+  const [showDaysOffReasonDialog, setShowDaysOffReasonDialog] = useState(false);
+  const [pendingDaysOffAction, setPendingDaysOffAction] = useState<{userId: string, hours: number} | null>(null);
   const [allEntries, setAllEntries] = useState<any[]>([]);
   const [projectsMap, setProjectsMap] = useState<Record<string, string>>({});
   const [confirmedWeeks, setConfirmedWeeks] = useState<any[]>([]);
@@ -97,6 +103,15 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
   const [reminderWeekNumber, setReminderWeekNumber] = useState<string>("");
   const [reminderYear, setReminderYear] = useState<string>(new Date().getFullYear().toString());
   const [timebuzzerSyncing, setTimebuzzerSyncing] = useState(false);
+  
+  // Error logs state (only for super admin)
+  const [errorLogs, setErrorLogs] = useState<any[]>([]);
+  const [errorLogsLoading, setErrorLogsLoading] = useState(false);
+  const [errorLogsFilter, setErrorLogsFilter] = useState<'all' | 'unresolved' | 'resolved'>('unresolved');
+  const [errorLogsSeverity, setErrorLogsSeverity] = useState<'all' | 'error' | 'warning' | 'info'>('all');
+  const [errorLogsUserFilter, setErrorLogsUserFilter] = useState<string>('all');
+  const [selectedErrorLog, setSelectedErrorLog] = useState<any | null>(null);
+  const [errorLogNotes, setErrorLogNotes] = useState("");
   
   // Export state
   const [exporting, setExporting] = useState(false);
@@ -116,6 +131,9 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
   
   // State for viewing week details
   const [selectedWeekForView, setSelectedWeekForView] = useState<{userId: string, weekStartDate: string} | null>(null);
+  
+  // Active tab state
+  const [activeTab, setActiveTab] = useState<string>("users");
   
   // Helper function to get ISO week number
   const getISOWeekNumber = (date: Date) => {
@@ -223,6 +241,13 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
   const [loadingActivities, setLoadingActivities] = useState(false);
   const [projects, setProjects] = useState<any[]>([]);
   const [selectedTimebuzzerUserId, setSelectedTimebuzzerUserId] = useState<string>(""); // For testing Timebuzzer per user
+  const [timebuzzerUsers, setTimebuzzerUsers] = useState<any[]>([]);
+  const [loadingTimebuzzerUsers, setLoadingTimebuzzerUsers] = useState(false);
+  const [timebuzzerUserHours, setTimebuzzerUserHours] = useState<Record<number, any>>({});
+  const [loadingUserHours, setLoadingUserHours] = useState<Record<number, boolean>>({});
+  const [selectedUserForHours, setSelectedUserForHours] = useState<string>("");
+  const [userActivitiesStatus, setUserActivitiesStatus] = useState<Record<number, { hasActivities: boolean; lastActivityDate?: string; totalActivities?: number }>>({});
+  const [checkingAllActivities, setCheckingAllActivities] = useState(false);
   
   // Fetch projects for mapping
   useEffect(() => {
@@ -416,7 +441,10 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
         }
       });
 
-      // Calculate overtime per day (more than 8 hours = overtime)
+      // Calculate overtime per day
+      // Overtime rules:
+      // 1. More than 8 hours on Monday-Friday = overtime
+      // 2. ALL hours on Saturday and Sunday = overtime (weekend is always overtime)
       const overtimeResults: any[] = [];
       
       Object.keys(userDateMap).forEach(userId => {
@@ -429,8 +457,24 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
         Object.keys(userDateMap[userId]).forEach(date => {
           const dayData = userDateMap[userId][date];
           const totalHours = dayData.totalHours;
-          const normalHours = 8;
-          const overtime = totalHours > normalHours ? totalHours - normalHours : 0;
+          
+          // Get day of week (0 = Sunday, 6 = Saturday)
+          const dateObj = new Date(date);
+          const dayOfWeek = dateObj.getDay();
+          const isWeekend = dayOfWeek === 0 || dayOfWeek === 6; // Sunday or Saturday
+          
+          let overtime = 0;
+          let normalHours = 0;
+          
+          if (isWeekend) {
+            // Weekend: ALL hours are overtime
+            overtime = totalHours;
+            normalHours = 0;
+          } else {
+            // Weekday (Monday-Friday): overtime if more than 8 hours
+            normalHours = 8;
+            overtime = totalHours > normalHours ? totalHours - normalHours : 0;
+          }
           
           if (overtime > 0) {
             // Sort entries by startTime for better readability
@@ -442,9 +486,11 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
             
             dailyOvertime.push({
               date,
+              dayOfWeek: isWeekend ? (dayOfWeek === 0 ? 'Sunday' : 'Saturday') : ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'][dayOfWeek - 1],
               totalHours: totalHours.toFixed(2),
               normalHours: normalHours.toFixed(2),
               overtime: overtime.toFixed(2),
+              isWeekend: isWeekend,
               entries: sortedEntries
             });
             totalOvertime += overtime;
@@ -762,6 +808,436 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
 
   const SUPER_ADMIN_EMAIL = "r.blance@bampro.nl";
 
+  // Fetch error logs (only for super admin) - via edge function for security
+  const fetchErrorLogs = async () => {
+    if (currentUser?.email !== SUPER_ADMIN_EMAIL) return;
+    
+    setErrorLogsLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('error-logs', {
+        body: {
+          action: 'list',
+          filter: errorLogsFilter,
+          severity: errorLogsSeverity,
+          userFilter: errorLogsUserFilter,
+          limit: 100,
+        },
+      });
+      
+      if (error) {
+        // If edge function doesn't exist (404) or CORS error, fall back to direct query
+        const shouldFallback = error.message?.includes('404') || 
+                               error.message?.includes('CORS') || 
+                               error.message?.includes('Failed to send') ||
+                               error.message?.includes('NetworkError');
+        
+        if (shouldFallback) {
+          console.log('Edge function not available, using direct query fallback');
+          // Fallback to direct query if edge function doesn't exist
+          let query = supabase
+            .from('error_logs')
+            .select('*')
+            .order('created_at', { ascending: false })
+            .limit(100);
+
+          if (errorLogsFilter === 'unresolved') {
+            query = query.eq('resolved', false);
+          } else if (errorLogsFilter === 'resolved') {
+            query = query.eq('resolved', true);
+          }
+
+          if (errorLogsSeverity !== 'all') {
+            query = query.eq('severity', errorLogsSeverity);
+          }
+
+          if (errorLogsUserFilter !== 'all') {
+            query = query.eq('user_email', errorLogsUserFilter);
+            console.log('Applying user filter in fallback query:', errorLogsUserFilter);
+          }
+
+          const { data: fallbackData, error: fallbackError } = await query;
+          
+          if (fallbackError) {
+            toast({
+              title: "Error",
+              description: fallbackError.message,
+              variant: "destructive",
+            });
+            setErrorLogs([]);
+          } else {
+            console.log('Error logs fetched from fallback query:', fallbackData?.length || 0, 'logs');
+            console.log('User filter applied:', errorLogsUserFilter);
+            console.log('Unique users in results:', [...new Set((fallbackData || []).map((log: any) => log.user_email))]);
+            setErrorLogs(fallbackData || []);
+          }
+          return;
+        }
+        
+        // Real error from edge function
+        toast({
+          title: "Error",
+          description: error.message || 'Failed to fetch error logs',
+          variant: "destructive",
+        });
+        setErrorLogs([]);
+        return;
+      }
+      
+      if (data?.success) {
+        const logs = data.data || [];
+        console.log('Error logs fetched from edge function:', logs.length, 'logs');
+        console.log('User filter applied:', errorLogsUserFilter);
+        console.log('Unique users in results:', [...new Set(logs.map((log: any) => log.user_email))]);
+        setErrorLogs(logs);
+      } else {
+        // Edge function returned but without success flag - try fallback
+        console.log('Edge function returned without success, using fallback');
+        let query = supabase
+          .from('error_logs')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(100);
+
+        if (errorLogsFilter === 'unresolved') {
+          query = query.eq('resolved', false);
+        } else if (errorLogsFilter === 'resolved') {
+          query = query.eq('resolved', true);
+        }
+
+        if (errorLogsSeverity !== 'all') {
+          query = query.eq('severity', errorLogsSeverity);
+        }
+
+        if (errorLogsUserFilter !== 'all') {
+          query = query.eq('user_email', errorLogsUserFilter);
+        }
+
+        const { data: fallbackData, error: fallbackError } = await query;
+        
+        if (fallbackError) {
+          toast({
+            title: "Error",
+            description: fallbackError.message,
+            variant: "destructive",
+          });
+          setErrorLogs([]);
+        } else {
+          setErrorLogs(fallbackData || []);
+        }
+      }
+    } catch (error: any) {
+      // If edge function doesn't exist, fall back to direct query
+      console.log('Edge function error, using direct query fallback:', error);
+      try {
+        let query = supabase
+          .from('error_logs')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(100);
+
+        if (errorLogsFilter === 'unresolved') {
+          query = query.eq('resolved', false);
+        } else if (errorLogsFilter === 'resolved') {
+          query = query.eq('resolved', true);
+        }
+
+        if (errorLogsSeverity !== 'all') {
+          query = query.eq('severity', errorLogsSeverity);
+        }
+
+        if (errorLogsUserFilter !== 'all') {
+          query = query.eq('user_email', errorLogsUserFilter);
+          console.log('Applying user filter in second fallback query:', errorLogsUserFilter);
+        }
+
+        const { data: fallbackData, error: fallbackError } = await query;
+        
+        if (fallbackError) {
+          toast({
+            title: "Error",
+            description: fallbackError.message || 'Failed to fetch error logs',
+            variant: "destructive",
+          });
+          setErrorLogs([]);
+        } else {
+          console.log('Error logs fetched from second fallback query:', fallbackData?.length || 0, 'logs');
+          console.log('User filter applied:', errorLogsUserFilter);
+          console.log('Unique users in results:', [...new Set((fallbackData || []).map((log: any) => log.user_email))]);
+          setErrorLogs(fallbackData || []);
+        }
+      } catch (fallbackError: any) {
+        console.error('Error fetching error logs:', fallbackError);
+        toast({
+          title: "Error",
+          description: fallbackError.message || 'Failed to fetch error logs',
+          variant: "destructive",
+        });
+        setErrorLogs([]);
+      }
+    } finally {
+      setErrorLogsLoading(false);
+    }
+  };
+
+  // Mark error as resolved - via edge function for security
+  const handleResolveError = async (errorId: string) => {
+    try {
+      const { data, error } = await supabase.functions.invoke('error-logs', {
+        body: {
+          action: 'resolve',
+          errorId,
+          notes: errorLogNotes || null,
+          resolvedBy: currentUser?.id,
+        },
+      });
+
+      if (error) {
+        // Fallback to direct query if edge function doesn't exist
+        const { error: fallbackError } = await supabase
+          .from('error_logs')
+          .update({
+            resolved: true,
+            resolved_at: new Date().toISOString(),
+            resolved_by: currentUser?.id,
+            notes: errorLogNotes || null,
+          })
+          .eq('id', errorId);
+
+        if (fallbackError) {
+          toast({
+            title: "Error",
+            description: fallbackError.message,
+            variant: "destructive",
+          });
+          return;
+        }
+      }
+
+      toast({
+        title: "Success",
+        description: "Error marked as resolved",
+      });
+      setSelectedErrorLog(null);
+      setErrorLogNotes("");
+      fetchErrorLogs();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Delete error log - via edge function for security
+  const handleDeleteErrorLog = async (errorId: string) => {
+    if (!confirm("Are you sure you want to delete this error log?")) return;
+
+    try {
+      const { error } = await supabase.functions.invoke('error-logs', {
+        method: 'DELETE',
+        body: {
+          action: 'delete',
+          id: errorId,
+        },
+      });
+
+      if (error) {
+        // Fallback to direct query if edge function doesn't exist
+        const { error: fallbackError } = await supabase
+          .from('error_logs')
+          .delete()
+          .eq('id', errorId);
+
+        if (fallbackError) {
+          toast({
+            title: "Error",
+            description: fallbackError.message,
+            variant: "destructive",
+          });
+          return;
+        }
+      }
+
+      toast({
+        title: "Success",
+        description: "Error log deleted",
+      });
+      fetchErrorLogs();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Delete all error logs
+  const handleDeleteAllErrors = async () => {
+    if (!confirm("Are you sure you want to delete ALL error logs? This action cannot be undone.")) return;
+
+    try {
+      const { data, error } = await supabase.functions.invoke('error-logs', {
+        method: 'DELETE',
+        body: {
+          action: 'delete-all',
+        },
+      });
+
+      if (error) {
+        // Check if it's a network/404 error that should fallback
+        const shouldFallback = error.message?.includes('404') || 
+                              error.message?.includes('CORS') || 
+                              error.message?.includes('Failed to send') ||
+                              error.message?.includes('NetworkError');
+        
+        if (shouldFallback) {
+          // Fallback to direct query if edge function doesn't exist
+          // First get count
+          const { count: countBefore } = await supabase
+            .from('error_logs')
+            .select('*', { count: 'exact', head: true });
+          
+          const { error: fallbackError } = await supabase
+            .from('error_logs')
+            .delete()
+            .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all (using a condition that matches all)
+
+          if (fallbackError) {
+            toast({
+              title: "Error",
+              description: fallbackError.message,
+              variant: "destructive",
+            });
+            return;
+          }
+          
+          // Verify deletion
+          const { count: countAfter } = await supabase
+            .from('error_logs')
+            .select('*', { count: 'exact', head: true });
+          
+          toast({
+            title: "Success",
+            description: `All error logs deleted (${countBefore || 0} deleted, ${countAfter || 0} remaining)`,
+          });
+        } else {
+          // Real error from edge function
+          toast({
+            title: "Error",
+            description: error.message,
+            variant: "destructive",
+          });
+          return;
+        }
+      } else {
+        // Success from edge function
+        toast({
+          title: "Success",
+          description: data?.message || "All error logs deleted",
+        });
+      }
+      
+      // Wait a moment before refreshing to ensure deletion is complete
+      // and to avoid showing newly logged errors immediately
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Also delete any ResizeObserver errors that might have been logged during the delete operation
+      try {
+        await supabase
+          .from('error_logs')
+          .delete()
+          .ilike('error_message', '%ResizeObserver%');
+      } catch (e) {
+        // Ignore errors here - we're just cleaning up
+      }
+      
+      fetchErrorLogs();
+    } catch (error: any) {
+      console.error('Error deleting all error logs:', error);
+      toast({
+        title: "Error",
+        description: error.message || 'Failed to delete all error logs',
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Delete only ResizeObserver errors
+  const handleDeleteResizeObserverErrors = async () => {
+    if (!confirm("Are you sure you want to delete all ResizeObserver errors?")) return;
+
+    try {
+      const { data, error } = await supabase.functions.invoke('error-logs', {
+        method: 'DELETE',
+        body: {
+          action: 'delete-by-message',
+          messagePattern: 'ResizeObserver',
+        },
+      });
+
+      if (error) {
+        // Check if it's a network/404 error that should fallback
+        const shouldFallback = error.message?.includes('404') || 
+                              error.message?.includes('CORS') || 
+                              error.message?.includes('Failed to send') ||
+                              error.message?.includes('NetworkError');
+        
+        if (shouldFallback) {
+          // Fallback to direct query if edge function doesn't exist
+          const { error: fallbackError } = await supabase
+            .from('error_logs')
+            .delete()
+            .ilike('error_message', '%ResizeObserver%');
+
+          if (fallbackError) {
+            toast({
+              title: "Error",
+              description: fallbackError.message,
+              variant: "destructive",
+            });
+            return;
+          }
+        } else {
+          // Real error from edge function
+          toast({
+            title: "Error",
+            description: error.message,
+            variant: "destructive",
+          });
+          return;
+        }
+      }
+
+      toast({
+        title: "Success",
+        description: data?.message || "All ResizeObserver errors deleted",
+      });
+      fetchErrorLogs();
+    } catch (error: any) {
+      console.error('Error deleting ResizeObserver errors:', error);
+      toast({
+        title: "Error",
+        description: error.message || 'Failed to delete ResizeObserver errors',
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Fetch error logs on mount and when filters change
+  useEffect(() => {
+    if (currentUser?.email === SUPER_ADMIN_EMAIL) {
+      console.log('Fetching error logs with filters:', {
+        filter: errorLogsFilter,
+        severity: errorLogsSeverity,
+        userFilter: errorLogsUserFilter
+      });
+      fetchErrorLogs();
+    }
+    // eslint-disable-next-line
+  }, [currentUser, errorLogsFilter, errorLogsSeverity, errorLogsUserFilter]);
+
   // Get current user type
   const getUserType = (user: any): string => {
     if (user.email === SUPER_ADMIN_EMAIL) {
@@ -794,6 +1270,16 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
   };
   // Change user type (super admin, admin, or user)
   const handleChangeUserType = async (userId: string, userEmail: string, newUserType: string) => {
+    // Prevent super admin from changing their own account type
+    if (currentUser?.email === SUPER_ADMIN_EMAIL && String(userId) === String(currentUser.id)) {
+      toast({
+        title: "Action not allowed",
+        description: "You cannot change your own account type as super admin.",
+        variant: "destructive",
+      });
+      return;
+    }
+    // Prevent changing super admin email's user type (for other super admin accounts)
     if (userEmail === SUPER_ADMIN_EMAIL && newUserType !== 'super_admin') {
       toast({
         title: "Action not allowed",
@@ -802,7 +1288,8 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
       });
       return;
     }
-    if (userId === currentUser.id && newUserType !== 'admin' && newUserType !== 'super_admin') {
+    // Prevent users from removing their own admin rights (unless they are super admin changing themselves, which is already blocked above)
+    if (String(userId) === String(currentUser.id) && newUserType !== 'admin' && newUserType !== 'super_admin') {
       toast({
         title: "Action not allowed",
         description: "You cannot remove your own admin rights.",
@@ -900,25 +1387,138 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
 
   const totalDaysOff = 25;
 
-  const handleAddOrDeductDaysOff = async (userId: string, hours: number) => {
+  const handleAddOrDeductDaysOffClick = (userId: string, hours: number) => {
     if (!hours) return;
-    // Add: insert a new timesheet entry with +hours
-    // Deduct: insert a new timesheet entry with -hours
+    
+    // Store the pending action and show dialog to ask for reason
+    setPendingDaysOffAction({ userId, hours });
+    setShowDaysOffReasonDialog(true);
+  };
+
+  const handleConfirmDaysOffChange = async () => {
+    if (!pendingDaysOffAction) return;
+    
+    const { userId, hours } = pendingDaysOffAction;
+    const reason = daysOffReasonInput[userId] || '';
+    
+    if (!reason.trim()) {
+      toast({
+        title: "Reason Required",
+        description: "Please provide a reason for this change.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // Close dialog and clear reason input
+    setShowDaysOffReasonDialog(false);
+    const reasonToUse = reason;
+    setDaysOffReasonInput(prev => ({ ...prev, [userId]: "" }));
+    setPendingDaysOffAction(null);
+    
+    // Now execute the actual change
+    await handleAddOrDeductDaysOff(userId, hours, reasonToUse);
+  };
+
+  const handleAddOrDeductDaysOff = async (userId: string, hours: number, reason: string) => {
+    if (!hours) return;
+    
+    console.log('🔵 handleAddOrDeductDaysOff called:', { userId, hours, hoursType: typeof hours, reason });
+    
+    // IMPORTANT: The logic is inverted!
+    // "Add" means: give user more days off (reduce taken hours) -> insert NEGATIVE hours
+    // "Subtract" means: take days off away (increase taken hours) -> insert POSITIVE hours
+    // This is because daysOffMap sums all hours, and daysLeft = 25 - (daysOffMap / 8)
+    // So to give more days: reduce daysOffMap (negative hours)
+    // To take days away: increase daysOffMap (positive hours)
+    
+    // Invert the sign: if hours is positive, make it negative (and vice versa)
+    const invertedHours = -hours;
+    
+    console.log('🔵 Hours inverted:', { original: hours, inverted: invertedHours });
     const today = new Date().toISOString().split('T')[0];
-    const { error } = await supabase.from("timesheet").insert([
+    
+    console.log('🔵 Inserting timesheet entry:', {
+      user_id: userId,
+      date: today,
+      hours: invertedHours,
+      description: "31"
+    });
+    
+    const { data: insertData, error } = await supabase.from("timesheet").insert([
       {
         user_id: userId,
         project_id: null,
         date: today,
-        hours: hours,
+        hours: invertedHours, // Use inverted hours
         description: "31",
       },
-    ]);
+    ]).select();
+    
     if (error) {
+      console.error('❌ Error inserting timesheet entry:', error);
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
-      toast({ title: hours > 0 ? "Day(s) Off Added" : "Day(s) Off Deducted", description: `User ${userId} now has updated days off.` });
+      console.log('✅ Timesheet entry inserted:', insertData);
+      
+      // Create notification for the user
+      // Note: hours is the original value (what admin clicked), invertedHours is what we stored
+      // For notification, we want to show what the admin intended:
+      // - If admin clicked "Add", hours is positive, but we stored negative -> user gets more days
+      // - If admin clicked "Subtract", hours is negative, but we stored positive -> user loses days
+      const daysChanged = Math.abs(hours) / 8;
+      const isAdding = hours > 0; // Original hours value determines if it's "Add" or "Subtract"
+      const baseMessage = isAdding
+        ? `${daysChanged.toFixed(2)} day(s) off (${Math.abs(hours).toFixed(2)} hours) have been added to your account.`
+        : `${daysChanged.toFixed(2)} day(s) off (${Math.abs(hours).toFixed(2)} hours) have been deducted from your account.`;
+      const message = reason ? `${baseMessage}\n\nReason: ${reason}` : baseMessage;
+      
+      // Get user name for the notification
+      const targetUser = users.find(u => String(u.id) === String(userId));
+      const userName = targetUser?.name || targetUser?.email || 'User';
+      
+      // Insert notification
+      // For notification, store the original hours value (what admin intended)
+      // But the actual database entry uses invertedHours
+      console.log('🔵 Creating days off notification:', {
+        user_id: userId,
+        hours_changed: hours, // Original value for notification
+        hours_stored: invertedHours, // What's actually stored in timesheet
+        days_changed: daysChanged,
+        isAdding: isAdding,
+        message: message,
+        created_by: currentUser?.id,
+        admin_name: currentUser?.name || currentUser?.email
+      });
+      
+      const { data: notifData, error: notifError } = await supabase.from("days_off_notifications").insert([
+        {
+          user_id: String(userId), // Ensure it's a string
+          hours_changed: hours, // Store original value for notification display
+          days_changed: daysChanged,
+          message: message,
+          created_by: currentUser?.id ? String(currentUser.id) : null,
+          admin_name: currentUser?.name || currentUser?.email || 'Admin',
+        },
+      ]).select();
+      
+      if (notifError) {
+        console.error('❌ Error creating notification:', notifError);
+        toast({
+          title: "Warning",
+          description: `Days off updated but notification could not be created: ${notifError.message}`,
+          variant: "destructive",
+        });
+      } else {
+        console.log('✅ Notification created successfully:', notifData);
+      }
+      
+      toast({ 
+        title: isAdding ? "Day(s) Off Added" : "Day(s) Off Deducted", 
+        description: `${userName} will be notified about this change. ${isAdding ? 'Added' : 'Deducted'}: ${Math.abs(hours)} hours` 
+      });
       setDaysOffInput((prev) => ({ ...prev, [userId]: "" }));
+      
       // Refresh days off map
       const currentYear = new Date().getFullYear();
       const fromDate = `${currentYear}-01-01`;
@@ -929,13 +1529,18 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
         .eq("description", "31")
         .gte("date", fromDate)
         .lte("date", toDate);
+      
       if (data) {
+        console.log('🔵 All timesheet entries with description 31:', data);
         const map: Record<string, number> = {};
         data.forEach(e => {
           // Handle both string and number user_id
           const userId = String(e.user_id);
-          map[userId] = (map[userId] || 0) + (parseFloat(String(e.hours)) || 0);
+          const hoursValue = parseFloat(String(e.hours)) || 0;
+          map[userId] = (map[userId] || 0) + hoursValue;
+          console.log(`🔵 User ${userId}: adding ${hoursValue} hours, total now: ${map[userId]}`);
         });
+        console.log('🔵 Final daysOffMap:', map);
         setDaysOffMap(map);
       }
     }
@@ -1189,8 +1794,52 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
     <div className="p-3 sm:p-4 md:p-8 bg-white dark:bg-gray-800 rounded shadow w-full max-w-full">
       <h2 className="text-xl sm:text-2xl font-bold mb-3 sm:mb-4 text-gray-900 dark:text-gray-100">{t('admin.title')}</h2>
       
-      {/* Add User Section - Only for admins, not for administratie */}
-      {currentUser?.isAdmin && !isAdministratie(currentUser) && (
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 mb-6">
+          <TabsTrigger value="users" className="flex items-center gap-2">
+            <Users className="h-4 w-4" />
+            <span className="hidden sm:inline">Users</span>
+          </TabsTrigger>
+          <TabsTrigger value="weeks" className="flex items-center gap-2">
+            <Calendar className="h-4 w-4" />
+            <span className="hidden sm:inline">Weeks</span>
+          </TabsTrigger>
+          <TabsTrigger value="reminders" className="flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4" />
+            <span className="hidden sm:inline">Reminders</span>
+          </TabsTrigger>
+          <TabsTrigger value="export" className="flex items-center gap-2">
+            <Download className="h-4 w-4" />
+            <span className="hidden sm:inline">Export</span>
+          </TabsTrigger>
+          <TabsTrigger value="overtime" className="flex items-center gap-2">
+            <BarChart3 className="h-4 w-4" />
+            <span className="hidden sm:inline">Overtime</span>
+          </TabsTrigger>
+          {currentUser?.email === SUPER_ADMIN_EMAIL && (
+            <TabsTrigger value="timebuzzer" className="flex items-center gap-2">
+              <CalendarIcon className="h-4 w-4" />
+              <span className="hidden sm:inline">Timebuzzer</span>
+            </TabsTrigger>
+          )}
+          {(currentUser?.isAdmin || currentUser?.userType === 'administratie' || currentUser?.email === SUPER_ADMIN_EMAIL) && (
+            <TabsTrigger value="daysOff" className="flex items-center gap-2">
+              <Clock className="h-4 w-4" />
+              <span className="hidden sm:inline">{t('admin.daysOffOverview')}</span>
+            </TabsTrigger>
+          )}
+          {currentUser?.email === SUPER_ADMIN_EMAIL && (
+            <TabsTrigger value="errors" className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4" />
+              <span className="hidden sm:inline">Errors</span>
+            </TabsTrigger>
+          )}
+        </TabsList>
+
+        {/* Users Tab */}
+        <TabsContent value="users" className="space-y-6">
+          {/* Add User Section - Only for admins, not for administratie */}
+          {currentUser?.isAdmin && !isAdministratie(currentUser) && (
       <div className="mb-6 sm:mb-8">
         <h3 className="text-base sm:text-lg font-semibold mb-2 text-gray-900 dark:text-gray-100">{t('admin.addUser')}</h3>
         <form onSubmit={handleAddUser} className={`flex ${isMobile ? 'flex-col' : 'flex-row flex-wrap'} gap-3 sm:gap-4 ${isMobile ? '' : 'items-end'} w-full`}>
@@ -1241,77 +1890,9 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
         </form>
       </div>
       )}
-      
-      {/* Send Reminder Section - Available for admin and administratie */}
-      <div className="mb-6 sm:mb-8 p-4 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg">
-        <h3 className="text-base sm:text-lg font-semibold mb-3 text-blue-800 dark:text-blue-200">{t('admin.sendReminder')}</h3>
-        <p className="text-xs sm:text-sm text-blue-700 dark:text-blue-300 mb-4">{t('admin.sendReminderDescription')}</p>
-        <div className="mb-4">
-          <Label className="text-sm font-semibold mb-2 block">{t('admin.selectUsers')}</Label>
-          <div className="max-h-48 overflow-y-auto border rounded-lg p-3 bg-white dark:bg-gray-700">
-            {users.length === 0 ? (
-              <p className="text-sm text-gray-500 dark:text-gray-400">{t('admin.noUsers')}</p>
-            ) : (
-              <div className="space-y-2">
-                {users.map(user => (
-                  <div key={user.id} className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      id={`reminder-user-${user.id}`}
-                      checked={reminderUserIds.includes(user.id.toString())}
-                      onChange={() => toggleReminderUser(user.id.toString())}
-                      className="h-4 w-4"
-                    />
-                    <Label htmlFor={`reminder-user-${user.id}`} className="text-sm cursor-pointer text-gray-900 dark:text-gray-100">
-                      {user.name || user.email} {user.isAdmin && <span className="text-xs text-blue-600 dark:text-blue-400">(Admin)</span>}
-                    </Label>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-          {reminderUserIds.length > 0 && (
-            <p className="text-xs text-blue-600 dark:text-blue-400 mt-2">{reminderUserIds.length} user(s) selected</p>
-          )}
-        </div>
-        <div className={`flex ${isMobile ? 'flex-col' : 'flex-row flex-wrap'} gap-3 sm:gap-4 ${isMobile ? '' : 'items-end'} w-full`}>
-          <div className={isMobile ? 'w-full' : ''}>
-            <Label className="text-sm">{t('admin.weekNumber')}</Label>
-            <Input 
-              type="number" 
-              value={reminderWeekNumber} 
-              onChange={e => setReminderWeekNumber(e.target.value)} 
-              placeholder={t('admin.weekNumberPlaceholder')}
-              min="1"
-              max="53"
-              className="h-10 sm:h-9"
-            />
-          </div>
-          <div className={isMobile ? 'w-full' : ''}>
-            <Label className="text-sm">{t('admin.year')}</Label>
-            <Input 
-              type="number" 
-              value={reminderYear} 
-              onChange={e => setReminderYear(e.target.value)} 
-              placeholder={t('admin.yearPlaceholder')}
-              min="2020"
-              max="2100"
-              className="h-10 sm:h-9"
-            />
-          </div>
-          <Button 
-            onClick={handleSendReminder}
-            className={`${isMobile ? 'w-full' : ''} h-10 sm:h-9 bg-blue-600 hover:bg-blue-700`}
-            size={isMobile ? "lg" : "default"}
-            disabled={reminderUserIds.length === 0 || !reminderWeekNumber || !reminderYear}
-          >
-            {t('admin.sendReminderButton')}{reminderUserIds.length > 0 ? ` (${reminderUserIds.length})` : ''}
-          </Button>
-        </div>
-      </div>
-      
-      {/* Pending Users Section - Only for admins, not for administratie */}
-      {currentUser?.isAdmin && !isAdministratie(currentUser) && users.filter(u => u.approved === false).length > 0 && (
+
+          {/* Pending Users Section - Only for admins, not for administratie */}
+          {currentUser?.isAdmin && !isAdministratie(currentUser) && users.filter(u => u.approved === false).length > 0 && (
         <div className="mb-6 sm:mb-8">
           <h3 className="text-base sm:text-lg font-semibold mb-2 text-orange-600 dark:text-orange-400">{t('admin.pendingApproval')}</h3>
           {isMobile ? (
@@ -1375,9 +1956,9 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
         </div>
       )}
       
-      {/* Existing Users Section - Only for admins, not for administratie */}
-      {currentUser?.isAdmin && !isAdministratie(currentUser) && (
-      <div>
+          {/* Existing Users Section - Only for admins, not for administratie */}
+          {currentUser?.isAdmin && !isAdministratie(currentUser) && (
+          <div>
         <h3 className="text-base sm:text-lg font-semibold mb-2 text-gray-900 dark:text-gray-100">{t('admin.existingUsers')}</h3>
         {loading ? (
           <div className="text-sm">{t('common.loading')}</div>
@@ -1496,7 +2077,10 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                     <Select 
                       value={getUserType(user)} 
                       onValueChange={(value) => handleChangeUserType(user.id, user.email, value)}
-                      disabled={user.email === SUPER_ADMIN_EMAIL && currentUser.email !== SUPER_ADMIN_EMAIL}
+                      disabled={
+                        (user.email === SUPER_ADMIN_EMAIL && currentUser.email !== SUPER_ADMIN_EMAIL) ||
+                        (currentUser?.email === SUPER_ADMIN_EMAIL && String(user.id) === String(currentUser.id))
+                      }
                     >
                       <SelectTrigger className="h-8 w-28 text-xs">
                         <SelectValue />
@@ -1539,9 +2123,13 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                     <span className="text-gray-600 dark:text-gray-400">{t('admin.daysOffLeft')}:</span>
                     <span className="font-semibold text-gray-900 dark:text-gray-100">
                       {(() => {
-                        const daysLeft = (totalDaysOff - ((daysOffMap[String(user.id)] || 0) / 8)).toFixed(2);
-                        const hoursLeft = (parseFloat(daysLeft) * 8).toFixed(1);
-                        return `${daysLeft} (${hoursLeft} ${t('admin.hours')})`;
+                        // Calculate hours left first (more accurate), then convert to days
+                        const totalHoursTaken = daysOffMap[String(user.id)] || 0;
+                        const totalHoursAvailable = totalDaysOff * 8;
+                        const hoursLeft = totalHoursAvailable - totalHoursTaken;
+                        const daysLeft = (hoursLeft / 8).toFixed(1);
+                        const hoursLeftRounded = hoursLeft.toFixed(1);
+                        return `${daysLeft} (${hoursLeftRounded} ${t('admin.hours')})`;
                       })()}
                     </span>
                   </div>
@@ -1586,10 +2174,10 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                       className="h-9 text-sm"
                     />
                     <div className="flex gap-2">
-                      <Button size="sm" onClick={() => handleAddOrDeductDaysOff(user.id, -Math.abs(parseFloat(daysOffInput[user.id] || "0")))} className="flex-1 h-9 text-xs">
+                      <Button size="sm" onClick={() => handleAddOrDeductDaysOffClick(user.id, Math.abs(parseFloat(daysOffInput[user.id] || "0")))} className="flex-1 h-9 text-xs">
                         {t('admin.add')}
                       </Button>
-                      <Button size="sm" variant="destructive" onClick={() => handleAddOrDeductDaysOff(user.id, Math.abs(parseFloat(daysOffInput[user.id] || "0")))} className="flex-1 h-9 text-xs">
+                      <Button size="sm" variant="destructive" onClick={() => handleAddOrDeductDaysOffClick(user.id, -Math.abs(parseFloat(daysOffInput[user.id] || "0")))} className="flex-1 h-9 text-xs">
                         {t('admin.subtract')}
                       </Button>
                     </div>
@@ -1726,7 +2314,10 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                       <Select 
                         value={getUserType(user)} 
                         onValueChange={(value) => handleChangeUserType(user.id, user.email, value)}
-                        disabled={user.email === SUPER_ADMIN_EMAIL && currentUser.email !== SUPER_ADMIN_EMAIL}
+                        disabled={
+                          (user.email === SUPER_ADMIN_EMAIL && currentUser.email !== SUPER_ADMIN_EMAIL) ||
+                          (currentUser?.email === SUPER_ADMIN_EMAIL && String(user.id) === String(currentUser.id))
+                        }
                       >
                         <SelectTrigger className="h-9 w-32">
                           <SelectValue />
@@ -1760,9 +2351,13 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                     )}
                     <td className="p-2 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700">
                       {(() => {
-                        const daysLeft = (totalDaysOff - ((daysOffMap[String(user.id)] || 0) / 8)).toFixed(2);
-                        const hoursLeft = (parseFloat(daysLeft) * 8).toFixed(1);
-                        return `${daysLeft} (${hoursLeft} ${t('admin.hours')})`;
+                        // Calculate hours left first (more accurate), then convert to days
+                        const totalHoursTaken = daysOffMap[String(user.id)] || 0;
+                        const totalHoursAvailable = totalDaysOff * 8;
+                        const hoursLeft = totalHoursAvailable - totalHoursTaken;
+                        const daysLeft = (hoursLeft / 8).toFixed(1);
+                        const hoursLeftRounded = hoursLeft.toFixed(1);
+                        return `${daysLeft} (${hoursLeftRounded} ${t('admin.hours')})`;
                       })()}
                     </td>
                     <td className="p-2 border border-gray-300 dark:border-gray-700">
@@ -1804,10 +2399,10 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                           style={{ width: 70 }}
                           className="h-8"
                         />
-                        <Button size="sm" onClick={() => handleAddOrDeductDaysOff(user.id, -Math.abs(parseFloat(daysOffInput[user.id] || "0")))}>
+                        <Button size="sm" onClick={() => handleAddOrDeductDaysOffClick(user.id, Math.abs(parseFloat(daysOffInput[user.id] || "0")))}>
                           {t('admin.add')}
                         </Button>
-                        <Button size="sm" variant="destructive" onClick={() => handleAddOrDeductDaysOff(user.id, Math.abs(parseFloat(daysOffInput[user.id] || "0")))}>
+                        <Button size="sm" variant="destructive" onClick={() => handleAddOrDeductDaysOffClick(user.id, -Math.abs(parseFloat(daysOffInput[user.id] || "0")))}>
                           {t('admin.subtract')}
                         </Button>
                       </div>
@@ -1819,12 +2414,86 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
             </table>
           </div>
         )}
-      </div>
+        </div>
       )}
-      
-      {/* All Confirmed Weeks Section - Available for admin and administratie */}
-      {isAdminOrAdministratie(currentUser) && (
-      <div className="mt-8 sm:mt-12">
+        </TabsContent>
+
+        {/* Reminders Tab */}
+        <TabsContent value="reminders" className="space-y-6">
+          {/* Send Reminder Section - Available for admin and administratie */}
+          <div className="p-4 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg">
+            <h3 className="text-base sm:text-lg font-semibold mb-3 text-blue-800 dark:text-blue-200">{t('admin.sendReminder')}</h3>
+            <p className="text-xs sm:text-sm text-blue-700 dark:text-blue-300 mb-4">{t('admin.sendReminderDescription')}</p>
+            <div className="mb-4">
+              <Label className="text-sm font-semibold mb-2 block">{t('admin.selectUsers')}</Label>
+              <div className="max-h-48 overflow-y-auto border rounded-lg p-3 bg-white dark:bg-gray-700">
+                {users.length === 0 ? (
+                  <p className="text-sm text-gray-500 dark:text-gray-400">{t('admin.noUsers')}</p>
+                ) : (
+                  <div className="space-y-2">
+                    {users.map(user => (
+                      <div key={user.id} className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          id={`reminder-user-${user.id}`}
+                          checked={reminderUserIds.includes(user.id.toString())}
+                          onChange={() => toggleReminderUser(user.id.toString())}
+                          className="h-4 w-4"
+                        />
+                        <Label htmlFor={`reminder-user-${user.id}`} className="text-sm cursor-pointer text-gray-900 dark:text-gray-100">
+                          {user.name || user.email} {user.isAdmin && <span className="text-xs text-blue-600 dark:text-blue-400">(Admin)</span>}
+                        </Label>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              {reminderUserIds.length > 0 && (
+                <p className="text-xs text-blue-600 dark:text-blue-400 mt-2">{reminderUserIds.length} user(s) selected</p>
+              )}
+            </div>
+            <div className={`flex ${isMobile ? 'flex-col' : 'flex-row flex-wrap'} gap-3 sm:gap-4 ${isMobile ? '' : 'items-end'} w-full`}>
+              <div className={isMobile ? 'w-full' : ''}>
+                <Label className="text-sm">{t('admin.weekNumber')}</Label>
+                <Input 
+                  type="number" 
+                  value={reminderWeekNumber} 
+                  onChange={e => setReminderWeekNumber(e.target.value)} 
+                  placeholder={t('admin.weekNumberPlaceholder')}
+                  min="1"
+                  max="53"
+                  className="h-10 sm:h-9"
+                />
+              </div>
+              <div className={isMobile ? 'w-full' : ''}>
+                <Label className="text-sm">{t('admin.year')}</Label>
+                <Input 
+                  type="number" 
+                  value={reminderYear} 
+                  onChange={e => setReminderYear(e.target.value)} 
+                  placeholder={t('admin.yearPlaceholder')}
+                  min="2020"
+                  max="2100"
+                  className="h-10 sm:h-9"
+                />
+              </div>
+              <Button 
+                onClick={handleSendReminder}
+                className={`${isMobile ? 'w-full' : ''} h-10 sm:h-9 bg-blue-600 hover:bg-blue-700`}
+                size={isMobile ? "lg" : "default"}
+                disabled={reminderUserIds.length === 0 || !reminderWeekNumber || !reminderYear}
+              >
+                {t('admin.sendReminderButton')}{reminderUserIds.length > 0 ? ` (${reminderUserIds.length})` : ''}
+              </Button>
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* Weeks Tab */}
+        <TabsContent value="weeks" className="space-y-6">
+          {/* All Confirmed Weeks Section - Available for admin and administratie */}
+          {isAdminOrAdministratie(currentUser) && (
+          <div>
         <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4 text-green-600 dark:text-green-400">{t('admin.allConfirmedWeeks')}</h3>
         <div className="space-y-3">
           {users.map(user => {
@@ -2627,18 +3296,247 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
         <div className="text-sm text-orange-800 dark:text-orange-200 bg-orange-50 dark:bg-orange-900/30 p-4 rounded-lg border border-orange-200 dark:border-orange-800 mt-4">
           <strong className="text-orange-900 dark:text-orange-100">{t('export.note')}</strong> {t('export.adminNote')}
         </div>
-      </div>
-      )}
+          </div>
+          )}
+        </TabsContent>
 
-      {/* Overtime Tracking Section - Available for admin and administratie */}
-      {isAdminOrAdministratie(currentUser) && (
-      <div className="mt-8 sm:mt-12 mb-6 sm:mb-8 p-4 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg">
+        {/* Export Tab */}
+        <TabsContent value="export" className="space-y-6">
+          {/* Export Section - Available for admin and administratie */}
+          {isAdminOrAdministratie(currentUser) && (
+          <div className="p-4 bg-orange-50 dark:bg-orange-900/30 border border-orange-200 dark:border-orange-800 rounded-lg">
+            <h3 className="text-base sm:text-lg font-semibold mb-3 text-orange-800 dark:text-orange-200 flex items-center gap-2">
+              <Download className="h-5 w-5" />
+              {t('export.title')}
+            </h3>
+            <p className="text-xs sm:text-sm text-orange-700 dark:text-orange-300 mb-4">
+              {t('export.description')}
+            </p>
+            
+            {/* User Selection */}
+            <div className="mb-4">
+              <Label className="text-sm font-semibold mb-2 block">{t('export.selectUser')}</Label>
+              <Select value={selectedExportUserId} onValueChange={setSelectedExportUserId}>
+                <SelectTrigger className="h-10 sm:h-9">
+                  <SelectValue placeholder={t('export.selectUserPlaceholder')} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t('export.allUsers')}</SelectItem>
+                  {users.map((user: any) => (
+                    <SelectItem key={user.id} value={user.id}>
+                      {user.name || user.email}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Export Buttons */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Button 
+                variant="outline" 
+                className="h-20 flex flex-col items-center justify-center border-blue-200 dark:border-blue-700 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/40 shadow-lg rounded-lg transition-all" 
+                onClick={async () => {
+                  setExporting(true);
+                  try {
+                    let queryBuilder = supabase
+                      .from("timesheet")
+                      .select("*, projects(name)")
+                      .order("date", { ascending: true });
+                    
+                    if (selectedExportUserId && selectedExportUserId !== "all") {
+                      queryBuilder = queryBuilder.eq("user_id", selectedExportUserId);
+                    }
+                    const { data, error } = await queryBuilder;
+                    
+                    if (error) {
+                      toast({
+                        title: "Export Failed",
+                        description: error.message,
+                        variant: "destructive",
+                      });
+                      setExporting(false);
+                      return;
+                    }
+                    const rows = (data || []).map((row: any) => ({ 
+                      ...row, 
+                      project: row.projects?.name || "",
+                      user_name: users.find((u: any) => u.id === row.user_id)?.name || users.find((u: any) => u.id === row.user_id)?.email || "",
+                      user_email: users.find((u: any) => u.id === row.user_id)?.email || ""
+                    }));
+                    const wb = XLSX.utils.book_new();
+                    const ws = XLSX.utils.json_to_sheet(rows.map((row: any) => ({
+                      Date: formatDateDDMMYY(row.date),
+                      Day: getDayNameNL(row.date),
+                      'Work Type': getWorkTypeLabel(row.description || ""),
+                      Project: row.projects?.name || row.project || "",
+                      'Start Time': row.startTime || "",
+                      'End Time': row.endTime || "",
+                      Hours: parseFloat(row.hours || 0),
+                      'Hours (HH:MM)': formatHoursHHMM(row.hours || 0),
+                      Notes: row.notes || "",
+                      'User Name': row.user_name || "",
+                      'User Email': row.user_email || ""
+                    })));
+                    XLSX.utils.book_append_sheet(wb, ws, "Timesheet");
+                    XLSX.writeFile(wb, "timesheet_all.xlsx");
+                    setExporting(false);
+                    toast({
+                      title: "Export Successful",
+                      description: "All data exported to timesheet_all.xlsx",
+                    });
+                  } catch (error: any) {
+                    toast({
+                      title: "Export Failed",
+                      description: error.message,
+                      variant: "destructive",
+                    });
+                    setExporting(false);
+                  }
+                }}
+                disabled={exporting}
+              >
+                <FileText className="h-6 w-6 mb-2" />
+                <span className="text-sm font-medium">{t('export.allData')} (Excel)</span>
+              </Button>
+              <Button 
+                variant="outline" 
+                className="h-20 flex flex-col items-center justify-center border-blue-200 dark:border-blue-700 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/40 shadow-lg rounded-lg transition-all" 
+                onClick={async () => {
+                  if (!selectedExportUserId || selectedExportUserId === "all") {
+                    toast({
+                      title: "No User Selected",
+                      description: "Please select a user to export.",
+                      variant: "destructive",
+                    });
+                    return;
+                  }
+                  setExporting(true);
+                  const { data, error } = await supabase
+                    .from("timesheet")
+                    .select("*, projects(name)")
+                    .eq("user_id", selectedExportUserId)
+                    .order("date", { ascending: true });
+                  if (error) {
+                    toast({
+                      title: "Export Failed",
+                      description: error.message,
+                      variant: "destructive",
+                    });
+                    setExporting(false);
+                    return;
+                  }
+                  const selectedUser = users.find((u: any) => u.id === selectedExportUserId);
+                  const rows = (data || []).map((row: any) => ({ 
+                    ...row, 
+                    project: row.projects?.name || "",
+                    user_name: selectedUser?.name || selectedUser?.email || "",
+                    user_email: selectedUser?.email || ""
+                  }));
+                  const userName = selectedUser?.name || selectedUser?.email || "user";
+                  const wb = XLSX.utils.book_new();
+                  const ws = XLSX.utils.json_to_sheet(rows.map((row: any) => ({
+                    Date: formatDateDDMMYY(row.date),
+                    Day: getDayNameNL(row.date),
+                    'Work Type': getWorkTypeLabel(row.description || ""),
+                    Project: row.projects?.name || row.project || "",
+                    'Start Time': row.startTime || "",
+                    'End Time': row.endTime || "",
+                    Hours: parseFloat(row.hours || 0),
+                    'Hours (HH:MM)': formatHoursHHMM(row.hours || 0),
+                    Notes: row.notes || ""
+                  })));
+                  XLSX.utils.book_append_sheet(wb, ws, "Timesheet");
+                  XLSX.writeFile(wb, `timesheet_${userName.replace(/[^a-zA-Z0-9]/g, '_')}.xlsx`);
+                  setExporting(false);
+                  toast({
+                    title: "Export Successful",
+                    description: `All data exported for ${userName}.`,
+                  });
+                }}
+                disabled={exporting || !selectedExportUserId || selectedExportUserId === "all"}
+              >
+                <Users className="h-6 w-6 mb-2" />
+                <span className="text-sm font-medium">{t('export.perUser')} (Excel)</span>
+              </Button>
+              <Button 
+                variant="outline" 
+                className="h-20 flex flex-col items-center justify-center border-red-200 dark:border-red-700 text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/40 shadow-lg rounded-lg transition-all" 
+                onClick={async () => {
+                  if (!selectedExportUserId || selectedExportUserId === "all") {
+                    toast({
+                      title: "No User Selected",
+                      description: "Please select a user to export.",
+                      variant: "destructive",
+                    });
+                    return;
+                  }
+                  setExporting(true);
+                  const { data, error } = await supabase
+                    .from("timesheet")
+                    .select("*, projects(name)")
+                    .eq("user_id", selectedExportUserId)
+                    .order("date", { ascending: true });
+                  if (error) {
+                    toast({
+                      title: "Export Failed",
+                      description: error.message,
+                      variant: "destructive",
+                    });
+                    setExporting(false);
+                    return;
+                  }
+                  const selectedUser = users.find((u: any) => u.id === selectedExportUserId);
+                  const userName = selectedUser?.name || selectedUser?.email || "user";
+                  const formattedData = (data || []).map((row: any) => {
+                    return {
+                      Date: formatDateDDMMYY(row.date),
+                      Day: getDayNameNL(row.date),
+                      'Work Type': getWorkTypeLabel(row.description || ""),
+                      Project: row.projects?.name || row.project || "",
+                      'Start Time': row.startTime || "",
+                      'End Time': row.endTime || "",
+                      Hours: typeof row.hours === 'number' ? row.hours : parseFloat(row.hours || 0),
+                      'Hours (HH:MM)': formatHoursHHMM(row.hours || 0),
+                      Notes: row.notes || "",
+                    };
+                  });
+                  createPDF({
+                    userName: userName,
+                    period: "All Data",
+                    data: formattedData
+                  }, `timesheet_${userName.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`);
+                  setExporting(false);
+                  toast({
+                    title: "PDF Export Successful",
+                    description: `All data exported for ${userName}.`,
+                  });
+                }}
+                disabled={exporting || !selectedExportUserId || selectedExportUserId === "all"}
+              >
+                <FileDown className="h-6 w-6 mb-2" />
+                <span className="text-sm font-medium">{t('export.perUser')} (PDF)</span>
+              </Button>
+            </div>
+            
+            <div className="text-sm text-orange-800 dark:text-orange-200 bg-orange-50 dark:bg-orange-900/30 p-4 rounded-lg border border-orange-200 dark:border-orange-800 mt-4">
+              <strong className="text-orange-900 dark:text-orange-100">{t('export.note')}</strong> {t('export.adminNote')}
+            </div>
+          </div>
+          )}
+        </TabsContent>
+
+        {/* Overtime Tab */}
+        <TabsContent value="overtime" className="space-y-6">
+          {/* Overtime Tracking Section - Available for admin and administratie */}
+          {isAdminOrAdministratie(currentUser) && (
+          <div className="p-4 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg">
         <h3 className="text-base sm:text-lg font-semibold mb-3 text-blue-800 dark:text-blue-200 flex items-center gap-2">
           <Calendar className="h-5 w-5" />
           Overuren Tracking
         </h3>
         <p className="text-xs sm:text-sm text-blue-700 dark:text-blue-300 mb-4">
-          Bekijk overuren per gebruiker. Een normale werkdag is 8 uur. Alles wat meer is gewerkt wordt als overuren geteld.
+          Bekijk overuren per gebruiker. Een normale werkdag (maandag t/m vrijdag) is 8 uur. Alles wat meer is gewerkt wordt als overuren geteld. Zaterdag en zondag worden altijd als overuren gezien (alle uren op weekenddagen zijn overuren).
         </p>
         
         {/* Filters */}
@@ -2802,11 +3700,24 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                       <AccordionTrigger className="px-4 py-3 hover:no-underline">
                         <div className="flex items-center justify-between w-full pr-4">
                           <div className="text-left">
-                            <div className="font-semibold text-sm text-gray-900 dark:text-gray-100">
+                            <div className="font-semibold text-sm text-gray-900 dark:text-gray-100 flex items-center gap-2">
                               {formatDateWithDayName(day.date)}
+                              {day.isWeekend && (
+                                <span className="text-xs bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 px-2 py-0.5 rounded">
+                                  Weekend
+                                </span>
+                              )}
                             </div>
                             <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                              {day.totalHours}h totaal - {day.normalHours}h normaal
+                              {day.isWeekend ? (
+                                <span className="text-orange-600 dark:text-orange-400">
+                                  {day.totalHours}h totaal (alle uren zijn overuren)
+                                </span>
+                              ) : (
+                                <span>
+                                  {day.totalHours}h totaal - {day.normalHours}h normaal
+                                </span>
+                              )}
                             </div>
                           </div>
                           <div className="text-right">
@@ -2912,9 +3823,13 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
       </div>
       )}
 
-      {/* Timebuzzer Sync Section - Only for admins, not for administratie */}
-      {currentUser?.isAdmin && !isAdministratie(currentUser) && (
-      <div className="mb-6 sm:mb-8 p-4 bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 rounded-lg">
+        </TabsContent>
+
+        {/* Timebuzzer Tab - Only for super admin */}
+        {currentUser?.email === SUPER_ADMIN_EMAIL && (
+        <TabsContent value="timebuzzer" className="space-y-6">
+          {/* Timebuzzer Sync Section */}
+          <div className="p-4 bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 rounded-lg">
         <h3 className="text-base sm:text-lg font-semibold mb-3 text-green-800">Timebuzzer Integration</h3>
         <p className="text-xs sm:text-sm text-green-700 mb-4">
           Sync time entries from Timebuzzer to your timesheet. Make sure users and projects are mapped in the database first.
@@ -3002,20 +3917,82 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All users (default)</SelectItem>
+                {/* Show mapped users first */}
                 {users
-                  .filter((u: any) => u.timebuzzer_user_id) // Only show users with Timebuzzer mapping
+                  .filter((u: any) => u.timebuzzer_user_id)
                   .map((user: any) => (
                     <SelectItem key={user.id} value={user.timebuzzer_user_id}>
-                      {user.name || user.email} ({user.timebuzzer_user_id})
+                      {user.name || user.email} ({user.timebuzzer_user_id}) - Mapped
+                    </SelectItem>
+                  ))}
+                {/* Then show Timebuzzer users that are not yet mapped */}
+                {timebuzzerUsers
+                  .filter((tbUser: any) => !users.some((u: any) => u.timebuzzer_user_id === String(tbUser.id)))
+                  .map((tbUser: any) => (
+                    <SelectItem key={`tb-${tbUser.id}`} value={String(tbUser.id)}>
+                      {tbUser.name || tbUser.email || `User ${tbUser.id}`} ({tbUser.id}) - Not mapped
                     </SelectItem>
                   ))}
               </SelectContent>
             </Select>
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-              Select a user to test Timebuzzer API for that specific user only. Leave empty to test for all users.
+              Select a user to test Timebuzzer API for that specific user only. Shows both mapped users and Timebuzzer users. Leave empty to test for all users.
             </p>
+            {timebuzzerUsers.length === 0 && (
+              <p className="text-xs text-orange-600 dark:text-orange-400 mt-1">
+                💡 Tip: Click "Fetch All Timebuzzer Users" first to see all available users from Timebuzzer.
+              </p>
+            )}
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            <Button
+              onClick={async () => {
+                setLoadingTimebuzzerUsers(true);
+                setTimebuzzerUsers([]);
+                try {
+                  const { data, error } = await supabase.functions.invoke('timebuzzer-sync', {
+                    body: { 
+                      action: 'fetch-users',
+                    },
+                  });
+                  
+                  if (error) {
+                    toast({
+                      title: "Error",
+                      description: error.message || 'Failed to fetch users from Timebuzzer',
+                      variant: "destructive",
+                    });
+                    return;
+                  }
+                  
+                  if (data && data.success && data.users) {
+                    setTimebuzzerUsers(data.users);
+                    toast({
+                      title: "Success",
+                      description: `Found ${data.users.length} users in Timebuzzer`,
+                    });
+                  } else {
+                    toast({
+                      title: "Error",
+                      description: data?.error || 'Failed to fetch users from Timebuzzer',
+                      variant: "destructive",
+                    });
+                  }
+                } catch (error: any) {
+                  toast({
+                    title: "Error",
+                    description: error.message || 'Failed to fetch users from Timebuzzer',
+                    variant: "destructive",
+                  });
+                } finally {
+                  setLoadingTimebuzzerUsers(false);
+                }
+              }}
+              disabled={loadingTimebuzzerUsers}
+              className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700"
+            >
+              {loadingTimebuzzerUsers ? "Loading..." : "Fetch All Timebuzzer Users"}
+            </Button>
             <Button
               onClick={async () => {
                 if (!timebuzzerSyncWeekNumber || !timebuzzerSyncYear) {
@@ -3320,9 +4297,103 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
               variant="outline"
               className="w-full sm:w-auto"
             >
-              Test API
+              Test API Connection
             </Button>
           </div>
+          
+          {/* API Testing Section */}
+          <div className="mt-4 p-4 bg-gray-50 dark:bg-gray-900/50 rounded-lg border border-gray-200 dark:border-gray-800">
+            <h4 className="text-sm font-semibold mb-3 text-gray-800 dark:text-gray-200">API Testing Tools</h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <Button
+                onClick={async () => {
+                  try {
+                    const { data, error } = await supabase.functions.invoke('timebuzzer-sync', {
+                      body: { action: 'test-account' },
+                    });
+                    
+                    if (error) {
+                      toast({
+                        title: "Error",
+                        description: error.message || 'Failed to test account endpoint',
+                        variant: "destructive",
+                      });
+                      return;
+                    }
+                    
+                    if (data && data.success) {
+                      toast({
+                        title: "Account Endpoint OK",
+                        description: data.message || `Found ${data.usersCount || 0} users`,
+                      });
+                      console.log('Account data:', data);
+                    } else {
+                      toast({
+                        title: "Error",
+                        description: data?.error || 'Account endpoint test failed',
+                        variant: "destructive",
+                      });
+                    }
+                  } catch (error: any) {
+                    toast({
+                      title: "Error",
+                      description: error.message || 'Failed to test account endpoint',
+                      variant: "destructive",
+                    });
+                  }
+                }}
+                variant="outline"
+                size="sm"
+                className="text-xs"
+              >
+                Test Account Endpoint
+              </Button>
+              <Button
+                onClick={async () => {
+                  try {
+                    const { data, error } = await supabase.functions.invoke('timebuzzer-sync', {
+                      body: { action: 'test-tiles' },
+                    });
+                    
+                    if (error) {
+                      toast({
+                        title: "Error",
+                        description: error.message || 'Failed to test tiles endpoint',
+                        variant: "destructive",
+                      });
+                      return;
+                    }
+                    
+                    if (data && data.success) {
+                      toast({
+                        title: "Tiles Endpoint OK",
+                        description: `Found ${data.count || 0} tiles/projects`,
+                      });
+                      console.log('Tiles data:', data);
+                    } else {
+                      toast({
+                        title: "Error",
+                        description: data?.error || 'Tiles endpoint test failed',
+                        variant: "destructive",
+                      });
+                    }
+                  } catch (error: any) {
+                    toast({
+                      title: "Error",
+                      description: error.message || 'Failed to test tiles endpoint',
+                      variant: "destructive",
+                    });
+                  }
+                }}
+                variant="outline"
+                size="sm"
+                className="text-xs"
+              >
+                Test Tiles/Projects
+              </Button>
+            </div>
+          </div>
+          
           <p className="text-xs text-green-600">
             Note: Users and projects must be mapped with Timebuzzer IDs in the database before syncing.
           </p>
@@ -3612,6 +4683,294 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
             </div>
           )}
           
+          {/* Timebuzzer Users Display */}
+          {timebuzzerUsers.length > 0 && (
+            <div className="mt-4 p-4 bg-white dark:bg-gray-800 rounded-lg border border-green-200 dark:border-green-800">
+              <div className="flex justify-between items-center mb-3">
+                <h4 className="text-sm font-semibold text-green-800 dark:text-green-200">
+                  Timebuzzer Users ({timebuzzerUsers.length})
+                </h4>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={async () => {
+                      setCheckingAllActivities(true);
+                      try {
+                        // Check activities for all users (last 3 months)
+                        const today = new Date();
+                        const threeMonthsAgo = new Date();
+                        threeMonthsAgo.setMonth(today.getMonth() - 3);
+                        
+                        const statusUpdates: Record<number, { hasActivities: boolean; lastActivityDate?: string; totalActivities?: number }> = {};
+                        
+                        // Check each user
+                        for (const user of timebuzzerUsers) {
+                          try {
+                            const { data, error } = await supabase.functions.invoke('timebuzzer-sync', {
+                              body: {
+                                action: 'fetch-activities',
+                                startDate: threeMonthsAgo.toISOString().split('T')[0],
+                                endDate: today.toISOString().split('T')[0],
+                                userId: String(user.id),
+                              },
+                            });
+                            
+                            if (data && data.success) {
+                              const activities = data.activities || [];
+                              let lastActivityDate: string | undefined;
+                              if (activities.length > 0) {
+                                const dates = activities
+                                  .map((a: any) => a.startDate || a.endDate)
+                                  .filter(Boolean)
+                                  .sort()
+                                  .reverse();
+                                lastActivityDate = dates[0];
+                              }
+                              
+                              statusUpdates[user.id] = {
+                                hasActivities: activities.length > 0,
+                                lastActivityDate,
+                                totalActivities: activities.length,
+                              };
+                            } else {
+                              statusUpdates[user.id] = {
+                                hasActivities: false,
+                              };
+                            }
+                          } catch (error) {
+                            console.error(`Error checking activities for user ${user.id}:`, error);
+                            statusUpdates[user.id] = {
+                              hasActivities: false,
+                            };
+                          }
+                        }
+                        
+                        setUserActivitiesStatus(prev => ({ ...prev, ...statusUpdates }));
+                        
+                        const usersWithActivities = Object.values(statusUpdates).filter(s => s.hasActivities).length;
+                        toast({
+                          title: "Check Complete",
+                          description: `${usersWithActivities} of ${timebuzzerUsers.length} users have activities in the last 3 months`,
+                        });
+                      } catch (error: any) {
+                        toast({
+                          title: "Error",
+                          description: error.message || 'Failed to check all users',
+                          variant: "destructive",
+                        });
+                      } finally {
+                        setCheckingAllActivities(false);
+                      }
+                    }}
+                    disabled={checkingAllActivities || timebuzzerUsers.length === 0}
+                    className="text-xs"
+                  >
+                    {checkingAllActivities ? "Checking..." : "Check All Users"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setTimebuzzerUsers([]);
+                      setTimebuzzerUserHours({});
+                      setUserActivitiesStatus({});
+                    }}
+                    className="text-xs"
+                  >
+                    Clear
+                  </Button>
+                </div>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-xs border border-gray-300 dark:border-gray-700">
+                  <thead className="bg-gray-100 dark:bg-gray-700">
+                    <tr>
+                      <th className="p-2 text-left border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">ID</th>
+                      <th className="p-2 text-left border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">Name</th>
+                      <th className="p-2 text-left border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">Email</th>
+                      <th className="p-2 text-left border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">Mapped To</th>
+                      <th className="p-2 text-left border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">Has Activities</th>
+                      <th className="p-2 text-left border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {timebuzzerUsers.map((user: any) => {
+                      const mappedUser = users.find((u: any) => u.timebuzzer_user_id === String(user.id));
+                      return (
+                        <tr key={user.id} className="border-t border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800">
+                          <td className="p-2 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100 font-mono text-xs">
+                            {user.id}
+                          </td>
+                          <td className="p-2 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">
+                            {user.name || '-'}
+                          </td>
+                          <td className="p-2 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">
+                            {user.email || '-'}
+                          </td>
+                          <td className="p-2 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">
+                            {mappedUser ? (
+                              <span className="text-green-600 dark:text-green-400">
+                                ✓ {mappedUser.name || mappedUser.email}
+                              </span>
+                            ) : (
+                              <span className="text-orange-600 dark:text-orange-400">Not mapped</span>
+                            )}
+                          </td>
+                          <td className="p-2 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">
+                            {userActivitiesStatus[user.id] ? (
+                              userActivitiesStatus[user.id].hasActivities ? (
+                                <div className="flex flex-col gap-1">
+                                  <span className="text-green-600 dark:text-green-400 font-semibold">✓ Yes</span>
+                                  {userActivitiesStatus[user.id].totalActivities !== undefined && (
+                                    <span className="text-xs text-gray-500">
+                                      {userActivitiesStatus[user.id].totalActivities} total
+                                    </span>
+                                  )}
+                                  {userActivitiesStatus[user.id].lastActivityDate && (
+                                    <span className="text-xs text-gray-500">
+                                      Last: {new Date(userActivitiesStatus[user.id].lastActivityDate!).toLocaleDateString('nl-NL')}
+                                    </span>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-orange-600 dark:text-orange-400">✗ No activities</span>
+                              )
+                            ) : (
+                              <span className="text-gray-400">Not checked</span>
+                            )}
+                          </td>
+                          <td className="p-2 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={async () => {
+                                setLoadingUserHours(prev => ({ ...prev, [user.id]: true }));
+                                try {
+                                  // Check for activities in the last 3 months
+                                  const today = new Date();
+                                  const threeMonthsAgo = new Date();
+                                  threeMonthsAgo.setMonth(today.getMonth() - 3);
+                                  
+                                  const { data, error } = await supabase.functions.invoke('timebuzzer-sync', {
+                                    body: {
+                                      action: 'fetch-activities',
+                                      startDate: threeMonthsAgo.toISOString().split('T')[0],
+                                      endDate: today.toISOString().split('T')[0],
+                                      userId: String(user.id),
+                                    },
+                                  });
+                                  
+                                  if (error) {
+                                    toast({
+                                      title: "Error",
+                                      description: error.message || 'Failed to check activities',
+                                      variant: "destructive",
+                                    });
+                                    return;
+                                  }
+                                  
+                                  if (data && data.success) {
+                                    const activities = data.activities || [];
+                                    const hasActivities = activities.length > 0;
+                                    
+                                    // Check for API access warnings
+                                    if (data.warning) {
+                                      toast({
+                                        title: "⚠️ API Access Warning",
+                                        description: data.warning,
+                                        variant: "destructive",
+                                      });
+                                    }
+                                    
+                                    // If API returned activities for different users, show warning
+                                    if (data.apiReturnedUserIds && data.apiReturnedUserIds.length > 0) {
+                                      const requestedUserId = String(user.id);
+                                      const returnedUserIds = data.apiReturnedUserIds.map((id: number) => String(id));
+                                      if (!returnedUserIds.includes(requestedUserId)) {
+                                        toast({
+                                          title: "⚠️ Limited API Access",
+                                          description: `API key may only have access to user ${returnedUserIds[0]}. Requested user ${requestedUserId} not accessible.`,
+                                          variant: "destructive",
+                                        });
+                                      }
+                                    }
+                                    
+                                    // Find last activity date
+                                    let lastActivityDate: string | undefined;
+                                    if (activities.length > 0) {
+                                      const dates = activities
+                                        .map((a: any) => a.startDate || a.endDate)
+                                        .filter(Boolean)
+                                        .sort()
+                                        .reverse();
+                                      lastActivityDate = dates[0];
+                                    }
+                                    
+                                    setUserActivitiesStatus(prev => ({
+                                      ...prev,
+                                      [user.id]: {
+                                        hasActivities,
+                                        lastActivityDate,
+                                        totalActivities: activities.length,
+                                      }
+                                    }));
+                                    
+                                    if (hasActivities) {
+                                      toast({
+                                        title: "Activities Found",
+                                        description: `User has ${activities.length} activities in the last 3 months`,
+                                      });
+                                    } else {
+                                      let description = "No activities found for this user in the last 3 months";
+                                      if (data.availableUserIds && data.availableUserIds.length > 0) {
+                                        description += `. API returned activities for other users: ${data.availableUserIds.join(', ')}. This suggests the API key has limited access.`;
+                                      }
+                                      toast({
+                                        title: "No Activities",
+                                        description: description,
+                                        variant: "default",
+                                      });
+                                    }
+                                  } else {
+                                    setUserActivitiesStatus(prev => ({
+                                      ...prev,
+                                      [user.id]: {
+                                        hasActivities: false,
+                                      }
+                                    }));
+                                  }
+                                } catch (error: any) {
+                                  toast({
+                                    title: "Error",
+                                    description: error.message || 'Failed to check activities',
+                                    variant: "destructive",
+                                  });
+                                } finally {
+                                  setLoadingUserHours(prev => ({ ...prev, [user.id]: false }));
+                                }
+                              }}
+                              disabled={loadingUserHours[user.id]}
+                              className="text-xs h-7"
+                            >
+                              {loadingUserHours[user.id] ? "Checking..." : "Check Activities"}
+                            </Button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <div className="mt-3 text-xs text-gray-600 dark:text-gray-400">
+                <p><strong>Tip:</strong> Gebruik de ID kolom om users te mappen in de database:</p>
+                <code className="block mt-1 p-2 bg-gray-100 dark:bg-gray-700 rounded text-xs">
+                  UPDATE users SET timebuzzer_user_id = 'ID' WHERE email = 'email';
+                </code>
+              </div>
+            </div>
+          )}
+
           {/* Test Results Display */}
           {timebuzzerTestResult && timebuzzerTestResult.success && (
             <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
@@ -3710,8 +5069,375 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
             </div>
           )}
         </div>
-      </div>
+          </div>
+        </TabsContent>
+        )}
+
+        {/* Days Off Overview Tab - For admin, administratie, and super admin */}
+        {(currentUser?.isAdmin || currentUser?.userType === 'administratie' || currentUser?.email === SUPER_ADMIN_EMAIL) && (
+        <TabsContent value="daysOff" className="space-y-6">
+          <div>
+            <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4 flex items-center gap-2">
+              <Clock className="h-5 w-5 text-blue-600" />
+              {t('admin.daysOffOverview')}
+            </h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+              {t('admin.daysOffOverviewDescription')}
+            </p>
+            
+            {isMobile ? (
+              // Mobile view: Cards
+              <div className="space-y-3">
+                {users
+                  .filter(user => user.approved !== false)
+                  .map((user) => {
+                    const totalHoursTaken = daysOffMap[String(user.id)] || 0;
+                    const totalHoursAvailable = totalDaysOff * 8;
+                    const hoursLeft = totalHoursAvailable - totalHoursTaken;
+                    const daysLeft = (hoursLeft / 8).toFixed(1);
+                    const hoursLeftRounded = hoursLeft.toFixed(1);
+                    
+                    return (
+                      <Card key={user.id} className="p-4">
+                        <div className="space-y-2">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <div className="font-semibold text-gray-900 dark:text-gray-100">
+                                {user.name || user.email}
+                              </div>
+                              <div className="text-xs text-gray-500 dark:text-gray-400">
+                                {user.email}
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-lg font-bold text-blue-700 dark:text-blue-400">
+                                {daysLeft}
+                              </div>
+                              <div className="text-xs text-gray-600 dark:text-gray-400">
+                                {hoursLeftRounded} {t('admin.hours')}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </Card>
+                    );
+                  })}
+              </div>
+            ) : (
+              // Desktop view: Table
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse border border-gray-300 dark:border-gray-700">
+                  <thead>
+                    <tr className="bg-gray-100 dark:bg-gray-800">
+                      <th className="p-3 text-left text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700">{t('admin.name')}</th>
+                      <th className="p-3 text-left text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700">{t('admin.email')}</th>
+                      <th className="p-3 text-left text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700">{t('admin.daysOffLeft')}</th>
+                      <th className="p-3 text-left text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700">{t('admin.hoursTaken')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {users
+                      .filter(user => user.approved !== false)
+                      .map((user) => {
+                        const totalHoursTaken = daysOffMap[String(user.id)] || 0;
+                        const totalHoursAvailable = totalDaysOff * 8;
+                        const hoursLeft = totalHoursAvailable - totalHoursTaken;
+                        const daysLeft = (hoursLeft / 8).toFixed(1);
+                        const hoursLeftRounded = hoursLeft.toFixed(1);
+                        
+                        return (
+                          <tr key={user.id} className="hover:bg-gray-50 dark:hover:bg-gray-800">
+                            <td className="p-3 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700">
+                              {user.name || user.email}
+                            </td>
+                            <td className="p-3 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700">
+                              {user.email}
+                            </td>
+                            <td className="p-3 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700">
+                              <span className="font-semibold text-blue-700 dark:text-blue-400">
+                                {daysLeft} ({hoursLeftRounded} {t('admin.hours')})
+                              </span>
+                            </td>
+                            <td className="p-3 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700">
+                              {totalHoursTaken.toFixed(1)} {t('admin.hours')}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </TabsContent>
+        )}
+
+        {/* Error Logs Tab - Only for super admin */}
+        {currentUser?.email === SUPER_ADMIN_EMAIL && (
+        <TabsContent value="errors" className="space-y-6">
+          <div>
+          <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4 flex items-center gap-2">
+            <AlertTriangle className="h-5 w-5 text-red-600" />
+            Error Logs
+          </h3>
+          
+          <div className="mb-4 flex flex-wrap gap-4">
+            <Select value={errorLogsFilter} onValueChange={(val: any) => setErrorLogsFilter(val)}>
+              <SelectTrigger className="w-40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Errors</SelectItem>
+                <SelectItem value="unresolved">Unresolved</SelectItem>
+                <SelectItem value="resolved">Resolved</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Select value={errorLogsSeverity} onValueChange={(val: any) => setErrorLogsSeverity(val)}>
+              <SelectTrigger className="w-40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Severities</SelectItem>
+                <SelectItem value="error">Errors</SelectItem>
+                <SelectItem value="warning">Warnings</SelectItem>
+                <SelectItem value="info">Info</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Select value={errorLogsUserFilter} onValueChange={(val: any) => setErrorLogsUserFilter(val)}>
+              <SelectTrigger className="w-48">
+                <SelectValue placeholder="All Users" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Users</SelectItem>
+                {users
+                  .filter((user: any) => user.email) // Only show users with email
+                  .map((user: any) => (
+                    <SelectItem key={user.id} value={user.email}>
+                      {user.name || user.email} ({user.email})
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+
+            <Button onClick={fetchErrorLogs} variant="outline" size="sm">
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Refresh
+            </Button>
+            <Button 
+              onClick={handleDeleteResizeObserverErrors} 
+              variant="outline" 
+              size="sm"
+              className="text-orange-600 hover:text-orange-700 border-orange-300 hover:bg-orange-50"
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Delete ResizeObserver Errors
+            </Button>
+            <Button 
+              onClick={handleDeleteAllErrors} 
+              variant="destructive" 
+              size="sm"
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Delete All Errors
+            </Button>
+          </div>
+
+          {errorLogsLoading ? (
+            <div className="text-center p-8">Loading error logs...</div>
+          ) : errorLogs.length === 0 ? (
+            <div className="text-center p-8 text-gray-500">No error logs found</div>
+          ) : (
+            <div className="space-y-4">
+              {errorLogs.map((errorLog) => (
+                <Card key={errorLog.id} className={errorLog.resolved ? "bg-gray-50 dark:bg-gray-800" : "bg-red-50 dark:bg-red-900/20"}>
+                  <CardHeader>
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <CardTitle className="text-sm flex items-center gap-2">
+                          <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                            errorLog.severity === 'error' ? 'bg-red-600 text-white' :
+                            errorLog.severity === 'warning' ? 'bg-yellow-600 text-white' :
+                            'bg-blue-600 text-white'
+                          }`}>
+                            {errorLog.severity?.toUpperCase()}
+                          </span>
+                          {errorLog.resolved && (
+                            <span className="px-2 py-1 rounded text-xs bg-green-600 text-white">RESOLVED</span>
+                          )}
+                        </CardTitle>
+                        <div className="mt-2 text-xs text-gray-600 dark:text-gray-400">
+                          {new Date(errorLog.created_at).toLocaleString()}
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        {!errorLog.resolved && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setSelectedErrorLog(errorLog)}
+                          >
+                            Resolve
+                          </Button>
+                        )}
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => handleDeleteErrorLog(errorLog.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2 text-sm">
+                      <div>
+                        <strong>Message:</strong>
+                        <div className="mt-1 p-2 bg-white dark:bg-gray-700 rounded font-mono text-xs">
+                          {errorLog.error_message}
+                        </div>
+                      </div>
+                      
+                      {errorLog.user_email && (
+                        <div>
+                          <strong>User:</strong> {errorLog.user_name || errorLog.user_email}
+                        </div>
+                      )}
+                      
+                      {errorLog.error_component && (
+                        <div>
+                          <strong>Component:</strong> {errorLog.error_component}
+                        </div>
+                      )}
+                      
+                      {errorLog.error_url && (
+                        <div>
+                          <strong>URL:</strong> {errorLog.error_url}
+                        </div>
+                      )}
+                      
+                      {errorLog.error_stack && (
+                        <details className="mt-2">
+                          <summary className="cursor-pointer text-xs font-semibold">Stack Trace</summary>
+                          <pre className="mt-2 p-2 bg-white dark:bg-gray-700 rounded text-xs overflow-auto max-h-48">
+                            {errorLog.error_stack}
+                          </pre>
+                        </details>
+                      )}
+                      
+                      {errorLog.notes && (
+                        <div>
+                          <strong>Notes:</strong>
+                          <div className="mt-1 p-2 bg-white dark:bg-gray-700 rounded text-xs">
+                            {errorLog.notes}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+          </div>
+        </TabsContent>
+        )}
+
+      {/* Resolve Error Dialog */}
+      {selectedErrorLog && (
+        <Dialog open={!!selectedErrorLog} onOpenChange={() => setSelectedErrorLog(null)}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Resolve Error</DialogTitle>
+              <DialogDescription>
+                Add notes about how this error was resolved
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label>Error Message</Label>
+                <div className="p-2 bg-gray-100 dark:bg-gray-800 rounded text-sm font-mono">
+                  {selectedErrorLog.error_message}
+                </div>
+              </div>
+              <div>
+                <Label>Notes</Label>
+                <Input
+                  value={errorLogNotes}
+                  onChange={(e) => setErrorLogNotes(e.target.value)}
+                  placeholder="Add notes about how this error was resolved..."
+                />
+              </div>
+              <div className="flex gap-2 justify-end">
+                <Button variant="outline" onClick={() => {
+                  setSelectedErrorLog(null);
+                  setErrorLogNotes("");
+                }}>
+                  Cancel
+                </Button>
+                <Button onClick={() => handleResolveError(selectedErrorLog.id)}>
+                  Mark as Resolved
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       )}
+
+      {/* Days Off Reason Dialog */}
+      <Dialog open={showDaysOffReasonDialog} onOpenChange={setShowDaysOffReasonDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {pendingDaysOffAction && pendingDaysOffAction.hours > 0 ? "Add Days Off" : "Subtract Days Off"}
+            </DialogTitle>
+            <DialogDescription>
+              Please provide a reason for this change. This will be shown to the user in the notification.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {pendingDaysOffAction && (
+              <div className="text-sm text-gray-600 dark:text-gray-400">
+                <strong>Hours:</strong> {Math.abs(pendingDaysOffAction.hours)} hours ({Math.abs(pendingDaysOffAction.hours / 8).toFixed(2)} days)
+                <br />
+                <strong>User:</strong> {users.find(u => String(u.id) === String(pendingDaysOffAction.userId))?.name || users.find(u => String(u.id) === String(pendingDaysOffAction.userId))?.email || 'Unknown'}
+              </div>
+            )}
+            <div>
+              <Label htmlFor="days-off-reason">Reason *</Label>
+              <Textarea
+                id="days-off-reason"
+                placeholder="e.g., Correction for previous error, Bonus days, etc."
+                value={pendingDaysOffAction ? (daysOffReasonInput[pendingDaysOffAction.userId] || "") : ""}
+                onChange={(e) => {
+                  if (pendingDaysOffAction) {
+                    setDaysOffReasonInput(prev => ({ ...prev, [pendingDaysOffAction.userId]: e.target.value }));
+                  }
+                }}
+                className="mt-2"
+                rows={4}
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => {
+              setShowDaysOffReasonDialog(false);
+              setPendingDaysOffAction(null);
+              if (pendingDaysOffAction) {
+                setDaysOffReasonInput(prev => ({ ...prev, [pendingDaysOffAction.userId]: "" }));
+              }
+            }}>
+              Cancel
+            </Button>
+            <Button onClick={handleConfirmDaysOffChange}>
+              Confirm
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+      </Tabs>
     </div>
   );
 };

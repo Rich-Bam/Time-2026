@@ -89,7 +89,7 @@ interface DayData {
   entries: Entry[];
 }
 
-const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
+const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification = false }: { currentUser: any; hasUnreadDaysOffNotification?: boolean }) => {
   const { t, language } = useLanguage();
   const { toast } = useToast();
   const isMobile = useIsMobile();
@@ -118,12 +118,40 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
   const weekDates = getWeekDates(weekStart);
   const weekNumber = getISOWeekNumber(weekDates[0]);
   const totalDaysOff = 25;
-  const daysOffLeft = (totalDaysOff - dbDaysOff).toFixed(1);
+  // Calculate hours left first (more accurate), then convert to days
+  const totalHoursAvailable = totalDaysOff * 8;
+  const totalHoursTaken = dbDaysOff * 8;
+  const hoursLeft = totalHoursAvailable - totalHoursTaken;
+  const daysOffLeft = (hoursLeft / 8).toFixed(1);
+  const hoursLeftRounded = hoursLeft.toFixed(1);
 
-  // Fetch projects
+  // Fetch projects with status for validation - ALWAYS fetch ALL projects (including closed) for validation
+  const [projectsWithStatus, setProjectsWithStatus] = useState<{ id: number; name: string; status: string | null }[]>([]);
   useEffect(() => {
     const fetchProjects = async () => {
       try {
+        // First, fetch ALL projects with status for validation (including closed ones)
+        let allProjectsQuery = supabase.from("projects").select("id, name, user_id, status");
+        if (currentUser?.id) {
+          try {
+            const { data: allProjectsData } = await allProjectsQuery.or(`user_id.is.null,user_id.eq.${currentUser.id}`);
+            if (allProjectsData) {
+              // Store ALL projects (including closed) for validation
+              setProjectsWithStatus(allProjectsData
+                .filter(p => !p.user_id || p.user_id === currentUser.id)
+                .map(p => ({ id: p.id, name: p.name, status: p.status || null })));
+            }
+          } catch (err) {
+            // Fallback: fetch all projects without user_id filter
+            const { data: allData } = await supabase.from("projects").select("id, name, status");
+            setProjectsWithStatus((allData || []).map(p => ({ id: p.id, name: p.name, status: p.status || null })));
+          }
+        } else {
+          const { data: allData } = await supabase.from("projects").select("id, name, status");
+          setProjectsWithStatus((allData || []).map(p => ({ id: p.id, name: p.name, status: p.status || null })));
+        }
+        
+        // Now fetch only active projects for the dropdown
         let query = supabase.from("projects").select("id, name, user_id, status");
         if (currentUser?.id) {
           try {
@@ -155,6 +183,9 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
       } catch (err) {
         const { data } = await supabase.from("projects").select("id, name");
         setProjects(data || []);
+        // Still try to get status for validation
+        const { data: allData } = await supabase.from("projects").select("id, name, status");
+        setProjectsWithStatus((allData || []).map(p => ({ id: p.id, name: p.name, status: p.status || null })));
       }
     };
     fetchProjects();
@@ -491,6 +522,44 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
           variant: "destructive",
         });
         return;
+      }
+      // Validate that project is not closed - check directly from database for most up-to-date status
+      if (entry.project && requiresProject) {
+        // First check local cache
+        const selectedProject = projectsWithStatus.find(p => p.name === entry.project);
+        if (selectedProject && selectedProject.status === "closed") {
+          toast({
+            title: "Project Closed",
+            description: `The project "${entry.project}" is closed and cannot be used for time entries.`,
+            variant: "destructive",
+          });
+          return;
+        }
+        // Also check directly from database to ensure we have the latest status
+        const { data: projectData } = await supabase
+          .from("projects")
+          .select("id, name, status")
+          .eq("name", entry.project)
+          .maybeSingle();
+        
+        if (projectData && projectData.status === "closed") {
+          toast({
+            title: "Project Closed",
+            description: `The project "${entry.project}" is closed and cannot be used for time entries.`,
+            variant: "destructive",
+          });
+          // Refresh projectsWithStatus
+          const { data: allProjects } = await supabase
+            .from("projects")
+            .select("id, name, user_id, status");
+          if (allProjects && currentUser?.id) {
+            const filtered = allProjects.filter(p => !p.user_id || p.user_id === currentUser.id);
+            setProjectsWithStatus(filtered.map(p => ({ id: p.id, name: p.name, status: p.status || null })));
+          } else if (allProjects) {
+            setProjectsWithStatus(allProjects.map(p => ({ id: p.id, name: p.name, status: p.status || null })));
+          }
+          return;
+        }
       }
       if (!entry.startTime || !entry.endTime) {
         toast({
@@ -1004,6 +1073,45 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
           continue;
         }
         
+        // Validate that project is not closed - check directly from database for most up-to-date status
+        if (entry.project && requiresProject && !isDayOff) {
+          // First check local cache
+          const selectedProject = projectsWithStatus.find(p => p.name === entry.project);
+          if (selectedProject && selectedProject.status === "closed") {
+            toast({
+              title: "Project Closed",
+              description: `The project "${entry.project}" is closed and cannot be used for time entries.`,
+              variant: "destructive",
+            });
+            return;
+          }
+          // Also check directly from database to ensure we have the latest status
+          const { data: projectData } = await supabase
+            .from("projects")
+            .select("id, name, status")
+            .eq("name", entry.project)
+            .maybeSingle();
+          
+          if (projectData && projectData.status === "closed") {
+            toast({
+              title: "Project Closed",
+              description: `The project "${entry.project}" is closed and cannot be used for time entries.`,
+              variant: "destructive",
+            });
+            // Refresh projectsWithStatus
+            const { data: allProjects } = await supabase
+              .from("projects")
+              .select("id, name, user_id, status");
+            if (allProjects && currentUser?.id) {
+              const filtered = allProjects.filter(p => !p.user_id || p.user_id === currentUser.id);
+              setProjectsWithStatus(filtered.map(p => ({ id: p.id, name: p.name, status: p.status || null })));
+            } else if (allProjects) {
+              setProjectsWithStatus(allProjects.map(p => ({ id: p.id, name: p.name, status: p.status || null })));
+            }
+            return;
+          }
+        }
+        
         // Calculate hours from start/end time if available, otherwise use entered hours
         let hoursToSave = 0;
         // If full day off is checked, use 8 hours
@@ -1365,14 +1473,26 @@ const WeeklyCalendarEntrySimple = ({ currentUser }: { currentUser: any }) => {
             </Button>
           </div>
         </div>
-        <Card className="bg-blue-50 border-blue-200 w-full sm:w-auto sm:min-w-[200px]">
+        <Card className={`bg-blue-50 border-blue-200 w-full sm:w-auto sm:min-w-[200px] ${hasUnreadDaysOffNotification ? 'ring-2 ring-orange-400 ring-offset-2' : ''}`}>
           <CardHeader className="p-3 sm:p-6">
-            <CardTitle className="text-blue-900 text-sm sm:text-lg">{t('weekly.daysOffRemaining')}</CardTitle>
+            <CardTitle className="text-blue-900 text-sm sm:text-lg flex items-center justify-between">
+              <span>{t('weekly.daysOffRemaining')}</span>
+              {hasUnreadDaysOffNotification && (
+                <div className="flex items-center gap-1 bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300 px-2 py-0.5 rounded-full text-xs font-semibold animate-pulse">
+                  <span>⚠️</span>
+                </div>
+              )}
+            </CardTitle>
           </CardHeader>
           <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
             <div className="text-2xl sm:text-3xl font-bold text-blue-700">
-              {daysOffLeft} <span className="text-base sm:text-lg">({(parseFloat(daysOffLeft) * 8).toFixed(1)} {t('weekly.hours')})</span>
+              {daysOffLeft} <span className="text-base sm:text-lg">({hoursLeftRounded} {t('weekly.hours')})</span>
             </div>
+            {hasUnreadDaysOffNotification && (
+              <div className="text-xs sm:text-sm text-orange-600 dark:text-orange-400 mt-2 font-semibold">
+                ⚠️ Updated!
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

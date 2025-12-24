@@ -227,6 +227,9 @@ const translations: Record<Language, Record<string, string>> = {
     'admin.add': 'Toevoegen',
     'admin.subtract': 'Aftrekken',
     'admin.hours': 'Uren',
+    'admin.hoursTaken': 'Uren Genomen',
+    'admin.daysOffOverview': 'Vrije Dagen Overzicht',
+    'admin.daysOffOverviewDescription': 'Overzicht van alle vrije dagen die gebruikers nog over hebben voor het huidige jaar.',
     'admin.newPassword': 'Nieuw wachtwoord',
     'admin.date': 'Datum',
     'admin.workType': 'Werk Type',
@@ -462,6 +465,9 @@ const translations: Record<Language, Record<string, string>> = {
     'admin.add': 'Add',
     'admin.subtract': 'Subtract',
     'admin.hours': 'Hours',
+    'admin.hoursTaken': 'Hours Taken',
+    'admin.daysOffOverview': 'Days Off Overview',
+    'admin.daysOffOverviewDescription': 'Overview of all users\' remaining days off for the current year.',
     'admin.newPassword': 'New password',
     'admin.date': 'Date',
     'admin.workType': 'Work Type',
@@ -597,6 +603,10 @@ const translations: Record<Language, Record<string, string>> = {
     'admin.confirmedWeeks': 'Semanas Confirmadas',
     'admin.approveWeek': 'Aprobar',
     'admin.reopenWeek': 'Reabrir',
+    'admin.hours': 'Horas',
+    'admin.hoursTaken': 'Horas Tomadas',
+    'admin.daysOffOverview': 'Resumen de Días Libres',
+    'admin.daysOffOverviewDescription': 'Resumen de todos los días libres que los usuarios tienen restantes para el año actual.',
     
     // Common
     'common.loading': 'Cargando...',
@@ -742,6 +752,10 @@ const translations: Record<Language, Record<string, string>> = {
     'admin.confirmedWeeks': 'Επιβεβαιωμένες Εβδομάδες',
     'admin.approveWeek': 'Έγκριση',
     'admin.reopenWeek': 'Επαναφορά',
+    'admin.hours': 'Ώρες',
+    'admin.hoursTaken': 'Ώρες που Λήφθηκαν',
+    'admin.daysOffOverview': 'Επισκόπηση Ημερών Άδειας',
+    'admin.daysOffOverviewDescription': 'Επισκόπηση όλων των ημερών άδειας που απομένουν στους χρήστες για το τρέχον έτος.',
     
     // Common
     'common.loading': 'Φόρτωση...',
@@ -866,6 +880,10 @@ const translations: Record<Language, Record<string, string>> = {
     'admin.confirmedWeeks': 'Săptămâni Confirmate',
     'admin.approveWeek': 'Aprobă',
     'admin.reopenWeek': 'Redeschide',
+    'admin.hours': 'Ore',
+    'admin.hoursTaken': 'Ore Luate',
+    'admin.daysOffOverview': 'Prezentare Generală Zile Libere',
+    'admin.daysOffOverviewDescription': 'Prezentare generală a tuturor zilelor libere rămase pentru utilizatori pentru anul curent.',
     
     // Common
     'common.loading': 'Se încarcă...',
@@ -990,6 +1008,10 @@ const translations: Record<Language, Record<string, string>> = {
     'admin.confirmedWeeks': 'Potwierdzone Tygodnie',
     'admin.approveWeek': 'Zatwierdź',
     'admin.reopenWeek': 'Otwórz Ponownie',
+    'admin.hours': 'Godziny',
+    'admin.hoursTaken': 'Godziny Wzięte',
+    'admin.daysOffOverview': 'Przegląd Dni Wolnych',
+    'admin.daysOffOverviewDescription': 'Przegląd wszystkich dni wolnych, które użytkownicy mają pozostałe na bieżący rok.',
     
     // Common
     'common.loading': 'Ładowanie...',

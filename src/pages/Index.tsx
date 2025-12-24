@@ -42,8 +42,19 @@ const Index = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
   const SUPER_ADMIN_EMAIL = "r.blance@bampro.nl";
+  
+  // Make currentUser available globally for error logging
+  useEffect(() => {
+    (window as any).__currentUser = currentUser;
+    return () => {
+      delete (window as any).__currentUser;
+    };
+  }, [currentUser]);
   const [showReminderDialog, setShowReminderDialog] = useState(false);
   const [userReminder, setUserReminder] = useState<any>(null);
+  const [showDaysOffDialog, setShowDaysOffDialog] = useState(false);
+  const [daysOffNotification, setDaysOffNotification] = useState<any>(null);
+  const [hasUnreadDaysOffNotification, setHasUnreadDaysOffNotification] = useState(false);
   const [dateRange, setDateRange] = useState({ from: "", to: "" });
   const [exporting, setExporting] = useState(false);
   const [activeTab, setActiveTab] = useState("weekly");
@@ -106,6 +117,99 @@ const Index = () => {
     };
     
     checkReminders();
+  }, [isLoggedIn, currentUser]);
+
+  // Check for unread days off notifications
+  // This function will be called on login, page load, and when user returns to the page
+  const checkDaysOffNotifications = async () => {
+    if (!isLoggedIn || !currentUser) {
+      console.log("Days off notification check skipped: not logged in or no user", { isLoggedIn, hasUser: !!currentUser });
+      return;
+    }
+    
+    try {
+      console.log("Checking days off notifications for user:", currentUser.id, currentUser.email);
+      const userId = String(currentUser.id);
+      console.log("Querying with user_id:", userId);
+      
+      const { data: notifications, error } = await supabase
+        .from("days_off_notifications")
+        .select("*")
+        .eq("user_id", userId)
+        .is("read_at", null)
+        .order("created_at", { ascending: false })
+        .limit(1);
+      
+      console.log("Days off notifications query result:", { notifications, error, count: notifications?.length });
+      
+      // If table doesn't exist, just ignore
+      if (error) {
+        if (error.message?.includes("does not exist") || error.message?.includes("relation") || error.code === "42P01") {
+          console.log("Days off notifications table not found - skipping check. Please run create_days_off_notifications_table.sql in Supabase.");
+          return;
+        }
+        console.error("Error checking days off notifications:", error);
+        return;
+      }
+      
+      if (notifications && notifications.length > 0) {
+        // Only show dialog if we don't already have this notification shown
+        const notificationId = notifications[0].id;
+        if (!daysOffNotification || daysOffNotification.id !== notificationId) {
+          console.log("Found unread days off notification:", notifications[0]);
+          setDaysOffNotification(notifications[0]);
+          setShowDaysOffDialog(true);
+          setHasUnreadDaysOffNotification(true);
+        }
+      } else {
+        console.log("No unread days off notifications found");
+        setHasUnreadDaysOffNotification(false);
+      }
+    } catch (err) {
+      console.error("Error in days off notification check:", err);
+    }
+  };
+
+  // Check notifications when user logs in or currentUser changes
+  useEffect(() => {
+    checkDaysOffNotifications();
+  }, [isLoggedIn, currentUser]);
+
+  // Check notifications when page becomes visible (user returns to tab/window)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && isLoggedIn && currentUser) {
+        console.log("Page became visible, checking for new notifications");
+        checkDaysOffNotifications();
+      }
+    };
+
+    const handleFocus = () => {
+      if (isLoggedIn && currentUser) {
+        console.log("Window gained focus, checking for new notifications");
+        checkDaysOffNotifications();
+      }
+    };
+
+    // Listen for visibility changes (tab switching)
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    // Listen for window focus (returning to window)
+    window.addEventListener('focus', handleFocus);
+
+    // Also check periodically (every 30 seconds) if user is logged in
+    const interval = setInterval(() => {
+      if (isLoggedIn && currentUser && document.visibilityState === 'visible') {
+        console.log("Periodic check for new notifications");
+        checkDaysOffNotifications();
+      }
+    }, 30000); // Check every 30 seconds
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
+      clearInterval(interval);
+    };
   }, [isLoggedIn, currentUser]);
 
   // Check for saved session on page load (only if rememberMe was checked)
@@ -917,6 +1021,7 @@ const Index = () => {
       user_email: users.find(u => u.id === row.user_id)?.email || ""
     }));
     const selectedUser = users.find(u => u.id === selectedUserId);
+    const userLabel = selectedUser ? `_${selectedUser.name || selectedUser.email}` : "";
     // Create filename with user name and week number
     const userName = selectedUser ? (selectedUser.name || selectedUser.email || "User").replace(/[^a-zA-Z0-9]/g, '_') : "All_Users";
     const filename = `${userName}_Week${weekNum}_${year}.xlsx`;
@@ -925,6 +1030,7 @@ const Index = () => {
       dateRange: { from, to },
       period: `Week ${weekNum}, ${year}`
     });
+    
     setExporting(false);
     toast({
       title: "Export Successful",
@@ -1327,6 +1433,21 @@ const Index = () => {
     }
   };
 
+  const handleDaysOffNotificationRead = async () => {
+    if (!daysOffNotification) return;
+    
+    const { error } = await supabase
+      .from("days_off_notifications")
+      .update({ read_at: new Date().toISOString() })
+      .eq("id", daysOffNotification.id);
+    
+    if (!error) {
+      setShowDaysOffDialog(false);
+      setDaysOffNotification(null);
+      setHasUnreadDaysOffNotification(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-orange-100 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
       {/* Reminder Dialog for Users */}
@@ -1361,6 +1482,67 @@ const Index = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Days Off Notification Dialog */}
+      <Dialog open={showDaysOffDialog} onOpenChange={setShowDaysOffDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-green-700 dark:text-green-400">
+              <Calendar className="h-6 w-6 text-green-500 dark:text-green-400" />
+              Days Off Update
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-4 text-base text-gray-700 dark:text-gray-300">
+            {daysOffNotification && (
+              <>
+                <p className="mb-3">
+                  {daysOffNotification.hours_changed > 0 ? (
+                    <span className="text-green-700 dark:text-green-400 font-semibold">
+                      {Math.abs(daysOffNotification.days_changed).toFixed(2)} day(s) off ({Math.abs(daysOffNotification.hours_changed).toFixed(2)} hours) have been <strong>added</strong> to your account.
+                    </span>
+                  ) : (
+                    <span className="text-orange-700 dark:text-orange-400 font-semibold">
+                      {Math.abs(daysOffNotification.days_changed).toFixed(2)} day(s) off ({Math.abs(daysOffNotification.hours_changed).toFixed(2)} hours) have been <strong>deducted</strong> from your account.
+                    </span>
+                  )}
+                </p>
+                {daysOffNotification.admin_name && (
+                  <p className="mb-3 text-sm text-gray-600 dark:text-gray-400">
+                    Changed by: <strong>{daysOffNotification.admin_name}</strong>
+                  </p>
+                )}
+                {daysOffNotification.message && (
+                  <>
+                    {daysOffNotification.message.includes('\n\nReason:') ? (
+                      <>
+                        <p className="mb-2 text-sm text-gray-600 dark:text-gray-400">
+                          {daysOffNotification.message.split('\n\nReason:')[0]}
+                        </p>
+                        <div className="mt-3 p-3 bg-gray-100 dark:bg-gray-800 rounded-md">
+                          <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Reason:</p>
+                          <p className="text-sm text-gray-600 dark:text-gray-400">
+                            {daysOffNotification.message.split('\n\nReason:')[1]}
+                          </p>
+                        </div>
+                      </>
+                    ) : (
+                      <p className="mb-3 text-sm text-gray-600 dark:text-gray-400">
+                        {daysOffNotification.message}
+                      </p>
+                    )}
+                  </>
+                )}
+              </>
+            )}
+          </div>
+          <DialogFooter className="flex gap-2 justify-end">
+            <Button onClick={handleDaysOffNotificationRead} className="bg-green-600 hover:bg-green-700">
+              OK
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Header */}
       <header className="bg-white dark:bg-gray-800 shadow-lg border-b border-orange-100 dark:border-gray-700">
         <div className="container mx-auto px-3 sm:px-4 md:px-6 py-3 sm:py-4 md:py-6">
@@ -1468,7 +1650,7 @@ const Index = () => {
       {/* Main Content */}
       <div className="container mx-auto px-3 sm:px-4 md:px-6 py-3 sm:py-4 md:py-8">
         {activeTab === 'timesheet' && (
-          <TimesheetEntry currentUser={currentUser} />
+          <TimesheetEntry currentUser={currentUser} hasUnreadDaysOffNotification={hasUnreadDaysOffNotification} />
         )}
         {activeTab === 'weekly' && !isAdministratie(currentUser) && (
           <div className="space-y-4">
@@ -1493,9 +1675,9 @@ const Index = () => {
               </Button>
             </div>
             {useSimpleWeeklyView ? (
-              <WeeklyCalendarEntrySimple currentUser={currentUser} />
+              <WeeklyCalendarEntrySimple currentUser={currentUser} hasUnreadDaysOffNotification={hasUnreadDaysOffNotification} />
             ) : (
-              <WeeklyCalendarEntry currentUser={currentUser} />
+              <WeeklyCalendarEntry currentUser={currentUser} hasUnreadDaysOffNotification={hasUnreadDaysOffNotification} />
             )}
           </div>
         )}

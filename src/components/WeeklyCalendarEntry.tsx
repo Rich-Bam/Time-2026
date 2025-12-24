@@ -78,7 +78,7 @@ const timeOptions = Array.from({ length: 24 * 4 }, (_, i) => {
   return `${h}:${m}`;
 });
 
-const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
+const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false }: { currentUser: any; hasUnreadDaysOffNotification?: boolean }) => {
   const { t } = useLanguage();
   const [weekStart, setWeekStart] = useState(() => {
     const now = new Date();
@@ -99,12 +99,36 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
   const weekDates = getWeekDates(weekStart);
   const weekNumber = getISOWeekNumber(weekDates[0]);
 
+  // Store projects with status for validation - ALWAYS fetch ALL projects (including closed) for validation
+  const [projectsWithStatus, setProjectsWithStatus] = useState<{ id: number; name: string; status: string | null }[]>([]);
   useEffect(() => {
     const fetchProjects = async () => {
       try {
-        // Fetch global projects (user_id is null) and user's custom projects
-        // Only show active projects (not closed) for time entry
-        // Try to fetch with user_id filter, but fallback to all projects if column doesn't exist
+        // First, fetch ALL projects with status for validation (including closed ones)
+        let allProjectsQuery = supabase
+          .from("projects")
+          .select("id, name, user_id, status");
+        
+        if (currentUser?.id) {
+          try {
+            const { data: allProjectsData } = await allProjectsQuery.or(`user_id.is.null,user_id.eq.${currentUser.id}`);
+            if (allProjectsData) {
+              // Store ALL projects (including closed) for validation
+              setProjectsWithStatus(allProjectsData
+                .filter(p => !p.user_id || p.user_id === currentUser.id)
+                .map(p => ({ id: p.id, name: p.name, status: p.status || null })));
+            }
+          } catch (err) {
+            // Fallback: fetch all projects without user_id filter
+            const { data: allData } = await supabase.from("projects").select("id, name, status");
+            setProjectsWithStatus((allData || []).map(p => ({ id: p.id, name: p.name, status: p.status || null })));
+          }
+        } else {
+          const { data: allData } = await supabase.from("projects").select("id, name, status");
+          setProjectsWithStatus((allData || []).map(p => ({ id: p.id, name: p.name, status: p.status || null })));
+        }
+        
+        // Now fetch only active projects for the dropdown
         let query = supabase
           .from("projects")
           .select("id, name, user_id, status");
@@ -147,6 +171,9 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
         // Fallback: fetch all projects without user_id/status filtering
         const { data } = await supabase.from("projects").select("id, name");
         setProjects(data || []);
+        // Still try to get status for validation
+        const { data: allData } = await supabase.from("projects").select("id, name, status");
+        setProjectsWithStatus((allData || []).map(p => ({ id: p.id, name: p.name, status: p.status || null })));
       }
     };
     fetchProjects();
@@ -255,12 +282,38 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
   };
 
   const handleAddEntry = (dayIdx: number) => {
+    const weekKey = weekDates[0].toISOString().split('T')[0];
+    const isWeekLocked = confirmedWeeks[weekKey];
+    
+    // Non-admins cannot add entries if week is confirmed
+    if (isWeekLocked && !currentUser?.isAdmin) {
+      toast({
+        title: "Not Allowed",
+        description: "This week is confirmed and cannot be changed anymore.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     setDays(days.map((day, i) =>
       i === dayIdx ? { ...day, entries: [...day.entries, { workType: "", project: "", hours: "", startTime: "", endTime: "" }] } : day
     ));
   };
 
   const handleRemoveEntry = (dayIdx: number, entryIdx: number) => {
+    const weekKey = weekDates[0].toISOString().split('T')[0];
+    const isWeekLocked = confirmedWeeks[weekKey];
+    
+    // Non-admins cannot remove entries if week is confirmed
+    if (isWeekLocked && !currentUser?.isAdmin) {
+      toast({
+        title: "Not Allowed",
+        description: "This week is confirmed and cannot be changed anymore.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     setDays(days.map((day, i) =>
       i === dayIdx ? { ...day, entries: day.entries.filter((_, j) => j !== entryIdx) } : day
     ));
@@ -269,6 +322,14 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
   const handleEntryChange = (dayIdx: number, entryIdx: number, field: string, value: any) => {
     // Prevent updates for submitted entries (entryIdx === -1)
     if (entryIdx < 0) return;
+    
+    const weekKey = weekDates[0].toISOString().split('T')[0];
+    const isWeekLocked = confirmedWeeks[weekKey];
+    
+    // Non-admins cannot change entries if week is confirmed
+    if (isWeekLocked && !currentUser?.isAdmin) {
+      return;
+    }
     
     setDays(days.map((day, i) => {
       if (i !== dayIdx) return day;
@@ -321,7 +382,12 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
 
   // Days Off Remaining calculation (for current year)
   const totalDaysOff = 25;
-  const daysOffLeft = (totalDaysOff - dbDaysOff).toFixed(1);
+  // Calculate hours left first (more accurate), then convert to days
+  const totalHoursAvailable = totalDaysOff * 8;
+  const totalHoursTaken = dbDaysOff * 8;
+  const hoursLeft = totalHoursAvailable - totalHoursTaken;
+  const daysOffLeft = (hoursLeft / 8).toFixed(1);
+  const hoursLeftRounded = hoursLeft.toFixed(1);
 
   const handleSubmitAll = async () => {
     const today = new Date();
@@ -463,6 +529,44 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
             variant: "destructive",
           });
           return;
+        }
+        // Validate that project is not closed - check directly from database for most up-to-date status
+        if (entry.project && requiresProject && !isDayOff) {
+          // First check local cache
+          const selectedProject = projectsWithStatus.find(p => p.name === entry.project);
+          if (selectedProject && selectedProject.status === "closed") {
+            toast({
+              title: "Project Closed",
+              description: `The project "${entry.project}" is closed and cannot be used for time entries.`,
+              variant: "destructive",
+            });
+            return;
+          }
+          // Also check directly from database to ensure we have the latest status
+          const { data: projectData } = await supabase
+            .from("projects")
+            .select("id, name, status")
+            .eq("name", entry.project)
+            .maybeSingle();
+          
+          if (projectData && projectData.status === "closed") {
+            toast({
+              title: "Project Closed",
+              description: `The project "${entry.project}" is closed and cannot be used for time entries.`,
+              variant: "destructive",
+            });
+            // Refresh projectsWithStatus
+            const { data: allProjects } = await supabase
+              .from("projects")
+              .select("id, name, user_id, status");
+            if (allProjects && currentUser?.id) {
+              const filtered = allProjects.filter(p => !p.user_id || p.user_id === currentUser.id);
+              setProjectsWithStatus(filtered.map(p => ({ id: p.id, name: p.name, status: p.status || null })));
+            } else if (allProjects) {
+              setProjectsWithStatus(allProjects.map(p => ({ id: p.id, name: p.name, status: p.status || null })));
+            }
+            return;
+          }
         }
         // For weekends, skip empty entries
         if (isWeekend && (!entry.project && !isDayOff) && !entry.workType && !entry.hours) {
@@ -1356,15 +1460,27 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
             </Button>
           </div>
         </div>
-        <Card className="bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-800 min-w-[260px]">
+        <Card className={`bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-800 min-w-[260px] ${hasUnreadDaysOffNotification ? 'ring-2 ring-orange-400 ring-offset-2' : ''}`}>
           <CardHeader>
-            <CardTitle className="text-blue-900 dark:text-blue-100 text-lg">{t('weekly.daysOffRemaining')}</CardTitle>
+            <CardTitle className="text-blue-900 dark:text-blue-100 text-lg flex items-center justify-between">
+              <span>{t('weekly.daysOffRemaining')}</span>
+              {hasUnreadDaysOffNotification && (
+                <div className="flex items-center gap-1 bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300 px-2 py-0.5 rounded-full text-xs font-semibold animate-pulse">
+                  <span>⚠️</span>
+                </div>
+              )}
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-blue-700 dark:text-blue-300">
-              {daysOffLeft} <span className="text-lg">({(parseFloat(daysOffLeft) * 8).toFixed(1)} {t('weekly.hours')})</span>
+              {daysOffLeft} <span className="text-lg">({hoursLeftRounded} {t('weekly.hours')})</span>
             </div>
-            <div className="text-sm text-blue-600 dark:text-blue-400 mt-2">{t('weekly.daysOffLeft', { days: daysOffLeft })}</div>
+            <div className="text-sm text-blue-600 dark:text-blue-400 mt-2">
+              {t('weekly.daysOffLeft', { days: daysOffLeft })}
+              {hasUnreadDaysOffNotification && (
+                <span className="block mt-1 text-orange-600 dark:text-orange-400 font-semibold">⚠️ Updated!</span>
+              )}
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -1428,289 +1544,276 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
                     const isLocked = confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin;
                     const dayName = day.date.toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short' });
                     
-                    // Combine editable entries and submitted entries
-                    const allEntriesForDay = [
-                      ...day.entries,
-                      ...submitted.map(s => ({ 
-                        id: s.id, 
-                        workType: s.description, 
-                        project: s.project, 
-                        hours: s.hours, 
-                        startTime: s.startTime, 
-                        endTime: s.endTime,
-                        isSubmitted: true 
-                      }))
-                    ];
-
                     // Ensure at least one empty entry for editing
                     const editableEntries = day.entries.length > 0 
                       ? day.entries 
                       : [{ workType: "", project: "", hours: "", startTime: "", endTime: "" }];
+                    
+                    // Calculate total rows for this day (editable + submitted)
+                    const totalRows = editableEntries.length + submitted.length;
+                    const hasRows = totalRows > 0;
 
-                    return editableEntries.map((entry, entryIdx) => {
-                      const isFirstEntry = entryIdx === 0;
-                      const rowSpan = isFirstEntry ? editableEntries.length : 0;
-                      
-                      return (
-                        <tr key={`${dayIdx}-${entryIdx}`} className="border-t hover:bg-gray-50 dark:hover:bg-gray-800">
-                          {isFirstEntry && (
-                            <td rowSpan={rowSpan} className="border p-2 sticky left-0 bg-white dark:bg-gray-900 font-medium align-top">
-                              {dayName}
-                              <div className="mt-2 space-y-1">
-                                <Button 
-                                  variant="outline" 
-                                  size="sm"
-                                  className="h-6 text-xs w-full"
-                                  onClick={() => handleAddEntry(dayIdx)}
-                                  disabled={isLocked}
+                    // Render all rows for this day (editable entries first, then submitted entries)
+                    return (
+                      <>
+                        {editableEntries.map((entry, entryIdx) => {
+                          const isFirstRow = entryIdx === 0 && submitted.length === 0;
+                          const isFirstEntry = entryIdx === 0;
+                          const rowSpan = isFirstEntry && hasRows ? totalRows : 0;
+                          
+                          return (
+                            <tr key={`${dayIdx}-${entryIdx}`} className="border-t hover:bg-gray-50 dark:hover:bg-gray-800">
+                              {isFirstEntry && (
+                                <td rowSpan={rowSpan || (hasRows ? totalRows : 1)} className="border p-2 sticky left-0 bg-white dark:bg-gray-900 font-medium align-top">
+                                  {dayName}
+                                  <div className="mt-2 space-y-1">
+                                    <Button 
+                                      variant="outline" 
+                                      size="sm"
+                                      className="h-6 text-xs w-full"
+                                      onClick={() => handleAddEntry(dayIdx)}
+                                      disabled={isLocked}
+                                    >
+                                      + {t('weekly.add')}
+                                    </Button>
+                                    {dayIdx > 0 && (
+                                      <Button 
+                                        variant="outline" 
+                                        size="sm"
+                                        className="h-6 text-xs w-full"
+                                        onClick={() => handleCopyFromPreviousDay(dayIdx)}
+                                        disabled={isLocked}
+                                      >
+                                        {t('weekly.copyPrevious')}
+                                      </Button>
+                                    )}
+                                  </div>
+                                </td>
+                              )}
+                              <td className="border p-1">
+                                <Popover
+                                  open={openWorkTypePopovers[`${dayIdx}-${entryIdx}`] || false}
+                                  onOpenChange={(open) => {
+                                    const key = `${dayIdx}-${entryIdx}`;
+                                    setOpenWorkTypePopovers(prev => ({ ...prev, [key]: open }));
+                                    if (!open) {
+                                      setWorkTypeSearchValues(prev => ({ ...prev, [key]: "" }));
+                                    }
+                                  }}
                                 >
-                                  + {t('weekly.add')}
-                                </Button>
-                                {dayIdx > 0 && (
+                                  <PopoverTrigger asChild>
+                                    <Button
+                                      variant="outline"
+                                      role="combobox"
+                                      className="w-full justify-between h-8 text-xs"
+                                      disabled={isLocked}
+                                    >
+                                      {entry.workType 
+                                        ? `${entry.workType} - ${workTypes.find(t => String(t.value) === entry.workType)?.label || ""}`
+                                        : t('weekly.type')}
+                                      <ChevronsUpDown className="ml-2 h-3 w-3 shrink-0 opacity-50" />
+                                    </Button>
+                                  </PopoverTrigger>
+                                  <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                                    <Command>
+                                      <CommandInput
+                                        placeholder={t('weekly.searchWorkType')}
+                                        value={workTypeSearchValues[`${dayIdx}-${entryIdx}`] || ""}
+                                        onValueChange={(value) => {
+                                          const key = `${dayIdx}-${entryIdx}`;
+                                          setWorkTypeSearchValues(prev => ({ ...prev, [key]: value }));
+                                        }}
+                                      />
+                                      <CommandList>
+                                        <CommandEmpty>{t('weekly.noWorkTypeFound')}</CommandEmpty>
+                                        <CommandGroup>
+                                          {workTypes
+                                            .filter(type =>
+                                              !workTypeSearchValues[`${dayIdx}-${entryIdx}`] ||
+                                              String(type.value).includes(workTypeSearchValues[`${dayIdx}-${entryIdx}`]) ||
+                                              type.label.toLowerCase().includes(workTypeSearchValues[`${dayIdx}-${entryIdx}`].toLowerCase())
+                                            )
+                                            .map((type) => (
+                                              <CommandItem
+                                                key={type.value}
+                                                value={String(type.value)}
+                                                onSelect={() => {
+                                                  handleEntryChange(dayIdx, entryIdx, "workType", String(type.value));
+                                                  const key = `${dayIdx}-${entryIdx}`;
+                                                  setOpenWorkTypePopovers(prev => ({ ...prev, [key]: false }));
+                                                  setWorkTypeSearchValues(prev => ({ ...prev, [key]: "" }));
+                                                }}
+                                              >
+                                                <Check
+                                                  className={cn(
+                                                    "mr-2 h-4 w-4",
+                                                    entry.workType === String(type.value) ? "opacity-100" : "opacity-0"
+                                                  )}
+                                                />
+                                                {type.value} - {type.label}
+                                              </CommandItem>
+                                            ))}
+                                        </CommandGroup>
+                                      </CommandList>
+                                    </Command>
+                                  </PopoverContent>
+                                </Popover>
+                                {/* Full Day Off checkbox for work type 31 */}
+                                {entry.workType === "31" && (
+                                  <div className="flex items-center space-x-2 mt-1">
+                                    <Checkbox
+                                      id={`fullDayOff-overview-${dayIdx}-${entryIdx}`}
+                                      checked={entry.fullDayOff || false}
+                                      onCheckedChange={(checked) => {
+                                        handleEntryChange(dayIdx, entryIdx, "fullDayOff", checked === true);
+                                      }}
+                                      disabled={isLocked}
+                                    />
+                                    <Label 
+                                      htmlFor={`fullDayOff-overview-${dayIdx}-${entryIdx}`}
+                                      className="text-xs font-medium cursor-pointer"
+                                    >
+                                      {t('weekly.fullDayOff') || 'Hele dag vrij (8 uren)'}
+                                    </Label>
+                                  </div>
+                                )}
+                              </td>
+                              <td className="border p-1">
+                                <Select
+                                  value={entry.project || ""}
+                                  onValueChange={val => handleEntryChange(dayIdx, entryIdx, "project", val)}
+                                  disabled={!workTypeRequiresProject(entry.workType) || isLocked}
+                                >
+                                  <SelectTrigger className="h-8 text-xs"><SelectValue placeholder={t('weekly.projectPlaceholder')} /></SelectTrigger>
+                                  <SelectContent>
+                                    {projects.map(project => (
+                                      <SelectItem key={project.id} value={project.name}>{project.name}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </td>
+                              <td className="border p-1">
+                                <Input
+                                  type="text"
+                                  value={entry.startTime || ""}
+                                  onChange={e => handleEntryChange(dayIdx, entryIdx, "startTime", roundToQuarterHour(e.target.value))}
+                                  placeholder={t('weekly.startPlaceholder')}
+                                  className="h-8 text-xs w-20"
+                                  disabled={isLocked}
+                                />
+                              </td>
+                              <td className="border p-1">
+                                <Input
+                                  type="text"
+                                  value={entry.endTime || ""}
+                                  onChange={e => handleEntryChange(dayIdx, entryIdx, "endTime", roundToQuarterHour(e.target.value))}
+                                  placeholder={t('weekly.endPlaceholder')}
+                                  className="h-8 text-xs w-20"
+                                  disabled={isLocked}
+                                />
+                              </td>
+                              <td className="border p-1">
+                                <div className="h-8 flex items-center justify-center bg-gray-50 dark:bg-gray-800 border rounded px-2 text-xs font-medium">
+                                  {(() => {
+                                    // If full day off is checked, show 8 hours
+                                    if (entry.workType === "31" && entry.fullDayOff) {
+                                      return "8h";
+                                    }
+                                    if (entry.startTime && entry.endTime) {
+                                      const start = new Date(`2000-01-01T${entry.startTime}`);
+                                      const end = new Date(`2000-01-01T${entry.endTime}`);
+                                      const diff = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+                                      if (!isNaN(diff) && diff > 0) {
+                                        return `${diff.toFixed(2)}h`;
+                                      }
+                                    }
+                                    if (entry.hours) {
+                                      const hours = parseFloat(entry.hours);
+                                      if (!isNaN(hours) && hours > 0) {
+                                        return `${hours.toFixed(2)}h`;
+                                      }
+                                    }
+                                    return "-";
+                                  })()}
+                                </div>
+                              </td>
+                              <td className="border p-1 text-center">
+                                <div className="flex gap-1 justify-center">
                                   <Button 
                                     variant="outline" 
                                     size="sm"
-                                    className="h-6 text-xs w-full"
-                                    onClick={() => handleCopyFromPreviousDay(dayIdx)}
+                                    className="h-7 text-xs"
+                                    onClick={() => handleSubmitDay(dayIdx)}
                                     disabled={isLocked}
                                   >
-                                    {t('weekly.copyPrevious')}
+                                    ✓
                                   </Button>
-                                )}
-                              </div>
+                                  {editableEntries.length > 1 && (
+                                    <Button 
+                                      variant="destructive" 
+                                      size="sm"
+                                      className="h-7 w-7 text-xs"
+                                      onClick={() => handleRemoveEntry(dayIdx, entryIdx)}
+                                      disabled={isLocked}
+                                    >
+                                      -
+                                    </Button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                        {/* Show submitted entries right after editable entries for this day */}
+                        {submitted.map((submittedEntry, subIdx) => (
+                          <tr key={`submitted-${dayIdx}-${subIdx}`} className="border-t bg-gray-50 dark:bg-gray-800/50">
+                            <td className="border p-1">
+                              <span className="text-xs">{getWorkTypeLabel(submittedEntry.description || "")}</span>
                             </td>
-                          )}
-                          <td className="border p-1">
-                            <Popover
-                              open={openWorkTypePopovers[`${dayIdx}-${entryIdx}`] || false}
-                              onOpenChange={(open) => {
-                                const key = `${dayIdx}-${entryIdx}`;
-                                setOpenWorkTypePopovers(prev => ({ ...prev, [key]: open }));
-                                if (!open) {
-                                  setWorkTypeSearchValues(prev => ({ ...prev, [key]: "" }));
-                                }
-                              }}
-                            >
-                              <PopoverTrigger asChild>
-                                <Button
-                                  variant="outline"
-                                  role="combobox"
-                                  className="w-full justify-between h-8 text-xs"
-                                  disabled={isLocked}
-                                >
-                                  {entry.workType 
-                                    ? `${entry.workType} - ${workTypes.find(t => String(t.value) === entry.workType)?.label || ""}`
-                                    : t('weekly.type')}
-                                  <ChevronsUpDown className="ml-2 h-3 w-3 shrink-0 opacity-50" />
-                                </Button>
-                              </PopoverTrigger>
-                              <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
-                                <Command>
-                                  <CommandInput
-                                    placeholder={t('weekly.searchWorkType')}
-                                    value={workTypeSearchValues[`${dayIdx}-${entryIdx}`] || ""}
-                                    onValueChange={(value) => {
-                                      const key = `${dayIdx}-${entryIdx}`;
-                                      setWorkTypeSearchValues(prev => ({ ...prev, [key]: value }));
-                                    }}
-                                  />
-                                  <CommandList>
-                                    <CommandEmpty>{t('weekly.noWorkTypeFound')}</CommandEmpty>
-                                    <CommandGroup>
-                                      {workTypes
-                                        .filter(type =>
-                                          !workTypeSearchValues[`${dayIdx}-${entryIdx}`] ||
-                                          String(type.value).includes(workTypeSearchValues[`${dayIdx}-${entryIdx}`]) ||
-                                          type.label.toLowerCase().includes(workTypeSearchValues[`${dayIdx}-${entryIdx}`].toLowerCase())
-                                        )
-                                        .map((type) => (
-                                          <CommandItem
-                                            key={type.value}
-                                            value={String(type.value)}
-                                            onSelect={() => {
-                                              handleEntryChange(dayIdx, entryIdx, "workType", String(type.value));
-                                              const key = `${dayIdx}-${entryIdx}`;
-                                              setOpenWorkTypePopovers(prev => ({ ...prev, [key]: false }));
-                                              setWorkTypeSearchValues(prev => ({ ...prev, [key]: "" }));
-                                            }}
-                                          >
-                                            <Check
-                                              className={cn(
-                                                "mr-2 h-4 w-4",
-                                                entry.workType === String(type.value) ? "opacity-100" : "opacity-0"
-                                              )}
-                                            />
-                                            {type.value} - {type.label}
-                                          </CommandItem>
-                                        ))}
-                                    </CommandGroup>
-                                  </CommandList>
-                                </Command>
-                              </PopoverContent>
-                            </Popover>
-                            {/* Full Day Off checkbox for work type 31 */}
-                            {entry.workType === "31" && (
-                              <div className="flex items-center space-x-2 mt-1">
-                                <Checkbox
-                                  id={`fullDayOff-overview-${dayIdx}-${entryIdx}`}
-                                  checked={entry.fullDayOff || false}
-                                  onCheckedChange={(checked) => {
-                                    handleEntryChange(dayIdx, entryIdx, "fullDayOff", checked === true);
-                                  }}
-                                  disabled={isLocked}
-                                />
-                                <Label 
-                                  htmlFor={`fullDayOff-overview-${dayIdx}-${entryIdx}`}
-                                  className="text-xs font-medium cursor-pointer"
-                                >
-                                  {t('weekly.fullDayOff') || 'Hele dag vrij (8 uren)'}
-                                </Label>
-                              </div>
-                            )}
-                          </td>
-                          <td className="border p-1">
-                            <Select
-                              value={entry.project || ""}
-                              onValueChange={val => handleEntryChange(dayIdx, entryIdx, "project", val)}
-                              disabled={!workTypeRequiresProject(entry.workType) || isLocked}
-                            >
-                              <SelectTrigger className="h-8 text-xs"><SelectValue placeholder={t('weekly.projectPlaceholder')} /></SelectTrigger>
-                              <SelectContent>
-                                {projects.map(project => (
-                                  <SelectItem key={project.id} value={project.name}>{project.name}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </td>
-                          <td className="border p-1">
-                            <Input
-                              type="text"
-                              value={entry.startTime || ""}
-                              onChange={e => handleEntryChange(dayIdx, entryIdx, "startTime", roundToQuarterHour(e.target.value))}
-                              placeholder={t('weekly.startPlaceholder')}
-                              className="h-8 text-xs w-20"
-                              disabled={isLocked}
-                            />
-                          </td>
-                          <td className="border p-1">
-                            <Input
-                              type="text"
-                              value={entry.endTime || ""}
-                              onChange={e => handleEntryChange(dayIdx, entryIdx, "endTime", roundToQuarterHour(e.target.value))}
-                              placeholder={t('weekly.endPlaceholder')}
-                              className="h-8 text-xs w-20"
-                              disabled={isLocked}
-                            />
-                          </td>
-                          <td className="border p-1">
-                            <div className="h-8 flex items-center justify-center bg-gray-50 dark:bg-gray-800 border rounded px-2 text-xs font-medium">
-                              {(() => {
-                                // If full day off is checked, show 8 hours
-                                if (entry.workType === "31" && entry.fullDayOff) {
-                                  return "8h";
-                                }
-                                if (entry.startTime && entry.endTime) {
-                                  const start = new Date(`2000-01-01T${entry.startTime}`);
-                                  const end = new Date(`2000-01-01T${entry.endTime}`);
-                                  const diff = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
-                                  if (!isNaN(diff) && diff > 0) {
-                                    return `${diff.toFixed(2)}h`;
-                                  }
-                                }
-                                if (entry.hours) {
-                                  const hours = parseFloat(entry.hours);
-                                  if (!isNaN(hours) && hours > 0) {
-                                    return `${hours.toFixed(2)}h`;
-                                  }
-                                }
-                                return "-";
-                              })()}
-                            </div>
-                          </td>
-                          <td className="border p-1 text-center">
-                            <div className="flex gap-1 justify-center">
-                              <Button 
-                                variant="outline" 
-                                size="sm"
-                                className="h-7 text-xs"
-                                onClick={() => handleSubmitDay(dayIdx)}
-                                disabled={isLocked}
-                              >
-                                ✓
-                              </Button>
-                              {editableEntries.length > 1 && (
-                                <Button 
-                                  variant="destructive" 
-                                  size="sm"
-                                  className="h-7 w-7 text-xs"
-                                  onClick={() => handleRemoveEntry(dayIdx, entryIdx)}
-                                  disabled={isLocked}
-                                >
-                                  -
-                                </Button>
+                            <td className="border p-1">
+                              <span className="text-xs">{submittedEntry.project || "-"}</span>
+                            </td>
+                            <td className="border p-1">
+                              <span className="text-xs">{submittedEntry.startTime || "-"}</span>
+                            </td>
+                            <td className="border p-1">
+                              <span className="text-xs">{submittedEntry.endTime || "-"}</span>
+                            </td>
+                            <td className="border p-1">
+                              <span className="text-xs">{submittedEntry.hours || "0"}</span>
+                            </td>
+                            <td className="border p-1 text-center">
+                              <span className="text-xs">-</span>
+                            </td>
+                            <td className="border p-1 text-center">
+                              {!isLocked && (
+                                <div className="flex gap-1 justify-center">
+                                  <Button 
+                                    size="icon" 
+                                    variant="ghost" 
+                                    className="h-7 w-7"
+                                    onClick={() => handleEditEntry(submittedEntry, dateStr)}
+                                    title={t('common.edit')}
+                                  >
+                                    <svg className="h-3 w-3 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                    </svg>
+                                  </Button>
+                                  <Button 
+                                    size="icon" 
+                                    variant="ghost" 
+                                    className="h-7 w-7"
+                                    onClick={() => handleDeleteEntry(submittedEntry.id, dateStr)}
+                                  >
+                                    <Trash2 className="h-3 w-3 text-red-500" />
+                                  </Button>
+                                </div>
                               )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    });
-                  })}
-                  {/* Show submitted entries as read-only rows */}
-                  {days.map((day, dayIdx) => {
-                    const dateStr = day.date.toISOString().split('T')[0];
-                    const submitted = submittedEntries[dateStr] || [];
-                    const isLocked = confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin;
-                    
-                    return submitted.map((submittedEntry, subIdx) => (
-                      <tr key={`submitted-${dayIdx}-${subIdx}`} className="border-t bg-gray-50">
-                        <td className="border p-2 sticky left-0 bg-gray-50 font-medium text-xs">
-                          {day.date.toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short' })}
-                        </td>
-                        <td className="border p-1">
-                          <span className="text-xs">{getWorkTypeLabel(submittedEntry.description || "")}</span>
-                        </td>
-                        <td className="border p-1">
-                          <span className="text-xs">{submittedEntry.project || "-"}</span>
-                        </td>
-                        <td className="border p-1">
-                          <span className="text-xs">{submittedEntry.startTime || "-"}</span>
-                        </td>
-                        <td className="border p-1">
-                          <span className="text-xs">{submittedEntry.endTime || "-"}</span>
-                        </td>
-                        <td className="border p-1">
-                          <span className="text-xs">{submittedEntry.hours || "0"}</span>
-                        </td>
-                        <td className="border p-1 text-center">
-                          <span className="text-xs">-</span>
-                        </td>
-                        <td className="border p-1 text-center">
-                          {!isLocked && (
-                            <div className="flex gap-1 justify-center">
-                              <Button 
-                                size="icon" 
-                                variant="ghost" 
-                                className="h-7 w-7"
-                                onClick={() => handleEditEntry(submittedEntry, dateStr)}
-                                title={t('common.edit')}
-                              >
-                                <svg className="h-3 w-3 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                </svg>
-                              </Button>
-                              <Button 
-                                size="icon" 
-                                variant="ghost" 
-                                className="h-7 w-7"
-                                onClick={() => handleDeleteEntry(submittedEntry.id, dateStr)}
-                              >
-                                <Trash2 className="h-3 w-3 text-red-500" />
-                              </Button>
-                            </div>
-                          )}
-                        </td>
-                      </tr>
-                    ));
+                            </td>
+                          </tr>
+                        ))}
+                      </>
+                    );
                   })}
                 </tbody>
               </table>
@@ -2010,7 +2113,7 @@ const WeeklyCalendarEntry = ({ currentUser }: { currentUser: any }) => {
           )}
         </CardContent>
       </Card>
-      {!confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && allWeekdaysFilled && (
+      {!confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && (
         <Card className="mt-4 bg-orange-50 border-orange-200">
           <CardContent className="p-4">
             <div className="flex flex-col gap-3">
