@@ -12,6 +12,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { Trash2, Download, Plus, Check, ChevronsUpDown } from 'lucide-react';
 import { Checkbox } from "@/components/ui/checkbox";
 import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import { cn } from "@/lib/utils";
 
 const workTypes = [
@@ -1385,36 +1386,81 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
       return workType ? workType.label : desc;
     };
 
-    // Create workbook
-    const wb = XLSX.utils.book_new();
+    // Load logo image
+    let logoBuffer: ArrayBuffer | null = null;
+    try {
+      const response = await fetch('/bampro-marine-logo.jpg');
+      if (response.ok) {
+        logoBuffer = await response.arrayBuffer();
+      }
+    } catch (err) {
+      console.warn('Could not load logo:', err);
+    }
+
+    // Create ExcelJS workbook
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("Week Entries");
+
+    // Add logo to cell G1 (column 7, row 1) if logo is available
+    if (logoBuffer) {
+      const logoId = workbook.addImage({
+        buffer: logoBuffer,
+        extension: 'jpeg',
+      });
+      worksheet.addImage(logoId, {
+        tl: { col: 6, row: 0 }, // Column G (0-indexed = 6), Row 1 (0-indexed = 0)
+        ext: { width: 200, height: 60 }, // Adjust size as needed
+      });
+    }
+
+    // Set column widths
+    worksheet.getColumn(1).width = 12; // Day
+    worksheet.getColumn(2).width = 20; // Work Type
+    worksheet.getColumn(3).width = 25; // Project Work Order
+    worksheet.getColumn(4).width = 8;  // From
+    worksheet.getColumn(5).width = 8;  // To
+    worksheet.getColumn(6).width = 15; // Hours Worked
+    worksheet.getColumn(7).width = 30; // Space for logo
+
+    // Add header rows
+    worksheet.getCell('A1').value = 'Employee Name:';
+    worksheet.getCell('B1').value = currentUser.name || currentUser.email || '';
     
-    // Create header rows
-    const headerRows = [
-      ["Employee Name:", currentUser.name || currentUser.email || ""],
-      ["Date:", `From: ${formatDateDDMMYY(fromDate)}`, `To: ${formatDateDDMMYY(toDate)}`],
-      ["Day:", ""],
-      ["Week Number:", weekNumber.toString()],
-      ["Year:", new Date().getFullYear().toString()],
-      [""], // Empty row
-    ];
+    worksheet.getCell('A2').value = 'Date:';
+    worksheet.getCell('B2').value = `From: ${formatDateDDMMYY(fromDate)}`;
+    worksheet.getCell('D2').value = `To: ${formatDateDDMMYY(toDate)}`;
+    
+    worksheet.getCell('A3').value = 'Day:';
+    
+    worksheet.getCell('A4').value = 'Week Number:';
+    worksheet.getCell('B4').value = weekNumber.toString();
+    
+    worksheet.getCell('A5').value = 'Year:';
+    worksheet.getCell('B5').value = new Date().getFullYear().toString();
 
-    // Create table headers - only 6 columns
-    const tableHeaders = [
-      ["Day", "Work Type", "Project Work Order", "From", "To", "Hours Worked"]
-    ];
+    // Add table headers (row 7)
+    const headerRow = worksheet.getRow(7);
+    headerRow.values = ['Day', 'Work Type', 'Project Work Order', 'From', 'To', 'Hours Worked'];
+    headerRow.font = { bold: true };
+    headerRow.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFE5E5E5' }
+    };
 
-    // Format data rows - only 6 columns
-    const dataRows = data.map((entry) => {
+    // Format data rows
+    data.forEach((entry, idx) => {
       const date = new Date(entry.date);
       const dayNamesEN = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
       const dayName = dayNamesEN[date.getDay()];
       
-      return [
+      const row = worksheet.getRow(8 + idx);
+      row.values = [
         dayName,
-        getWorkTypeLabel(entry.description || ""),
-        entry.projects?.name || entry.project || "",
-        entry.startTime || "",
-        entry.endTime || "",
+        getWorkTypeLabel(entry.description || ''),
+        entry.projects?.name || entry.project || '',
+        entry.startTime || '',
+        entry.endTime || '',
         formatHoursHHMM(entry.hours || 0),
       ];
     });
@@ -1423,38 +1469,26 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
     const totalHours = data.reduce((sum, entry) => sum + (parseFloat(entry.hours) || 0), 0);
     const totalHoursHHMM = formatHoursHHMM(totalHours);
     
-    // Add total hours row at the bottom
-    const totalRow = [
-      "",
-      "Total:",
-      "",
-      "",
-      "",
-      totalHoursHHMM,
-    ];
-
-    // Combine all rows
-    const allRows = [...headerRows, ...tableHeaders, ...dataRows, [""], totalRow];
-
-    // Create worksheet from array
-    const ws = XLSX.utils.aoa_to_sheet(allRows);
-
-    // Set column widths - only 6 columns
-    ws['!cols'] = [
-      { wch: 12 }, // Day
-      { wch: 20 }, // Work Type
-      { wch: 25 }, // Project Work Order
-      { wch: 8 },  // From
-      { wch: 8 },  // To
-      { wch: 15 }, // Hours Worked
-    ];
-
-    // Append worksheet to workbook
-    XLSX.utils.book_append_sheet(wb, ws, "Week Entries");
+    // Add total row
+    const totalRowIndex = 8 + data.length;
+    const totalRow = worksheet.getRow(totalRowIndex);
+    totalRow.getCell(2).value = 'Total:';
+    totalRow.getCell(2).font = { bold: true };
+    totalRow.getCell(6).value = totalHoursHHMM;
+    totalRow.getCell(6).font = { bold: true };
 
     // Generate filename
     const filename = `Week_${weekNumber}_${formatDateDDMMYY(fromDate)}_${formatDateDDMMYY(toDate)}.xlsx`;
-    XLSX.writeFile(wb, filename);
+    
+    // Write to buffer and download
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.click();
+    window.URL.revokeObjectURL(url);
 
     toast({
       title: "Export Successful",

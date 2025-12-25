@@ -13,6 +13,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { Trash2, Download, Plus, Check, ChevronsUpDown } from 'lucide-react';
 import { useIsMobile } from "@/hooks/use-mobile";
 import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import { cn } from "@/lib/utils";
 
 const workTypes = [
@@ -1271,14 +1272,23 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
       entriesByDay[dateStr] = data.filter(entry => entry.date === dateStr);
     });
 
-    // Create workbook
-    const wb = XLSX.utils.book_new();
+    // Load logo image
+    let logoBuffer: ArrayBuffer | null = null;
+    try {
+      const response = await fetch('/bampro-marine-logo.jpg');
+      if (response.ok) {
+        logoBuffer = await response.arrayBuffer();
+      }
+    } catch (err) {
+      console.warn('Could not load logo:', err);
+    }
+
+    // Create ExcelJS workbook
+    const workbook = new ExcelJS.Workbook();
     
     const dayNamesEN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
     
-    // Create sheets for each day and store them with their day index for sorting
-    const sheets: Array<{ dayIndex: number; dayName: string; ws: any }> = [];
-    
+    // Create sheets for each day
     weekDates.forEach((date, dayIdx) => {
       const dateStr = date.toISOString().split('T')[0];
       const dayEntries = entriesByDay[dateStr] || [];
@@ -1289,73 +1299,92 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
       const totalHours = dayEntries.reduce((sum, entry) => sum + (parseFloat(entry.hours) || 0), 0);
       const totalHoursHHMM = formatHoursHHMM(totalHours);
       
-      // Create header rows
-      const headerRows = [
-        ["Employee Name:", currentUser.name || currentUser.email || ""],
-        ["Date:", `From: ${formatDateDDMMYY(fromDate)}`, `To: ${formatDateDDMMYY(toDate)}`],
-        ["Day:", `${formattedDate} ${dayName}`],
-        ["Week Number:", weekNumber.toString()],
-        ["Year:", new Date().getFullYear().toString()],
-        [""], // Empty row
-      ];
+      // Create worksheet
+      const worksheet = workbook.addWorksheet(dayName);
 
-      // Create table headers - only 6 columns
-      const tableHeaders = [
-        ["Day", "Work Type", "Project Work Order", "From", "To", "Hours Worked"]
-      ];
+      // Add logo to cell G1 (column 7, row 1) if logo is available
+      if (logoBuffer) {
+        const logoId = workbook.addImage({
+          buffer: logoBuffer,
+          extension: 'jpeg',
+        });
+        worksheet.addImage(logoId, {
+          tl: { col: 6, row: 0 }, // Column G (0-indexed = 6), Row 1 (0-indexed = 0)
+          ext: { width: 200, height: 60 }, // Adjust size as needed
+        });
+      }
+      
+      // Set column widths
+      worksheet.getColumn(1).width = 12; // Day
+      worksheet.getColumn(2).width = 20; // Work Type
+      worksheet.getColumn(3).width = 25; // Project Work Order
+      worksheet.getColumn(4).width = 8;  // From
+      worksheet.getColumn(5).width = 8;  // To
+      worksheet.getColumn(6).width = 15; // Hours Worked
+      worksheet.getColumn(7).width = 30; // Space for logo
 
-      // Format data rows for this day - only 6 columns
-      const dataRows = dayEntries.map((entry) => [
-        dayName,
-        getWorkTypeLabel(entry.description || ""),
-        entry.projects?.name || entry.project || "",
-        entry.startTime || "",
-        entry.endTime || "",
-        formatHoursHHMM(parseFloat(entry.hours) || 0),
-      ]);
+      // Add header rows
+      worksheet.getCell('A1').value = 'Employee Name:';
+      worksheet.getCell('B1').value = currentUser.name || currentUser.email || '';
+      
+      worksheet.getCell('A2').value = 'Date:';
+      worksheet.getCell('B2').value = `From: ${formatDateDDMMYY(fromDate)}`;
+      worksheet.getCell('D2').value = `To: ${formatDateDDMMYY(toDate)}`;
+      
+      worksheet.getCell('A3').value = 'Day:';
+      worksheet.getCell('B3').value = `${formattedDate} ${dayName}`;
+      
+      worksheet.getCell('A4').value = 'Week Number:';
+      worksheet.getCell('B4').value = weekNumber.toString();
+      
+      worksheet.getCell('A5').value = 'Year:';
+      worksheet.getCell('B5').value = new Date().getFullYear().toString();
 
-      // Add total hours row at the bottom - only 6 columns
-      const totalRow = [
-        "",
-        "Total:",
-        "",
-        "",
-        "",
-        totalHoursHHMM,
-      ];
+      // Add table headers (row 7)
+      const headerRow = worksheet.getRow(7);
+      headerRow.values = ['Day', 'Work Type', 'Project Work Order', 'From', 'To', 'Hours Worked'];
+      headerRow.font = { bold: true };
+      headerRow.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFE5E5E5' }
+      };
 
-      // Combine all rows
-      const allRows = [...headerRows, ...tableHeaders, ...dataRows, [""], totalRow];
+      // Add data rows
+      dayEntries.forEach((entry, idx) => {
+        const row = worksheet.getRow(8 + idx);
+        row.values = [
+          dayName,
+          getWorkTypeLabel(entry.description || ''),
+          entry.projects?.name || entry.project || '',
+          entry.startTime || '',
+          entry.endTime || '',
+          formatHoursHHMM(parseFloat(entry.hours) || 0),
+        ];
+      });
 
-      // Create worksheet from array
-      const ws = XLSX.utils.aoa_to_sheet(allRows);
-
-      // Set column widths - only 6 columns
-      ws['!cols'] = [
-        { wch: 12 }, // Day
-        { wch: 20 }, // Work Type
-        { wch: 25 }, // Project Work Order
-        { wch: 8 },  // From
-        { wch: 8 },  // To
-        { wch: 15 }, // Hours Worked
-      ];
-
-      // Store sheet with day index for sorting (dayIdx is already 0-6 for Monday-Sunday)
-      sheets.push({ dayIndex: dayIdx, dayName, ws });
-    });
-    
-    // Sort sheets by day index (Monday=0, Tuesday=1, ..., Sunday=6)
-    sheets.sort((a, b) => a.dayIndex - b.dayIndex);
-    
-    // Append sheets to workbook in correct order (Monday to Sunday)
-    sheets.forEach(({ dayName, ws }) => {
-      XLSX.utils.book_append_sheet(wb, ws, dayName);
+      // Add total row
+      const totalRowIndex = 8 + dayEntries.length;
+      const totalRow = worksheet.getRow(totalRowIndex);
+      totalRow.getCell(2).value = 'Total:';
+      totalRow.getCell(2).font = { bold: true };
+      totalRow.getCell(6).value = totalHoursHHMM;
+      totalRow.getCell(6).font = { bold: true };
     });
 
     // Generate filename with user name and week number
     const userName = (currentUser.name || currentUser.email || "User").replace(/[^a-zA-Z0-9]/g, '_');
     const filename = `${userName}_Week${weekNumber}_${new Date(fromDate).getFullYear()}.xlsx`;
-    XLSX.writeFile(wb, filename);
+    
+    // Write to buffer and download
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.click();
+    window.URL.revokeObjectURL(url);
 
     toast({
       title: "Export Successful",
