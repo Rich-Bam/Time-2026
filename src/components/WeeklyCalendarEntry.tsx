@@ -1221,8 +1221,16 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
         const start = new Date(`2000-01-01T${entry.startTime}`);
         const end = new Date(`2000-01-01T${entry.endTime}`);
         hoursToSave = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+        // If it's a day off (31) and hours are close to 8 (between 7.5 and 8.5), treat as full day off
+        if (isDayOff && hoursToSave >= 7.5 && hoursToSave <= 8.5) {
+          hoursToSave = 8;
+        }
       } else if (entry.hours) {
         hoursToSave = Number(entry.hours);
+        // If it's a day off (31) and hours are close to 8 (between 7.5 and 8.5), treat as full day off
+        if (isDayOff && hoursToSave >= 7.5 && hoursToSave <= 8.5) {
+          hoursToSave = 8;
+        }
       }
       
       // For day off (31), hours can be 0, but for other types we need valid hours

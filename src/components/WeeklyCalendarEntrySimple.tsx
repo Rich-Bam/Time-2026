@@ -964,8 +964,16 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
       } else if (entry.startTime && entry.endTime) {
         const calculated = calculateHours(entry.startTime, entry.endTime);
         hoursToSave = parseFloat(calculated) || 0;
+        // If it's a day off (31) and hours are close to 8 (between 7.5 and 8.5), treat as full day off
+        if (isDayOff && hoursToSave >= 7.5 && hoursToSave <= 8.5) {
+          hoursToSave = 8;
+        }
       } else if (entry.hours) {
         hoursToSave = Number(entry.hours);
+        // If it's a day off (31) and hours are close to 8 (between 7.5 and 8.5), treat as full day off
+        if (isDayOff && hoursToSave >= 7.5 && hoursToSave <= 8.5) {
+          hoursToSave = 8;
+        }
       }
       
       // For day off (31), hours can be 0, but for other types we need valid hours
