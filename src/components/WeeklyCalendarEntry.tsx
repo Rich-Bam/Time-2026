@@ -78,7 +78,7 @@ const timeOptions = Array.from({ length: 24 * 4 }, (_, i) => {
   return `${h}:${m}`;
 });
 
-const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false }: { currentUser: any; hasUnreadDaysOffNotification?: boolean }) => {
+const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false, useSimpleView, setUseSimpleView }: { currentUser: any; hasUnreadDaysOffNotification?: boolean; useSimpleView?: boolean; setUseSimpleView?: (value: boolean) => void }) => {
   const { t } = useLanguage();
   const [weekStart, setWeekStart] = useState(() => {
     const now = new Date();
@@ -1444,25 +1444,44 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
   };
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-bold">{t('weekly.title')}</h2>
-          <div className="mt-1 text-gray-700 dark:text-gray-300 font-medium">
+    <div className="flex flex-col gap-3 sm:gap-4">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 sm:gap-4">
+        <div className="w-full">
+          <h2 className="text-xl sm:text-2xl font-bold pt-1 sm:pt-0">{t('weekly.title')}</h2>
+          <div className="mt-1 text-sm sm:text-base text-gray-700 dark:text-gray-300 font-medium">
             {t('weekly.week')} {weekNumber} ({weekDates[0].toLocaleDateString()} - {weekDates[6].toLocaleDateString()})
           </div>
-          <div className="flex items-center gap-4 mt-2">
-            <Button variant="outline" onClick={() => changeWeek(-1)}>&lt; {t('weekly.prev')}</Button>
-            <Button variant="outline" onClick={() => changeWeek(1)}>{t('weekly.next')} &gt;</Button>
-            <Button variant="outline" onClick={handleExportWeek} className="ml-2">
-              <Download className="h-4 w-4 mr-2" />
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3 mt-2">
+            <Button variant="outline" onClick={() => changeWeek(-1)} size="sm" className="text-xs sm:text-sm">
+              &lt; {t('weekly.prev')}
+            </Button>
+            <Button variant="outline" onClick={() => changeWeek(1)} size="sm" className="text-xs sm:text-sm">
+              {t('weekly.next')} &gt;
+            </Button>
+            <Button variant="outline" onClick={handleExportWeek} size="sm" className="text-xs sm:text-sm">
+              <Download className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
               {t('weekly.exportWeek')}
             </Button>
+            {setUseSimpleView && (
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  const newValue = !useSimpleView;
+                  setUseSimpleView(newValue);
+                  localStorage.setItem('bampro_use_simple_weekly_view', String(newValue));
+                }}
+                size="sm" 
+                className="text-xs sm:text-sm"
+                title={useSimpleView ? "Switch to original view" : "Switch to simple view"}
+              >
+                🔄 {useSimpleView ? "Original" : "Simple"}
+              </Button>
+            )}
           </div>
         </div>
-        <Card className={`bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-800 min-w-[260px] ${hasUnreadDaysOffNotification ? 'ring-2 ring-orange-400 ring-offset-2' : ''}`}>
-          <CardHeader>
-            <CardTitle className="text-blue-900 dark:text-blue-100 text-lg flex items-center justify-between">
+        <Card className={`bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-800 w-full md:min-w-[260px] ${hasUnreadDaysOffNotification ? 'ring-2 ring-orange-400 ring-offset-2' : ''}`}>
+          <CardHeader className="p-3 sm:p-6">
+            <CardTitle className="text-blue-900 dark:text-blue-100 text-base sm:text-lg flex items-center justify-between">
               <span>{t('weekly.daysOffRemaining')}</span>
               {hasUnreadDaysOffNotification && (
                 <div className="flex items-center gap-1 bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300 px-2 py-0.5 rounded-full text-xs font-semibold animate-pulse">
@@ -1471,11 +1490,11 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
               )}
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-blue-700 dark:text-blue-300">
-              {daysOffLeft} <span className="text-lg">({hoursLeftRounded} {t('weekly.hours')})</span>
+          <CardContent className="p-3 sm:p-6 pt-0">
+            <div className="text-2xl sm:text-3xl font-bold text-blue-700 dark:text-blue-300">
+              {daysOffLeft} <span className="text-base sm:text-lg">({hoursLeftRounded} {t('weekly.hours')})</span>
             </div>
-            <div className="text-sm text-blue-600 dark:text-blue-400 mt-2">
+            <div className="text-xs sm:text-sm text-blue-600 dark:text-blue-400 mt-2">
               {t('weekly.daysOffLeft', { days: daysOffLeft })}
               {hasUnreadDaysOffNotification && (
                 <span className="block mt-1 text-orange-600 dark:text-orange-400 font-semibold">⚠️ Updated!</span>
@@ -1485,9 +1504,9 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
         </Card>
       </div>
       <Card>
-        <CardContent>
-          <div className="flex items-center justify-between mb-4">
-            <div className="grid grid-cols-7 gap-2 flex-1">
+        <CardContent className="p-3 sm:p-6">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 sm:gap-4 mb-4">
+            <div className="grid grid-cols-7 gap-1 sm:gap-2 flex-1">
               {days.map((day, dayIdx) => {
                 const dateStr = day.date.toISOString().split('T')[0];
                 const submittedCount = (submittedEntries[dateStr] || []).length;
@@ -1495,21 +1514,22 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
                 return (
                   <div 
                     key={dayIdx} 
-                    className={`border rounded-lg p-2 cursor-pointer transition-colors ${day.open ? 'bg-orange-100 dark:bg-orange-900/30 border-orange-300 dark:border-orange-700' : 'bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700'}`} 
+                    className={`border rounded-lg p-1.5 sm:p-2 cursor-pointer transition-colors ${day.open ? 'bg-orange-100 dark:bg-orange-900/30 border-orange-300 dark:border-orange-700' : 'bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700'}`} 
                     onClick={() => handleOpenDay(dayIdx)}
                   >
-                    <div className="font-semibold text-center text-sm">{day.date.toLocaleDateString(undefined, { weekday: 'short' })}</div>
-                    <div className="font-medium text-center text-xs">{day.date.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}</div>
-                    <div className="text-xs text-center text-gray-500 dark:text-gray-400 mt-1">{totalEntries} {totalEntries === 1 ? t('weekly.entry') : t('weekly.entries')}</div>
+                    <div className="font-semibold text-center text-xs sm:text-sm">{day.date.toLocaleDateString(undefined, { weekday: 'short' })}</div>
+                    <div className="font-medium text-center text-[10px] sm:text-xs">{day.date.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}</div>
+                    <div className="text-[10px] sm:text-xs text-center text-gray-500 dark:text-gray-400 mt-0.5 sm:mt-1">{totalEntries} {totalEntries === 1 ? t('weekly.entry') : t('weekly.entries')}</div>
                   </div>
                 );
               })}
             </div>
-            <div className="ml-4">
+            <div className="sm:ml-4 w-full sm:w-auto">
               <Button 
                 variant="outline" 
                 size="sm"
                 onClick={() => setViewMode(viewMode === "cards" ? "overview" : "cards")}
+                className="w-full sm:w-auto text-xs sm:text-sm"
               >
                 {viewMode === "cards" ? `📊 ${t('weekly.weekOverview')}` : `📋 ${t('weekly.dayView')}`}
               </Button>
@@ -1524,8 +1544,8 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
 
           {viewMode === "overview" ? (
             // Week Overview - All days in one table
-            <div className="overflow-x-auto">
-              <table className="min-w-full border-collapse">
+            <div className="overflow-x-auto -mx-3 sm:mx-0">
+              <table className="min-w-full border-collapse text-xs sm:text-sm">
                 <thead>
                   <tr className="bg-gray-100 dark:bg-gray-800">
                     <th className="border p-2 text-left sticky left-0 bg-gray-100 dark:bg-gray-800 z-10 min-w-[120px]">{t('weekly.day')}</th>
@@ -1833,8 +1853,8 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
             // Cards view - original functionality
             <>
           {days.map((day, dayIdx) => day.open && (
-            <div key={dayIdx} className="mb-4 border rounded-lg p-4 bg-white shadow">
-              <div className="font-semibold mb-2">{day.date.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'short', day: 'numeric' })}</div>
+            <div key={dayIdx} className="mb-3 sm:mb-4 border rounded-lg p-3 sm:p-4 bg-white dark:bg-gray-800 shadow">
+              <div className="font-semibold mb-2 text-sm sm:text-base">{day.date.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'short', day: 'numeric' })}</div>
               {confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin && (
                 <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded text-yellow-800 text-sm">
                   ⚠️ {t('weekly.confirmed')}

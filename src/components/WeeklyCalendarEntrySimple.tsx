@@ -89,7 +89,7 @@ interface DayData {
   entries: Entry[];
 }
 
-const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification = false }: { currentUser: any; hasUnreadDaysOffNotification?: boolean }) => {
+const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification = false, useSimpleView, setUseSimpleView }: { currentUser: any; hasUnreadDaysOffNotification?: boolean; useSimpleView?: boolean; setUseSimpleView?: (value: boolean) => void }) => {
   const { t, language } = useLanguage();
   const { toast } = useToast();
   const isMobile = useIsMobile();
@@ -1456,11 +1456,11 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
     <div className="flex flex-col gap-3 sm:gap-4">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
         <div className="flex-1">
-          <h2 className="text-xl sm:text-2xl font-bold">{t('weekly.title')}</h2>
+          <h2 className="text-xl sm:text-2xl font-bold pt-1 sm:pt-0">{t('weekly.title')}</h2>
           <div className="mt-1 text-sm sm:text-base text-gray-700 font-medium">
             {t('weekly.week')} {weekNumber} ({weekDates[0].toLocaleDateString()} - {weekDates[6].toLocaleDateString()})
           </div>
-          <div className="flex items-center gap-2 sm:gap-4 mt-2">
+          <div className="flex items-center gap-2 sm:gap-4 mt-2 flex-wrap">
             <Button variant="outline" size={isMobile ? "sm" : "default"} onClick={() => changeWeek(-1)} className="text-xs sm:text-sm">
               &lt; {t('weekly.prev')}
             </Button>
@@ -1471,6 +1471,21 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
               <Download className="h-4 w-4 mr-2" />
               {t('weekly.exportWeek')}
             </Button>
+            {setUseSimpleView && (
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  const newValue = !useSimpleView;
+                  setUseSimpleView(newValue);
+                  localStorage.setItem('bampro_use_simple_weekly_view', String(newValue));
+                }}
+                size={isMobile ? "sm" : "default"} 
+                className="text-xs sm:text-sm"
+                title={useSimpleView ? "Switch to original view" : "Switch to simple view"}
+              >
+                🔄 {useSimpleView ? "Original" : "Simple"}
+              </Button>
+            )}
           </div>
         </div>
         <Card className={`bg-blue-50 border-blue-200 w-full sm:w-auto sm:min-w-[200px] ${hasUnreadDaysOffNotification ? 'ring-2 ring-orange-400 ring-offset-2' : ''}`}>

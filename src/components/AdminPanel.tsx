@@ -1791,68 +1791,75 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
   };
 
   return (
-    <div className="p-3 sm:p-4 md:p-8 bg-white dark:bg-gray-800 rounded shadow w-full max-w-full">
-      <h2 className="text-xl sm:text-2xl font-bold mb-3 sm:mb-4 text-gray-900 dark:text-gray-100">{t('admin.title')}</h2>
+    <div className="p-2 sm:p-4 md:p-6 lg:p-8 bg-white dark:bg-gray-800 rounded shadow w-full max-w-full overflow-x-hidden">
+      <h2 className="text-lg sm:text-xl md:text-2xl font-bold mb-3 sm:mb-4 text-gray-900 dark:text-gray-100">{t('admin.title')}</h2>
       
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 mb-6">
-          <TabsTrigger value="users" className="flex items-center gap-2">
-            <Users className="h-4 w-4" />
-            <span className="hidden sm:inline">Users</span>
-          </TabsTrigger>
-          <TabsTrigger value="weeks" className="flex items-center gap-2">
-            <Calendar className="h-4 w-4" />
-            <span className="hidden sm:inline">Weeks</span>
-          </TabsTrigger>
-          <TabsTrigger value="reminders" className="flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4" />
-            <span className="hidden sm:inline">Reminders</span>
-          </TabsTrigger>
-          <TabsTrigger value="export" className="flex items-center gap-2">
-            <Download className="h-4 w-4" />
-            <span className="hidden sm:inline">Export</span>
-          </TabsTrigger>
-          <TabsTrigger value="overtime" className="flex items-center gap-2">
-            <BarChart3 className="h-4 w-4" />
-            <span className="hidden sm:inline">Overtime</span>
-          </TabsTrigger>
-          {currentUser?.email === SUPER_ADMIN_EMAIL && (
-            <TabsTrigger value="timebuzzer" className="flex items-center gap-2">
-              <CalendarIcon className="h-4 w-4" />
-              <span className="hidden sm:inline">Timebuzzer</span>
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full flex flex-col">
+        <div className="sticky top-0 z-10 bg-white dark:bg-gray-800 -mx-2 sm:mx-0 px-2 sm:px-0 pb-2">
+          <TabsList className={`grid w-full ${isMobile ? 'grid-cols-2' : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4'} gap-1 sm:gap-2`}>
+            <TabsTrigger value="users" className="flex items-center justify-center gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-4 py-2">
+              <Users className="h-3 w-3 sm:h-4 sm:w-4" />
+              <span>Users</span>
             </TabsTrigger>
-          )}
-          {(currentUser?.isAdmin || currentUser?.userType === 'administratie' || currentUser?.email === SUPER_ADMIN_EMAIL) && (
-            <TabsTrigger value="daysOff" className="flex items-center gap-2">
-              <Clock className="h-4 w-4" />
-              <span className="hidden sm:inline">{t('admin.daysOffOverview')}</span>
+            <TabsTrigger value="weeks" className="flex items-center justify-center gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-4 py-2">
+              <Calendar className="h-3 w-3 sm:h-4 sm:w-4" />
+              <span>Weeks</span>
             </TabsTrigger>
-          )}
-          {currentUser?.email === SUPER_ADMIN_EMAIL && (
-            <TabsTrigger value="errors" className="flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4" />
-              <span className="hidden sm:inline">Errors</span>
+            <TabsTrigger value="reminders" className="flex items-center justify-center gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-4 py-2">
+              <AlertTriangle className="h-3 w-3 sm:h-4 sm:w-4" />
+              <span className="hidden xs:inline">Reminders</span>
+              <span className="xs:hidden">Remind</span>
             </TabsTrigger>
-          )}
-        </TabsList>
+            <TabsTrigger value="export" className="flex items-center justify-center gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-4 py-2">
+              <Download className="h-3 w-3 sm:h-4 sm:w-4" />
+              <span>Export</span>
+            </TabsTrigger>
+            <TabsTrigger value="overtime" className="flex items-center justify-center gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-4 py-2">
+              <BarChart3 className="h-3 w-3 sm:h-4 sm:w-4" />
+              <span className="hidden xs:inline">Overtime</span>
+              <span className="xs:hidden">OT</span>
+            </TabsTrigger>
+            {currentUser?.email === SUPER_ADMIN_EMAIL && (
+              <TabsTrigger value="timebuzzer" className="flex items-center justify-center gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-4 py-2">
+                <CalendarIcon className="h-3 w-3 sm:h-4 sm:w-4" />
+                <span className="hidden xs:inline">Timebuzzer</span>
+                <span className="xs:hidden">TB</span>
+              </TabsTrigger>
+            )}
+            {(currentUser?.isAdmin || currentUser?.userType === 'administratie' || currentUser?.email === SUPER_ADMIN_EMAIL) && (
+              <TabsTrigger value="daysOff" className="flex items-center justify-center gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-4 py-2">
+                <Clock className="h-3 w-3 sm:h-4 sm:w-4" />
+                <span className="hidden sm:inline">{t('admin.daysOffOverview')}</span>
+                <span className="sm:hidden">Days</span>
+              </TabsTrigger>
+            )}
+            {currentUser?.email === SUPER_ADMIN_EMAIL && (
+              <TabsTrigger value="errors" className="flex items-center justify-center gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-4 py-2">
+                <AlertTriangle className="h-3 w-3 sm:h-4 sm:w-4" />
+                <span>Errors</span>
+              </TabsTrigger>
+            )}
+          </TabsList>
+        </div>
 
+        <div className="max-h-[calc(100vh-250px)] sm:max-h-[calc(100vh-300px)] md:max-h-[calc(100vh-350px)] overflow-y-auto overflow-x-hidden -mx-2 sm:mx-0 px-2 sm:px-0 mt-4 sm:mt-6">
         {/* Users Tab */}
         <TabsContent value="users" className="space-y-6">
           {/* Add User Section - Only for admins, not for administratie */}
           {currentUser?.isAdmin && !isAdministratie(currentUser) && (
-      <div className="mb-6 sm:mb-8">
-        <h3 className="text-base sm:text-lg font-semibold mb-2 text-gray-900 dark:text-gray-100">{t('admin.addUser')}</h3>
-        <form onSubmit={handleAddUser} className={`flex ${isMobile ? 'flex-col' : 'flex-row flex-wrap'} gap-3 sm:gap-4 ${isMobile ? '' : 'items-end'} w-full`}>
-          <div className={isMobile ? 'w-full' : ''}>
-            <Label className="text-sm">{t('admin.email')}</Label>
-            <Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} required className="h-10 sm:h-9" />
+      <div className="mb-4 sm:mb-6 md:mb-8">
+        <h3 className="text-sm sm:text-base md:text-lg font-semibold mb-2 sm:mb-3 text-gray-900 dark:text-gray-100">{t('admin.addUser')}</h3>
+        <form onSubmit={handleAddUser} className={`flex ${isMobile ? 'flex-col' : 'flex-row flex-wrap'} gap-2 sm:gap-3 md:gap-4 ${isMobile ? '' : 'items-end'} w-full`}>
+          <div className={`${isMobile ? 'w-full' : 'flex-1 min-w-[200px]'} space-y-1`}>
+            <Label className="text-xs sm:text-sm font-medium">{t('admin.email')}</Label>
+            <Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} required className="h-9 sm:h-9 text-sm" />
           </div>
-          <div className={isMobile ? 'w-full' : ''}>
-            <Label className="text-sm">{t('admin.name')}</Label>
-            <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className="h-10 sm:h-9" />
+          <div className={`${isMobile ? 'w-full' : 'flex-1 min-w-[200px]'} space-y-1`}>
+            <Label className="text-xs sm:text-sm font-medium">{t('admin.name')}</Label>
+            <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className="h-9 sm:h-9 text-sm" />
           </div>
-          <div className={isMobile ? 'w-full' : ''}>
-            <Label className="text-sm">{t('admin.password')}</Label>
+          <div className={`${isMobile ? 'w-full' : 'flex-1 min-w-[200px]'} space-y-1`}>
+            <Label className="text-xs sm:text-sm font-medium">{t('admin.password')}</Label>
             <Input 
               type="password" 
               value={form.password} 
@@ -1860,16 +1867,16 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
               required 
               minLength={6}
               placeholder={t('admin.passwordPlaceholder')}
-              className="h-10 sm:h-9"
+              className="h-9 sm:h-9 text-sm"
             />
             {form.password && form.password.length > 0 && form.password.length < 6 && (
               <p className="text-xs text-red-500 mt-1">{t('admin.passwordMinLength')}</p>
             )}
           </div>
-          <div className={isMobile ? 'w-full' : ''}>
-            <Label className="text-sm">{t('admin.userType')}</Label>
+          <div className={`${isMobile ? 'w-full' : 'flex-1 min-w-[150px]'} space-y-1`}>
+            <Label className="text-xs sm:text-sm font-medium">{t('admin.userType')}</Label>
             <Select value={form.userType} onValueChange={(value) => setForm(f => ({ ...f, userType: value }))}>
-              <SelectTrigger className="h-10 sm:h-9">
+              <SelectTrigger className="h-9 sm:h-9 text-sm">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -1882,11 +1889,11 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
               </SelectContent>
             </Select>
           </div>
-          <div className={`flex items-center gap-2 ${isMobile ? 'w-full' : ''}`}>
+          <div className={`flex items-center gap-2 ${isMobile ? 'w-full' : ''} mt-1`}>
             <input type="checkbox" id="must_change_password" checked={form.must_change_password} onChange={e => setForm(f => ({ ...f, must_change_password: e.target.checked }))} className="h-4 w-4" />
-            <Label htmlFor="must_change_password" className="text-sm">{t('admin.mustChangePassword')}</Label>
+            <Label htmlFor="must_change_password" className="text-xs sm:text-sm cursor-pointer">{t('admin.mustChangePassword')}</Label>
           </div>
-          <Button type="submit" className={`${isMobile ? 'w-full' : ''} h-10 sm:h-9`} size={isMobile ? "lg" : "default"}>{t('admin.createUser')}</Button>
+          <Button type="submit" className={`${isMobile ? 'w-full' : ''} h-9 sm:h-9 text-sm`} size={isMobile ? "lg" : "default"}>{t('admin.createUser')}</Button>
         </form>
       </div>
       )}
@@ -3829,9 +3836,9 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
         {currentUser?.email === SUPER_ADMIN_EMAIL && (
         <TabsContent value="timebuzzer" className="space-y-6">
           {/* Timebuzzer Sync Section */}
-          <div className="p-4 bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 rounded-lg">
-        <h3 className="text-base sm:text-lg font-semibold mb-3 text-green-800">Timebuzzer Integration</h3>
-        <p className="text-xs sm:text-sm text-green-700 mb-4">
+          <div className="p-3 sm:p-4 bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 rounded-lg">
+        <h3 className="text-base sm:text-lg font-semibold mb-2 sm:mb-3 text-green-800 dark:text-green-200">Timebuzzer Integration</h3>
+        <p className="text-xs sm:text-sm text-green-700 dark:text-green-300 mb-3 sm:mb-4">
           Sync time entries from Timebuzzer to your timesheet. Make sure users and projects are mapped in the database first.
         </p>
         
@@ -3891,15 +3898,14 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
             </div>
           </div>
           {timebuzzerSyncWeekNumber && timebuzzerSyncYear && (
-            <div className="text-xs text-green-600 bg-green-100 p-2 rounded">
-              <span className="font-medium">Week {timebuzzerSyncWeekNumber}, {timebuzzerSyncYear}:</span> {
-                (() => {
-                  const range = getWeekDateRange(timebuzzerSyncWeekNumber, timebuzzerSyncYear);
-                  const fromDate = new Date(range.from);
-                  const toDate = new Date(range.to);
-                  return `${fromDate.toLocaleDateString('nl-NL')} - ${toDate.toLocaleDateString('nl-NL')}`;
-                })()
-              }
+            <div className="text-xs sm:text-sm text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/50 p-2 sm:p-3 rounded break-words">
+              <span className="font-medium">Week {timebuzzerSyncWeekNumber}, {timebuzzerSyncYear}:</span>{' '}
+              {(() => {
+                const range = getWeekDateRange(timebuzzerSyncWeekNumber, timebuzzerSyncYear);
+                const fromDate = new Date(range.from);
+                const toDate = new Date(range.to);
+                return `${fromDate.toLocaleDateString('nl-NL')} - ${toDate.toLocaleDateString('nl-NL')}`;
+              })()}
             </div>
           )}
           {/* User selection for Timebuzzer testing */}
@@ -3944,7 +3950,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
               </p>
             )}
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-col sm:flex-row gap-2">
             <Button
               onClick={async () => {
                 setLoadingTimebuzzerUsers(true);
@@ -3989,7 +3995,8 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                 }
               }}
               disabled={loadingTimebuzzerUsers}
-              className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700"
+              className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-sm sm:text-base"
+              size={isMobile ? "lg" : "default"}
             >
               {loadingTimebuzzerUsers ? "Loading..." : "Fetch All Timebuzzer Users"}
             </Button>
@@ -5437,6 +5444,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
           </div>
         </DialogContent>
       </Dialog>
+        </div>
       </Tabs>
     </div>
   );

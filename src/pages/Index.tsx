@@ -24,9 +24,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { useToast } from "@/hooks/use-toast";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { createPDF } from "@/utils/pdfExport";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 const Index = () => {
   const [searchParams] = useSearchParams();
+  const isMobile = useIsMobile();
   
   // Helper function to check if user is administratie type
   const isAdministratie = (user: any): boolean => {
@@ -1544,25 +1546,44 @@ const Index = () => {
       </Dialog>
 
       {/* Header */}
-      <header className="bg-white dark:bg-gray-800 shadow-lg border-b border-orange-100 dark:border-gray-700">
-        <div className="container mx-auto px-3 sm:px-4 md:px-6 py-3 sm:py-4 md:py-6">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 sm:gap-4">
-            <div className="flex flex-col md:flex-row md:items-center gap-2 sm:gap-3 md:gap-12">
+      <header className="bg-white dark:bg-gray-800 shadow-lg border-b border-orange-100 dark:border-gray-700 fixed top-0 left-0 right-0 z-50">
+        <div className="container mx-auto px-1 sm:px-4 md:px-6 py-1 sm:py-1.5 md:py-2 lg:py-3">
+          {/* Logo Row - Only on mobile */}
+          {isMobile && (
+            <div className="flex justify-center mb-1">
               <button
                 onClick={() => setActiveTab('weekly')}
-                className="cursor-pointer hover:opacity-80 transition-opacity self-center md:self-auto"
+                className="cursor-pointer hover:opacity-80 transition-opacity"
                 title="Go to homepage"
               >
                 <img 
                   src="/bampro-marine-logo.jpg" 
                   alt="BAMPRO MARINE" 
-                  className="h-10 sm:h-12 md:h-14 lg:h-16 object-contain"
+                  className="h-4 object-contain"
                 />
               </button>
-              <nav className="flex flex-wrap md:flex-nowrap items-center gap-1.5 sm:gap-2 md:gap-4 lg:gap-8 justify-center md:justify-start">
+            </div>
+          )}
+          
+          {/* Navigation and Controls Row - All in one line from left to right */}
+          <div className="flex flex-row items-center gap-0.5 sm:gap-1.5 md:gap-2 overflow-hidden">
+            {!isMobile && (
+              <button
+                onClick={() => setActiveTab('weekly')}
+                className="cursor-pointer hover:opacity-80 transition-opacity shrink-0"
+                title="Go to homepage"
+              >
+                <img 
+                  src="/bampro-marine-logo.jpg" 
+                  alt="BAMPRO MARINE" 
+                  className="h-6 md:h-8 lg:h-10 xl:h-12 2xl:h-14 object-contain"
+                />
+              </button>
+            )}
+            <nav className="flex items-center gap-0.5 sm:gap-1 md:gap-1.5 lg:gap-2 shrink-0 flex-1 min-w-0 flex-nowrap overflow-x-auto">
                 {!isAdministratie(currentUser) && (
                   <button
-                    className={`text-sm sm:text-base md:text-lg font-medium px-2 sm:px-3 py-1.5 sm:py-1 rounded transition-colors ${activeTab === 'weekly' ? 'bg-orange-600 text-white dark:bg-orange-500' : 'text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-700'}`}
+                    className={`text-[9px] sm:text-xs md:text-sm lg:text-base font-medium px-1.5 sm:px-2 md:px-2 lg:px-3 py-1.5 sm:py-1 md:py-1.5 lg:py-2 rounded transition-colors whitespace-nowrap min-h-[32px] sm:min-h-0 flex-shrink-0 ${activeTab === 'weekly' ? 'bg-orange-600 text-white dark:bg-orange-500' : 'text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-700'}`}
                     onClick={() => setActiveTab('weekly')}
                   >
                     {t('nav.weekly')}
@@ -1570,7 +1591,7 @@ const Index = () => {
                 )}
                 {canSeeProjects(currentUser) && (
                   <button
-                    className={`text-sm sm:text-base md:text-lg font-medium px-2 sm:px-3 py-1.5 sm:py-1 rounded transition-colors ${activeTab === 'projects' ? 'bg-orange-600 text-white dark:bg-orange-500' : 'text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-700'}`}
+                    className={`text-[9px] sm:text-xs md:text-sm lg:text-base font-medium px-1.5 sm:px-2 md:px-2 lg:px-3 py-1.5 sm:py-1 md:py-1.5 lg:py-2 rounded transition-colors whitespace-nowrap min-h-[32px] sm:min-h-0 flex-shrink-0 ${activeTab === 'projects' ? 'bg-orange-600 text-white dark:bg-orange-500' : 'text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-700'}`}
                     onClick={() => setActiveTab('projects')}
                   >
                     {t('nav.projects')}
@@ -1579,7 +1600,7 @@ const Index = () => {
                 {/* Export - Visible for regular users, not for admin/administratie (they have it in Admin Panel) */}
                 {currentUser && !currentUser?.isAdmin && !isAdministratie(currentUser) && (
                   <button
-                    className={`text-sm sm:text-base md:text-lg font-medium px-2 sm:px-3 py-1.5 sm:py-1 rounded transition-colors ${activeTab === 'export' ? 'bg-orange-600 text-white dark:bg-orange-500' : 'text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-700'}`}
+                    className={`text-[9px] sm:text-xs md:text-sm lg:text-base font-medium px-1.5 sm:px-2 md:px-2 lg:px-3 py-1.5 sm:py-1 md:py-1.5 lg:py-2 rounded transition-colors whitespace-nowrap min-h-[32px] sm:min-h-0 flex-shrink-0 ${activeTab === 'export' ? 'bg-orange-600 text-white dark:bg-orange-500' : 'text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-700'}`}
                     onClick={() => setActiveTab('export')}
                   >
                     {t('nav.export')}
@@ -1587,41 +1608,41 @@ const Index = () => {
                 )}
                 {currentUser?.isAdmin && !isAdministratie(currentUser) && (
                   <button
-                    className={`text-sm sm:text-base md:text-lg font-medium px-2 sm:px-3 py-1.5 sm:py-1 rounded transition-colors ${activeTab === 'bugreports' ? 'bg-orange-600 text-white dark:bg-orange-500' : 'text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-700'}`}
+                    className={`text-[9px] sm:text-xs md:text-sm lg:text-base font-medium px-1.5 sm:px-2 md:px-2 lg:px-3 py-1.5 sm:py-1 md:py-1.5 lg:py-2 rounded transition-colors whitespace-nowrap min-h-[32px] sm:min-h-0 flex-shrink-0 ${activeTab === 'bugreports' ? 'bg-orange-600 text-white dark:bg-orange-500' : 'text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-700'}`}
                     onClick={() => setActiveTab('bugreports')}
                   >
                     {t('nav.reportBug')}
                   </button>
                 )}
                 <button
-                  className={`text-sm sm:text-base md:text-lg font-medium px-2 sm:px-3 py-1.5 sm:py-1 rounded transition-colors ${activeTab === 'overview' ? 'bg-orange-600 text-white dark:bg-orange-500' : 'text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-700'}`}
+                  className={`text-[9px] sm:text-xs md:text-sm lg:text-base font-medium px-1.5 sm:px-2 md:px-2 lg:px-3 py-1.5 sm:py-1 md:py-1.5 lg:py-2 rounded transition-colors whitespace-nowrap min-h-[32px] sm:min-h-0 flex-shrink-0 ${activeTab === 'overview' ? 'bg-orange-600 text-white dark:bg-orange-500' : 'text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-700'}`}
                   onClick={() => setActiveTab('overview')}
                 >
                   {t('nav.overview')}
                 </button>
                 {(currentUser?.isAdmin || isAdministratie(currentUser)) && (
                   <button
-                    className={`text-sm sm:text-base md:text-lg font-medium px-2 sm:px-3 py-1.5 sm:py-1 rounded transition-colors ${activeTab === 'admin' ? 'bg-orange-600 text-white dark:bg-orange-500' : 'text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-700'}`}
+                    className={`text-[9px] sm:text-xs md:text-sm lg:text-base font-medium px-1.5 sm:px-2 md:px-2 lg:px-3 py-1.5 sm:py-1 md:py-1.5 lg:py-2 rounded transition-colors whitespace-nowrap min-h-[32px] sm:min-h-0 flex-shrink-0 ${activeTab === 'admin' ? 'bg-orange-600 text-white dark:bg-orange-500' : 'text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-700'}`}
                     onClick={() => setActiveTab('admin')}
                   >
                     {t('nav.admin')}
                   </button>
                 )}
               </nav>
-            </div>
-            <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-3 md:gap-6 justify-center md:justify-end">
+            {/* Controls - Theme, Language, Logout - All in one line */}
+            <div className="flex items-center gap-0.5 sm:gap-1 md:gap-1.5 lg:gap-2 ml-auto shrink-0 flex-nowrap">
               <ThemeToggle />
               <LanguageSelector />
-              {currentUser && (
+              {currentUser && !isMobile && (
                 <button
                   onClick={() => setActiveTab('profile')}
-                  className="text-xs sm:text-sm md:text-base text-gray-700 dark:text-gray-300 font-medium text-center sm:text-left hover:text-orange-600 dark:hover:text-orange-400 transition-colors cursor-pointer underline decoration-1 hover:decoration-2"
+                  className="text-[10px] sm:text-xs md:text-sm text-gray-700 dark:text-gray-300 font-medium text-center hover:text-orange-600 dark:hover:text-orange-400 transition-colors cursor-pointer underline decoration-1 hover:decoration-2 whitespace-nowrap"
                   title="Click to view and edit your profile"
                 >
                   {t('nav.welcome')}, {currentUser?.name || "User"}
                 </button>
               )}
-              {currentUser && (
+              {currentUser && !isMobile && (
                 <ScreenshotButton currentUser={currentUser} />
               )}
               <Button 
@@ -1638,7 +1659,7 @@ const Index = () => {
                     description: "You have been successfully logged out.",
                   });
                 }}
-                className="border-orange-200 dark:border-orange-700 text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-700 h-9 sm:h-8 text-xs sm:text-sm w-full sm:w-auto"
+                className="border-orange-200 dark:border-orange-700 text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-700 h-5 sm:h-6 md:h-7 lg:h-8 text-[8px] sm:text-[9px] md:text-xs lg:text-sm px-1 sm:px-1.5 md:px-2 lg:px-3 py-0.5 whitespace-nowrap flex-shrink-0"
               >
                 {t('nav.logout')}
               </Button>
@@ -1648,36 +1669,26 @@ const Index = () => {
       </header>
 
       {/* Main Content */}
-      <div className="container mx-auto px-3 sm:px-4 md:px-6 py-3 sm:py-4 md:py-8">
+      <div className="container mx-auto px-2 sm:px-4 md:px-6 py-2 sm:py-4 md:py-6 lg:py-8" style={{ marginTop: isMobile ? '95px' : '100px' }}>
         {activeTab === 'timesheet' && (
           <TimesheetEntry currentUser={currentUser} hasUnreadDaysOffNotification={hasUnreadDaysOffNotification} />
         )}
         {activeTab === 'weekly' && !isAdministratie(currentUser) && (
           <div className="space-y-4">
-            <div className="flex justify-end">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  const newValue = !useSimpleWeeklyView;
-                  setUseSimpleWeeklyView(newValue);
-                  localStorage.setItem('bampro_use_simple_weekly_view', String(newValue));
-                  toast({
-                    title: "View Changed",
-                    description: newValue 
-                      ? "You are now using the simple view. You can always switch back using the button above." 
-                      : "You are now using the original view. You can always switch back using the button above.",
-                  });
-                }}
-                className="mb-4"
-              >
-                {useSimpleWeeklyView ? "🔄 Switch to original view" : "🔄 Switch to simple view"}
-              </Button>
-            </div>
             {useSimpleWeeklyView ? (
-              <WeeklyCalendarEntrySimple currentUser={currentUser} hasUnreadDaysOffNotification={hasUnreadDaysOffNotification} />
+              <WeeklyCalendarEntrySimple 
+                currentUser={currentUser} 
+                hasUnreadDaysOffNotification={hasUnreadDaysOffNotification}
+                useSimpleView={useSimpleWeeklyView}
+                setUseSimpleView={setUseSimpleWeeklyView}
+              />
             ) : (
-              <WeeklyCalendarEntry currentUser={currentUser} hasUnreadDaysOffNotification={hasUnreadDaysOffNotification} />
+              <WeeklyCalendarEntry 
+                currentUser={currentUser} 
+                hasUnreadDaysOffNotification={hasUnreadDaysOffNotification}
+                useSimpleView={useSimpleWeeklyView}
+                setUseSimpleView={setUseSimpleWeeklyView}
+              />
             )}
           </div>
         )}
@@ -1693,16 +1704,16 @@ const Index = () => {
         )}
         {activeTab === 'export' && !currentUser?.isAdmin && !isAdministratie(currentUser) && (
           <Card className="shadow-lg border-orange-100 w-full overflow-x-auto">
-            <CardHeader className="bg-gradient-to-r from-orange-50 to-orange-100 rounded-t-lg">
-              <CardTitle className="flex items-center text-orange-900">
-                <Download className="h-6 w-6 mr-3" />
+            <CardHeader className="bg-gradient-to-r from-orange-50 to-orange-100 dark:from-orange-900/30 dark:to-orange-800/30 rounded-t-lg p-4 sm:p-6">
+              <CardTitle className="flex items-center text-orange-900 dark:text-orange-100 text-lg sm:text-xl">
+                <Download className="h-5 w-5 sm:h-6 sm:w-6 mr-2 sm:mr-3" />
                 {t('export.title')}
               </CardTitle>
-              <CardDescription className="text-orange-700 dark:text-orange-300">
+              <CardDescription className="text-orange-700 dark:text-orange-300 text-sm">
                 {t('export.description')}
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6 p-8">
+            <CardContent className="space-y-4 sm:space-y-6 p-4 sm:p-6 md:p-8">
               {currentUser?.isAdmin ? (
                 // Admin export options
                 <div className="space-y-6">
@@ -1841,12 +1852,12 @@ const Index = () => {
                 </div>
               ) : (
                 // Normal user export options
-                <div className="space-y-4">
-                  <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
-                    <div className="flex-1">
+                <div className="space-y-4 sm:space-y-6">
+                  <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 items-start sm:items-end">
+                    <div className="flex-1 w-full">
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('export.selectPeriod')}</label>
                       <Select value={exportPeriod} onValueChange={(value: "day" | "week" | "month" | "year") => setExportPeriod(value)}>
-                        <SelectTrigger className="w-full">
+                        <SelectTrigger className="w-full h-10 sm:h-9">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -1857,7 +1868,7 @@ const Index = () => {
                         </SelectContent>
                       </Select>
                     </div>
-                    <div className="flex-1">
+                    <div className="flex-1 w-full">
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                         {exportPeriod === "day" ? t('export.selectDay') : exportPeriod === "week" ? t('export.selectWeek') : exportPeriod === "month" ? t('export.selectMonth') : t('export.selectYear')}
                       </label>
@@ -1865,35 +1876,37 @@ const Index = () => {
                         type="date" 
                         value={selectedDate} 
                         onChange={e => setSelectedDate(e.target.value)} 
-                        className="w-full border rounded px-3 py-2 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                        className="w-full border rounded px-3 py-2 h-10 sm:h-9 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm sm:text-base"
                       />
                     </div>
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                     <Button 
-                      className="w-full h-16 flex flex-col items-center justify-center bg-orange-600 hover:bg-orange-700 text-white shadow-lg rounded-lg transition-all" 
+                      className="w-full h-14 sm:h-16 flex flex-col items-center justify-center bg-orange-600 hover:bg-orange-700 text-white shadow-lg rounded-lg transition-all" 
                       onClick={handleExportPeriod} 
                       disabled={exporting}
+                      size="lg"
                     >
-                      <Download className="h-6 w-6 mb-2" />
-                      <span className="text-lg font-medium">
+                      <Download className="h-5 w-5 sm:h-6 sm:w-6 mb-1 sm:mb-2" />
+                      <span className="text-sm sm:text-base font-medium">
                         {exporting ? t('export.exporting') : `Export Excel (${exportPeriod === "day" ? t('export.day') : exportPeriod === "week" ? t('export.week') : exportPeriod === "month" ? t('export.month') : t('export.year')})`}
                       </span>
                     </Button>
                     <Button 
-                      className="w-full h-16 flex flex-col items-center justify-center bg-red-600 hover:bg-red-700 text-white shadow-lg rounded-lg transition-all" 
+                      className="w-full h-14 sm:h-16 flex flex-col items-center justify-center bg-red-600 hover:bg-red-700 text-white shadow-lg rounded-lg transition-all" 
                       onClick={handleExportPeriodPDF} 
                       disabled={exporting}
+                      size="lg"
                     >
-                      <FileDown className="h-6 w-6 mb-2" />
-                      <span className="text-lg font-medium">
+                      <FileDown className="h-5 w-5 sm:h-6 sm:w-6 mb-1 sm:mb-2" />
+                      <span className="text-sm sm:text-base font-medium">
                         {exporting ? t('export.exporting') : `Export PDF (${exportPeriod === "day" ? t('export.day') : exportPeriod === "week" ? t('export.week') : exportPeriod === "month" ? t('export.month') : t('export.year')})`}
                       </span>
                     </Button>
                   </div>
                 </div>
               )}
-              <div className="text-sm text-orange-800 dark:text-orange-200 bg-orange-50 dark:bg-orange-900/30 p-6 rounded-lg border border-orange-200 dark:border-orange-800">
+              <div className="text-xs sm:text-sm text-orange-800 dark:text-orange-200 bg-orange-50 dark:bg-orange-900/30 p-4 sm:p-6 rounded-lg border border-orange-200 dark:border-orange-800">
                 <strong className="text-orange-900 dark:text-orange-100">{t('export.note')}</strong> {currentUser?.isAdmin 
                   ? t('export.adminNote')
                   : t('export.userNote')}
@@ -1910,7 +1923,9 @@ const Index = () => {
           <Profile currentUser={currentUser} setCurrentUser={setCurrentUser} />
         )}
         {activeTab === 'admin' && (currentUser?.isAdmin || isAdministratie(currentUser)) && (
-          <AdminPanel currentUser={currentUser} />
+          <div className="w-full">
+            <AdminPanel currentUser={currentUser} />
+          </div>
         )}
         {activeTab === 'bugreports' && currentUser?.isAdmin && (
           <BugReports currentUser={currentUser} />
@@ -1919,7 +1934,7 @@ const Index = () => {
       
       {/* Floating Report Bug Button - Always visible for all users */}
       {currentUser && (
-        <div className="fixed bottom-6 right-6 z-50">
+        <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-50">
           <ScreenshotButton currentUser={currentUser} floating={true} />
         </div>
       )}
