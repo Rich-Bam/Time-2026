@@ -377,6 +377,7 @@ const translations: Record<Language, Record<string, string>> = {
   en: {
     // Navigation
     'nav.weekly': 'Weekly Entry',
+    'nav.viewHours': 'View Hours',
     'nav.projects': 'Projects',
     'nav.export': 'Export',
     'nav.admin': 'Admin',
@@ -550,7 +551,6 @@ const translations: Record<Language, Record<string, string>> = {
     'viewHours.hours': 'Hours',
     'viewHours.total': 'Total',
     'viewHours.weekTotal': 'Week Total',
-    'nav.viewHours': 'View Hours',
     
     // Admin Panel
     'admin.title': 'Admin Panel',
@@ -738,6 +738,7 @@ const translations: Record<Language, Record<string, string>> = {
   es: {
     // Navigation
     'nav.weekly': 'Entrada Semanal',
+    'nav.viewHours': 'Ver Horas',
     'nav.projects': 'Proyectos',
     'nav.export': 'Exportar',
     'nav.admin': 'Administrador',
@@ -811,6 +812,18 @@ const translations: Record<Language, Record<string, string>> = {
     'weekly.total': 'Total:',
     'weekly.exportSuccessful': 'Exportación Exitosa',
     'weekly.exportSuccessfulDescription': 'Semana {weekNumber} entradas exportadas a {filename} con {dayCount} hojas de día',
+    
+    // View Hours
+    'viewHours.title': 'Ver Horas',
+    'viewHours.errorFetching': 'Error al obtener horas',
+    'viewHours.noEntries': 'No se encontraron horas para esta semana',
+    'viewHours.noEntriesForDay': 'No hay horas para este día',
+    'viewHours.project': 'Proyecto',
+    'viewHours.workType': 'Tipo de Trabajo',
+    'viewHours.time': 'Tiempo',
+    'viewHours.hours': 'Horas',
+    'viewHours.total': 'Total',
+    'viewHours.weekTotal': 'Total Semanal',
     'weekly.switchToOriginal': 'Cambiar a vista original',
     'weekly.switchToSimple': 'Cambiar a vista simple',
     'weekly.original': 'Original',
@@ -833,19 +846,6 @@ const translations: Record<Language, Record<string, string>> = {
     'weekly.thursday': 'Jueves',
     'weekly.friday': 'Viernes',
     'weekly.saturday': 'Sábado',
-    
-    // View Hours
-    'viewHours.title': 'Ver Horas',
-    'viewHours.errorFetching': 'Error al obtener horas',
-    'viewHours.noEntries': 'No se encontraron horas para esta semana',
-    'viewHours.noEntriesForDay': 'No hay horas para este día',
-    'viewHours.project': 'Proyecto',
-    'viewHours.workType': 'Tipo de Trabajo',
-    'viewHours.time': 'Hora',
-    'viewHours.hours': 'Horas',
-    'viewHours.total': 'Total',
-    'viewHours.weekTotal': 'Total Semanal',
-    'nav.viewHours': 'Ver Horas',
     
     // Export
     'export.title': 'Exportar Datos de Timesheet',
@@ -959,6 +959,7 @@ const translations: Record<Language, Record<string, string>> = {
   el: {
     // Navigation
     'nav.weekly': 'Εβδομαδιαία Καταχώρηση',
+    'nav.viewHours': 'Προβολή Ωρών',
     'nav.projects': 'Έργα',
     'nav.export': 'Εξαγωγή',
     'nav.admin': 'Διαχειριστής',
@@ -1065,7 +1066,6 @@ const translations: Record<Language, Record<string, string>> = {
     'viewHours.hours': 'Ώρες',
     'viewHours.total': 'Σύνολο',
     'viewHours.weekTotal': 'Συνολικό Εβδομάδας',
-    'nav.viewHours': 'Προβολή Ωρών',
     
     'weekly.title': 'Εβδομαδιαία Καταχώρηση Ημερολογίου',
     'weekly.week': 'Εβδομάδα',
@@ -1202,6 +1202,7 @@ const translations: Record<Language, Record<string, string>> = {
   ro: {
     // Navigation
     'nav.weekly': 'Intrare Săptămânală',
+    'nav.viewHours': 'Vezi Orele',
     'nav.projects': 'Proiecte',
     'nav.export': 'Export',
     'nav.admin': 'Administrator',
@@ -1309,7 +1310,6 @@ const translations: Record<Language, Record<string, string>> = {
     'viewHours.hours': 'Ore',
     'viewHours.total': 'Total',
     'viewHours.weekTotal': 'Total Săptămână',
-    'nav.viewHours': 'Vizualizare Ore',
     
     // Export
     'export.title': 'Export Date Timesheet',
@@ -1530,7 +1530,6 @@ const translations: Record<Language, Record<string, string>> = {
     'viewHours.hours': 'Godziny',
     'viewHours.total': 'Razem',
     'viewHours.weekTotal': 'Razem Tydzień',
-    'nav.viewHours': 'Zobacz Godziny',
     
     // Export
     'export.title': 'Eksport Danych Timesheet',
@@ -1644,6 +1643,7 @@ const translations: Record<Language, Record<string, string>> = {
   tr: {
     // Navigation
     'nav.weekly': 'Haftalık Giriş',
+    'nav.viewHours': 'Saatleri Görüntüle',
     'nav.projects': 'Projeler',
     'nav.export': 'Dışa Aktar',
     'nav.admin': 'Yönetici',
@@ -1738,7 +1738,6 @@ const translations: Record<Language, Record<string, string>> = {
     'viewHours.hours': 'Saatler',
     'viewHours.total': 'Toplam',
     'viewHours.weekTotal': 'Hafta Toplamı',
-    'nav.viewHours': 'Saatleri Görüntüle',
     
     'weekly.actions': 'İşlemler',
     'weekly.submittedEntries': 'Gönderilen Girişler:',
