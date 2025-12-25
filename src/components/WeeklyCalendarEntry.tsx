@@ -96,6 +96,7 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
   const [confirmedWeeks, setConfirmedWeeks] = useState<Record<string, boolean>>({});
   const [openWorkTypePopovers, setOpenWorkTypePopovers] = useState<Record<string, boolean>>({});
   const [workTypeSearchValues, setWorkTypeSearchValues] = useState<Record<string, string>>({});
+  const [availableWeeks, setAvailableWeeks] = useState<Array<{ weekStart: string; weekNumber: number; year: number; label: string }>>([]);
 
   const weekDates = getWeekDates(weekStart);
   const weekNumber = getISOWeekNumber(weekDates[0]);
@@ -204,6 +205,60 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
     fetchDaysOff();
   }, [currentUser]);
 
+  // Fetch all weeks where user has entries (only for normal users, not admins)
+  const fetchAvailableWeeks = async () => {
+    if (!currentUser || currentUser?.isAdmin || currentUser?.userType === 'administratie') {
+      setAvailableWeeks([]);
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from("timesheet")
+        .select("date")
+        .eq("user_id", currentUser.id)
+        .order("date", { ascending: false });
+
+      if (error) {
+        console.error("Error fetching available weeks:", error);
+        return;
+      }
+
+      if (!data || data.length === 0) {
+        setAvailableWeeks([]);
+        return;
+      }
+
+      // Get unique week start dates
+      const weekStarts = new Set<string>();
+      data.forEach(entry => {
+        const date = new Date(entry.date);
+        const weekStart = getWeekDates(date)[0];
+        weekStarts.add(weekStart.toISOString().split('T')[0]);
+      });
+
+      // Convert to array and format for dropdown
+      const weeks = Array.from(weekStarts).map(weekStartStr => {
+        const weekStartDate = new Date(weekStartStr);
+        const weekDates = getWeekDates(weekStartDate);
+        const weekNumber = getISOWeekNumber(weekDates[0]);
+        const year = weekStartDate.getFullYear();
+        const label = `${t('weekly.week')} ${weekNumber} (${weekDates[0].toLocaleDateString()} - ${weekDates[6].toLocaleDateString()})`;
+        return { weekStart: weekStartStr, weekNumber, year, label };
+      });
+
+      // Sort by date descending (newest first)
+      weeks.sort((a, b) => b.weekStart.localeCompare(a.weekStart));
+      setAvailableWeeks(weeks);
+    } catch (err) {
+      console.error("Error fetching available weeks:", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchAvailableWeeks();
+  }, [currentUser]);
+
   // Fetch submitted entries for a day
   const fetchSubmittedEntries = async (dateStr: string) => {
     if (!currentUser) return;
@@ -238,14 +293,111 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
       .eq('user_id', currentUser.id)
       .eq('week_start_date', weekKey)
       .single();
-    // Week is locked if confirmed AND (not admin OR admin hasn't approved yet)
-    const isLocked = !!data?.confirmed && (!currentUser.isAdmin || !data?.admin_approved);
+    // Week is locked if confirmed = true (regardless of admin status)
+    // This ensures consistency with Simple view - once confirmed, week is locked in both views
+    // Admins can unlock via admin panel if needed
+    const isLocked = !!data?.confirmed;
     setConfirmedWeeks(prev => ({ ...prev, [weekKey]: isLocked }));
   };
 
   useEffect(() => {
     fetchConfirmedStatus();
     // eslint-disable-next-line
+  }, [currentUser, weekStart]);
+
+  // Handle week confirmation
+  const handleConfirmWeek = async () => {
+    if (!currentUser) return;
+    
+    const weekKey = weekDates[0].toISOString().split('T')[0];
+    
+    // Check if week already has confirmed status
+    const { data: existing } = await supabase
+      .from('confirmed_weeks')
+      .select('*')
+      .eq('user_id', currentUser.id)
+      .eq('week_start_date', weekKey)
+      .single();
+    
+    if (existing?.confirmed) {
+      toast({
+        title: "Already Confirmed",
+        description: "This week is already confirmed.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // Insert or update confirmed_weeks
+    const { error } = await supabase
+      .from('confirmed_weeks')
+      .upsert({
+        user_id: currentUser.id,
+        week_start_date: weekKey,
+        confirmed: true,
+        admin_approved: false,
+        admin_reviewed: false,
+      }, {
+        onConflict: 'user_id,week_start_date'
+      });
+    
+    if (error) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to confirm week.",
+        variant: "destructive",
+      });
+    } else {
+      // Immediately update state to lock the week
+      const weekKeyDate = weekDates[0].toISOString().split('T')[0];
+      console.log('CONFIRMING WEEK (Original view) - Setting state to locked:', weekKeyDate);
+      
+      // Lock the week immediately
+      setConfirmedWeeks(prev => {
+        const updated = { ...prev, [weekKeyDate]: true };
+        console.log('CONFIRMING WEEK (Original view) - Updated state:', updated);
+        return updated;
+      });
+      
+      toast({
+        title: "Week Confirmed",
+        description: "This week has been confirmed and locked. You can no longer make changes.",
+      });
+    }
+  };
+
+  // Set up real-time subscription to listen for changes to confirmed_weeks
+  useEffect(() => {
+    if (!currentUser) return;
+    
+    const weekKey = weekDates[0].toISOString().split('T')[0];
+    
+    const channel = supabase
+      .channel(`confirmed_weeks_${currentUser.id}_${weekKey}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'confirmed_weeks',
+          filter: `user_id=eq.${currentUser.id} AND week_start_date=eq.${weekKey}`
+        },
+        (payload) => {
+          console.log('Real-time update for confirmed_weeks:', payload);
+          // Update confirmed status immediately when it changes
+          // Week is locked if confirmed = true (regardless of admin status)
+          const isLocked = !!payload.new?.confirmed;
+          setConfirmedWeeks(prev => ({ ...prev, [weekKey]: isLocked }));
+          // Also refresh from database to ensure consistency
+          fetchConfirmedStatus();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser, weekStart]);
 
   // Ensure every day always has at least one entry
@@ -922,29 +1074,6 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
     }
   };
 
-  const handleConfirmWeek = async () => {
-    const weekKey = weekDates[0].toISOString().split('T')[0];
-    const { error } = await supabase.from('confirmed_weeks').upsert({
-      user_id: currentUser.id,
-      week_start_date: weekKey,
-      confirmed: true,
-      admin_approved: false,
-      admin_reviewed: false
-    });
-    if (error) {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive",
-      });
-    } else {
-      toast({
-        title: "Week Bevestigd",
-        description: "De week is bevestigd en wacht op admin goedkeuring. Je kunt de uren niet meer wijzigen tot een admin dit heeft goedgekeurd of teruggezet.",
-      });
-      fetchConfirmedStatus();
-    }
-  };
 
   const handleEditEntry = (entry: any, dateStr: string) => {
     const weekKey = weekDates[0].toISOString().split('T')[0];
@@ -1134,8 +1263,8 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
     
     if (previousEntries.length === 0) {
       toast({
-        title: "No Entries",
-        description: "The previous day has no entries to copy.",
+        title: t('weekly.noEntries'),
+        description: t('weekly.noEntriesToCopy'),
         variant: "destructive",
       });
       return;
@@ -1328,12 +1457,6 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
   };
 
   // Helper to get day name in Dutch
-  const getDayNameNL = (dateStr: string) => {
-    const date = new Date(dateStr);
-    const days = ['Zondag', 'Maandag', 'Dinsdag', 'Woensdag', 'Donderdag', 'Vrijdag', 'Zaterdag'];
-    return days[date.getDay()];
-  };
-
   // Helper to get work type label
   const getWorkTypeLabel = (desc: string) => {
     const workType = workTypes.find(wt => String(wt.value) === String(desc));
@@ -1373,8 +1496,8 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
 
     if (!data || data.length === 0) {
       toast({
-        title: "No Data",
-        description: "No entries found for this week.",
+        title: t('weekly.noData'),
+        description: t('weekly.noEntriesForWeek'),
         variant: "destructive",
       });
       return;
@@ -1423,24 +1546,24 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
     worksheet.getColumn(7).width = 30; // Space for logo
 
     // Add header rows
-    worksheet.getCell('A1').value = 'Employee Name:';
+    worksheet.getCell('A1').value = t('weekly.employeeName');
     worksheet.getCell('B1').value = currentUser.name || currentUser.email || '';
     
-    worksheet.getCell('A2').value = 'Date:';
-    worksheet.getCell('B2').value = `From: ${formatDateDDMMYY(fromDate)}`;
-    worksheet.getCell('D2').value = `To: ${formatDateDDMMYY(toDate)}`;
+    worksheet.getCell('A2').value = t('weekly.date');
+    worksheet.getCell('B2').value = `${t('weekly.from')}: ${formatDateDDMMYY(fromDate)}`;
+    worksheet.getCell('D2').value = `${t('weekly.to')}: ${formatDateDDMMYY(toDate)}`;
     
-    worksheet.getCell('A3').value = 'Day:';
+    worksheet.getCell('A3').value = t('weekly.day');
     
-    worksheet.getCell('A4').value = 'Week Number:';
+    worksheet.getCell('A4').value = t('weekly.weekNumber');
     worksheet.getCell('B4').value = weekNumber.toString();
     
-    worksheet.getCell('A5').value = 'Year:';
+    worksheet.getCell('A5').value = t('weekly.year');
     worksheet.getCell('B5').value = new Date().getFullYear().toString();
 
     // Add table headers (row 7)
     const headerRow = worksheet.getRow(7);
-    headerRow.values = ['Day', 'Work Type', 'Project Work Order', 'From', 'To', 'Hours Worked'];
+    headerRow.values = [t('weekly.day'), t('weekly.workType'), t('weekly.projectWorkOrder'), t('weekly.from'), t('weekly.to'), t('weekly.hoursWorked')];
     headerRow.font = { bold: true };
     headerRow.fill = {
       type: 'pattern',
@@ -1451,8 +1574,16 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
     // Format data rows
     data.forEach((entry, idx) => {
       const date = new Date(entry.date);
-      const dayNamesEN = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-      const dayName = dayNamesEN[date.getDay()];
+      const dayNames = [
+        t('weekly.sunday'),
+        t('weekly.monday'),
+        t('weekly.tuesday'),
+        t('weekly.wednesday'),
+        t('weekly.thursday'),
+        t('weekly.friday'),
+        t('weekly.saturday')
+      ];
+      const dayName = dayNames[date.getDay()];
       
       const row = worksheet.getRow(8 + idx);
       row.values = [
@@ -1472,7 +1603,7 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
     // Add total row
     const totalRowIndex = 8 + data.length;
     const totalRow = worksheet.getRow(totalRowIndex);
-    totalRow.getCell(2).value = 'Total:';
+      totalRow.getCell(2).value = t('weekly.total');
     totalRow.getCell(2).font = { bold: true };
     totalRow.getCell(6).value = totalHoursHHMM;
     totalRow.getCell(6).font = { bold: true };
@@ -1511,6 +1642,31 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
             <Button variant="outline" onClick={() => changeWeek(1)} size="sm" className="text-xs sm:text-sm">
               {t('weekly.next')} &gt;
             </Button>
+            {/* Week selector - Only for normal users (not admins or administratie) */}
+            {currentUser && !currentUser?.isAdmin && currentUser?.userType !== 'administratie' && availableWeeks.length > 0 && (
+              <Select
+                value={weekDates[0].toISOString().split('T')[0]}
+                onValueChange={(value) => {
+                  const selectedWeek = availableWeeks.find(w => w.weekStart === value);
+                  if (selectedWeek) {
+                    const newStart = new Date(selectedWeek.weekStart);
+                    setWeekStart(getWeekDates(newStart)[0]);
+                    setDays(getWeekDates(newStart).map(date => ({ date, entries: [{ workType: "", project: "", hours: "", startTime: "", endTime: "" }], open: false })));
+                  }
+                }}
+              >
+                <SelectTrigger className="w-[200px] sm:w-[250px] md:w-[300px] text-xs sm:text-sm h-8 sm:h-9">
+                  <SelectValue placeholder={t('weekly.selectWeek')} />
+                </SelectTrigger>
+                <SelectContent className="max-h-[300px]">
+                  {availableWeeks.map((week) => (
+                    <SelectItem key={week.weekStart} value={week.weekStart}>
+                      {week.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
             <Button variant="outline" onClick={handleExportWeek} size="sm" className="text-xs sm:text-sm">
               <Download className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
               {t('weekly.exportWeek')}
@@ -1525,9 +1681,9 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
                 }}
                 size="sm" 
                 className="text-xs sm:text-sm"
-                title={useSimpleView ? "Switch to original view" : "Switch to simple view"}
+                title={useSimpleView ? t('weekly.switchToOriginal') : t('weekly.switchToSimple')}
               >
-                🔄 {useSimpleView ? "Original" : "Simple"}
+                🔄 {useSimpleView ? t('weekly.original') : t('weekly.simple')}
               </Button>
             )}
           </div>
@@ -1550,7 +1706,7 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
             <div className="text-xs sm:text-sm text-blue-600 dark:text-blue-400 mt-2">
               {t('weekly.daysOffLeft', { days: daysOffLeft })}
               {hasUnreadDaysOffNotification && (
-                <span className="block mt-1 text-orange-600 dark:text-orange-400 font-semibold">⚠️ Updated!</span>
+                <span className="block mt-1 text-orange-600 dark:text-orange-400 font-semibold">⚠️ {t('weekly.updated')}</span>
               )}
             </div>
           </CardContent>
@@ -1589,9 +1745,9 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
             </div>
           </div>
           
-          {confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin && (
+          {confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && (
             <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded text-yellow-800 text-sm">
-              ⚠️ Deze week is bevestigd. Je kunt geen wijzigingen meer aanbrengen tot een admin dit heeft goedgekeurd of teruggezet.
+              ⚠️ {t('weekly.weekConfirmedWarning')}
             </div>
           )}
 
@@ -1614,7 +1770,9 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
                   {days.map((day, dayIdx) => {
                     const dateStr = day.date.toISOString().split('T')[0];
                     const submitted = submittedEntries[dateStr] || [];
-                    const isLocked = confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin;
+                    // Week is locked if confirmed = true (regardless of admin status)
+                    // Once confirmed, no one can edit (admins can unlock via admin panel if needed)
+                    const isLocked = !!confirmedWeeks[weekDates[0].toISOString().split('T')[0]];
                     const dayName = day.date.toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short' });
                     
                     // Ensure at least one empty entry for editing
@@ -1908,7 +2066,7 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
           {days.map((day, dayIdx) => day.open && (
             <div key={dayIdx} className="mb-3 sm:mb-4 border rounded-lg p-3 sm:p-4 bg-white dark:bg-gray-800 shadow">
               <div className="font-semibold mb-2 text-sm sm:text-base">{day.date.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'short', day: 'numeric' })}</div>
-              {confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin && (
+              {confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && (
                 <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded text-yellow-800 text-sm">
                   ⚠️ {t('weekly.confirmed')}
                 </div>
@@ -1932,7 +2090,7 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
                           variant="outline"
                           role="combobox"
                           className="w-full justify-between"
-                          disabled={confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin}
+                          disabled={!!confirmedWeeks[weekDates[0].toISOString().split('T')[0]]}
                         >
                           {entry.workType 
                             ? `${entry.workType} - ${workTypes.find(t => String(t.value) === entry.workType)?.label || ""}`
@@ -1951,7 +2109,7 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
                             }}
                           />
                           <CommandList>
-                            <CommandEmpty>No work type found.</CommandEmpty>
+                            <CommandEmpty>{t('weekly.noWorkTypeFound')}</CommandEmpty>
                             <CommandGroup>
                               {workTypes
                                 .filter(type =>
@@ -2018,7 +2176,7 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
                           size="sm" 
                           variant="outline" 
                           onClick={() => handleEntryChange(dayIdx, entryIdx, "project", "")}
-                          disabled={confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin}
+                          disabled={!!confirmedWeeks[weekDates[0].toISOString().split('T')[0]]}
                         >
                           {t('weekly.clear')}
                         </Button>
@@ -2049,7 +2207,7 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
                             size="sm"
                             className="ml-2"
                             onClick={() => handleAddCustomProject(dayIdx, entryIdx)}
-                            disabled={confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin}
+                            disabled={!!confirmedWeeks[weekDates[0].toISOString().split('T')[0]]}
                           >
                             {t('weekly.add')}
                           </Button>

@@ -115,6 +115,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
   const [projectSearchValues, setProjectSearchValues] = useState<Record<string, string>>({});
   const [openWorkTypePopovers, setOpenWorkTypePopovers] = useState<Record<string, boolean>>({});
   const [workTypeSearchValues, setWorkTypeSearchValues] = useState<Record<string, string>>({});
+  const [availableWeeks, setAvailableWeeks] = useState<Array<{ weekStart: string; weekNumber: number; year: number; label: string }>>([]);
   
   const weekDates = getWeekDates(weekStart);
   const weekNumber = getISOWeekNumber(weekDates[0]);
@@ -310,6 +311,60 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
     fetchDaysOff();
   }, [currentUser]);
 
+  // Fetch all weeks where user has entries (only for normal users, not admins)
+  const fetchAvailableWeeks = async () => {
+    if (!currentUser || currentUser?.isAdmin || currentUser?.userType === 'administratie') {
+      setAvailableWeeks([]);
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from("timesheet")
+        .select("date")
+        .eq("user_id", currentUser.id)
+        .order("date", { ascending: false });
+
+      if (error) {
+        console.error("Error fetching available weeks:", error);
+        return;
+      }
+
+      if (!data || data.length === 0) {
+        setAvailableWeeks([]);
+        return;
+      }
+
+      // Get unique week start dates
+      const weekStarts = new Set<string>();
+      data.forEach(entry => {
+        const date = new Date(entry.date);
+        const weekStart = getWeekDates(date)[0];
+        weekStarts.add(weekStart.toISOString().split('T')[0]);
+      });
+
+      // Convert to array and format for dropdown
+      const weeks = Array.from(weekStarts).map(weekStartStr => {
+        const weekStartDate = new Date(weekStartStr);
+        const weekDates = getWeekDates(weekStartDate);
+        const weekNumber = getISOWeekNumber(weekDates[0]);
+        const year = weekStartDate.getFullYear();
+        const label = `${t('weekly.week')} ${weekNumber} (${weekDates[0].toLocaleDateString()} - ${weekDates[6].toLocaleDateString()})`;
+        return { weekStart: weekStartStr, weekNumber, year, label };
+      });
+
+      // Sort by date descending (newest first)
+      weeks.sort((a, b) => b.weekStart.localeCompare(a.weekStart));
+      setAvailableWeeks(weeks);
+    } catch (err) {
+      console.error("Error fetching available weeks:", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchAvailableWeeks();
+  }, [currentUser]);
+
   // Fetch submitted entries
   const fetchSubmittedEntries = async (dateStr: string) => {
     if (!currentUser) return;
@@ -380,6 +435,40 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
 
   useEffect(() => {
     fetchConfirmedStatus();
+  }, [currentUser, weekStart]);
+
+  // Set up real-time subscription to listen for changes to confirmed_weeks
+  useEffect(() => {
+    if (!currentUser) return;
+    
+    const weekKey = weekDates[0].toISOString().split('T')[0];
+    
+    const channel = supabase
+      .channel(`confirmed_weeks_simple_${currentUser.id}_${weekKey}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'confirmed_weeks',
+          filter: `user_id=eq.${currentUser.id} AND week_start_date=eq.${weekKey}`
+        },
+        (payload) => {
+          console.log('Real-time update for confirmed_weeks (Simple view):', payload);
+          // Update confirmed status immediately when it changes
+          // Week is locked if confirmed = true (regardless of admin status)
+          const isLocked = !!payload.new?.confirmed;
+          setConfirmedWeeks(prev => ({ ...prev, [weekKey]: isLocked }));
+          // Also refresh from database to ensure consistency
+          fetchConfirmedStatus();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser, weekStart]);
 
   const changeWeek = (delta: number) => {
@@ -456,8 +545,15 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
   const handleEntryChange = (dayIdx: number, entryIdx: number, field: string, value: any) => {
     // Prevent changes if week is locked
     const weekKeyCheck = weekDates[0].toISOString().split('T')[0];
-    if (confirmedWeeks[weekKeyCheck]) {
-      return; // Silently ignore changes if week is locked
+    const isWeekLocked = !!confirmedWeeks[weekKeyCheck];
+    if (isWeekLocked) {
+      console.log('handleEntryChange blocked - week is locked:', weekKeyCheck);
+      toast({
+        title: "Week Locked",
+        description: "This week is confirmed and cannot be modified.",
+        variant: "destructive",
+      });
+      return; // Prevent changes if week is locked
     }
     
     setDays(prevDays => {
@@ -995,8 +1091,8 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
     
     if (entriesToSave.length === 0) {
       toast({
-        title: "Error",
-        description: "No valid entries to copy.",
+        title: t('common.error'),
+        description: t('weekly.noValidEntriesToCopy'),
         variant: "destructive",
       });
       return;
@@ -1249,7 +1345,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
 
     if (error) {
       toast({
-        title: "Export Failed",
+        title: t('weekly.exportFailed'),
         description: error.message,
         variant: "destructive",
       });
@@ -1258,8 +1354,8 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
 
     if (!data || data.length === 0) {
       toast({
-        title: "No Data",
-        description: "No entries found for this week.",
+        title: t('weekly.noData'),
+        description: t('weekly.noEntriesForWeek'),
         variant: "destructive",
       });
       return;
@@ -1366,14 +1462,14 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
       // Add total row
       const totalRowIndex = 8 + dayEntries.length;
       const totalRow = worksheet.getRow(totalRowIndex);
-      totalRow.getCell(2).value = 'Total:';
+      totalRow.getCell(2).value = t('weekly.total');
       totalRow.getCell(2).font = { bold: true };
       totalRow.getCell(6).value = totalHoursHHMM;
       totalRow.getCell(6).font = { bold: true };
     });
 
     // Generate filename with user name and week number
-    const userName = (currentUser.name || currentUser.email || "User").replace(/[^a-zA-Z0-9]/g, '_');
+    const userName = (currentUser.name || currentUser.email || t('common.user')).replace(/[^a-zA-Z0-9]/g, '_');
     const filename = `${userName}_Week${weekNumber}_${new Date(fromDate).getFullYear()}.xlsx`;
     
     // Write to buffer and download
@@ -1387,8 +1483,8 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
     window.URL.revokeObjectURL(url);
 
     toast({
-      title: "Export Successful",
-      description: `Week ${weekNumber} entries exported to ${filename} with ${weekDates.length} day sheets`,
+      title: t('weekly.exportSuccessful'),
+      description: t('weekly.exportSuccessfulDescription', { weekNumber, filename, dayCount: weekDates.length }),
     });
   };
 
@@ -1408,8 +1504,8 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
     
     if (existing?.confirmed) {
       toast({
-        title: "Already Confirmed",
-        description: "This week is already confirmed.",
+        title: t('weekly.alreadyConfirmed'),
+        description: t('weekly.alreadyConfirmedDescription'),
         variant: "destructive",
       });
       return;
@@ -1430,8 +1526,8 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
     
     if (error) {
       toast({
-        title: "Error",
-        description: error.message || "Failed to confirm week.",
+        title: t('common.error'),
+        description: error.message || t('weekly.failedToConfirmWeek'),
         variant: "destructive",
       });
     } else {
@@ -1452,6 +1548,12 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
         console.log('CONFIRMING WEEK - New value for weekKey:', updated[weekKeyDate]);
         return updated;
       });
+      
+      // Clear all editable entries to prevent any further editing
+      setDays(prevDays => prevDays.map(day => ({
+        ...day,
+        entries: [] // Clear all editable entries when week is confirmed
+      })));
       
       toast({
         title: "Week Confirmed",
@@ -1494,6 +1596,34 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
             <Button variant="outline" size={isMobile ? "sm" : "default"} onClick={() => changeWeek(1)} className="text-xs sm:text-sm">
               {t('weekly.next')} &gt;
             </Button>
+            {/* Week selector - Only for normal users (not admins or administratie) */}
+            {currentUser && !currentUser?.isAdmin && currentUser?.userType !== 'administratie' && availableWeeks.length > 0 && (
+              <Select
+                value={weekDates[0].toISOString().split('T')[0]}
+                onValueChange={(value) => {
+                  const selectedWeek = availableWeeks.find(w => w.weekStart === value);
+                  if (selectedWeek) {
+                    const newStart = new Date(selectedWeek.weekStart);
+                    setWeekStart(getWeekDates(newStart)[0]);
+                    setDays(getWeekDates(newStart).map(date => ({ 
+                      date, 
+                      entries: [{ workType: "", project: "", hours: "", startTime: "", endTime: "", fullDayOff: false }] 
+                    })));
+                  }
+                }}
+              >
+                <SelectTrigger className="w-[200px] sm:w-[250px] md:w-[300px] text-xs sm:text-sm h-8 sm:h-9">
+                  <SelectValue placeholder={t('weekly.selectWeek')} />
+                </SelectTrigger>
+                <SelectContent className="max-h-[300px]">
+                  {availableWeeks.map((week) => (
+                    <SelectItem key={week.weekStart} value={week.weekStart}>
+                      {week.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
             <Button variant="outline" size={isMobile ? "sm" : "default"} onClick={handleExportWeek} className="text-xs sm:text-sm">
               <Download className="h-4 w-4 mr-2" />
               {t('weekly.exportWeek')}
@@ -1662,7 +1792,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
                               {isEditing && (
-                                <span className="text-xs bg-yellow-500 text-white px-2 py-0.5 rounded font-semibold">EDITING</span>
+                                <span className="text-xs bg-yellow-500 text-white px-2 py-0.5 rounded font-semibold">{t('weekly.editing')}</span>
                               )}
                               <Label className="text-xs font-semibold">{t('weekly.workType')}</Label>
                             </div>
@@ -2216,7 +2346,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
                                                 className="text-blue-600 font-medium"
                                               >
                                                 <Plus className="mr-2 h-4 w-4" />
-                                                Create "{projectSearchValues[`${dayIdx}-${entryIdx}`]}"
+                                                {t('weekly.create')} "{projectSearchValues[`${dayIdx}-${entryIdx}`]}"
                                               </CommandItem>
                                             )}
                                         </CommandGroup>

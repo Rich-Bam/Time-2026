@@ -14,6 +14,7 @@ import AdminPanel from "@/components/AdminPanel";
 import ChangePasswordForm from "@/components/ChangePasswordForm";
 import WeeklyCalendarEntry from "@/components/WeeklyCalendarEntry";
 import WeeklyCalendarEntrySimple from "@/components/WeeklyCalendarEntrySimple";
+import ViewHours from "@/components/ViewHours";
 import ScreenshotButton from "@/components/ScreenshotButton";
 import BugReports from "@/components/BugReports";
 import InstallPWA from "@/components/InstallPWA";
@@ -1547,7 +1548,7 @@ const Index = () => {
 
       {/* Header */}
       <header className="bg-white dark:bg-gray-800 shadow-lg border-b border-orange-100 dark:border-gray-700 fixed top-0 left-0 right-0 z-50">
-        <div className="container mx-auto px-1 sm:px-4 md:px-6 py-1 sm:py-1.5 md:py-2 lg:py-3">
+        <div className="container mx-auto px-1 sm:px-3 md:px-4 lg:px-5 xl:px-6 py-1 sm:py-1.5 md:py-2 lg:py-3 max-w-full">
           {/* Logo Row - Only on mobile */}
           {isMobile && (
             <div className="flex justify-center mb-1">
@@ -1566,7 +1567,7 @@ const Index = () => {
           )}
           
           {/* Navigation and Controls Row - All in one line from left to right */}
-          <div className="flex flex-row items-center gap-0.5 sm:gap-1.5 md:gap-2 overflow-hidden">
+          <div className="flex flex-row items-center gap-0.5 sm:gap-1 md:gap-1.5 lg:gap-2 overflow-hidden">
             {!isMobile && (
               <button
                 onClick={() => setActiveTab('weekly')}
@@ -1576,22 +1577,33 @@ const Index = () => {
                 <img 
                   src="/bampro-marine-logo.jpg" 
                   alt="BAMPRO MARINE" 
-                  className="h-6 md:h-8 lg:h-10 xl:h-12 2xl:h-14 object-contain"
+                  className="h-6 md:h-7 lg:h-8 xl:h-9 2xl:h-10 object-contain"
                 />
               </button>
             )}
-            <nav className="flex items-center gap-0.5 sm:gap-1 md:gap-1.5 lg:gap-2 shrink-0 flex-1 min-w-0 flex-nowrap overflow-x-auto">
+            <nav className="flex items-center gap-0.5 sm:gap-0.5 md:gap-1 lg:gap-1.5 shrink-0 flex-1 min-w-0 flex-nowrap overflow-x-auto">
                 {!isAdministratie(currentUser) && (
-                  <button
-                    className={`text-[9px] sm:text-xs md:text-sm lg:text-base font-medium px-1.5 sm:px-2 md:px-2 lg:px-3 py-1.5 sm:py-1 md:py-1.5 lg:py-2 rounded transition-colors whitespace-nowrap min-h-[32px] sm:min-h-0 flex-shrink-0 ${activeTab === 'weekly' ? 'bg-orange-600 text-white dark:bg-orange-500' : 'text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-700'}`}
-                    onClick={() => setActiveTab('weekly')}
-                  >
-                    {t('nav.weekly')}
-                  </button>
+                  <>
+                    <button
+                      className={`text-[9px] sm:text-xs md:text-sm lg:text-sm xl:text-base font-medium px-1 sm:px-1.5 md:px-2 lg:px-2.5 py-1.5 sm:py-1 md:py-1.5 lg:py-2 rounded transition-colors whitespace-nowrap min-h-[32px] sm:min-h-0 flex-shrink-0 ${activeTab === 'weekly' ? 'bg-orange-600 text-white dark:bg-orange-500' : 'text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-700'}`}
+                      onClick={() => setActiveTab('weekly')}
+                    >
+                      {t('nav.weekly')}
+                    </button>
+                    {/* View Hours - Only for normal users (not admins or administratie) */}
+                    {currentUser && !currentUser?.isAdmin && currentUser?.userType !== 'administratie' && (
+                      <button
+                        className={`text-[9px] sm:text-xs md:text-sm lg:text-sm xl:text-base font-medium px-1 sm:px-1.5 md:px-2 lg:px-2.5 py-1.5 sm:py-1 md:py-1.5 lg:py-2 rounded transition-colors whitespace-nowrap min-h-[32px] sm:min-h-0 flex-shrink-0 ${activeTab === 'viewhours' ? 'bg-orange-600 text-white dark:bg-orange-500' : 'text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-700'}`}
+                        onClick={() => setActiveTab('viewhours')}
+                      >
+                        {t('nav.viewHours')}
+                      </button>
+                    )}
+                  </>
                 )}
                 {canSeeProjects(currentUser) && (
                   <button
-                    className={`text-[9px] sm:text-xs md:text-sm lg:text-base font-medium px-1.5 sm:px-2 md:px-2 lg:px-3 py-1.5 sm:py-1 md:py-1.5 lg:py-2 rounded transition-colors whitespace-nowrap min-h-[32px] sm:min-h-0 flex-shrink-0 ${activeTab === 'projects' ? 'bg-orange-600 text-white dark:bg-orange-500' : 'text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-700'}`}
+                    className={`text-[9px] sm:text-xs md:text-sm lg:text-sm xl:text-base font-medium px-1 sm:px-1.5 md:px-2 lg:px-2.5 py-1.5 sm:py-1 md:py-1.5 lg:py-2 rounded transition-colors whitespace-nowrap min-h-[32px] sm:min-h-0 flex-shrink-0 ${activeTab === 'projects' ? 'bg-orange-600 text-white dark:bg-orange-500' : 'text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-700'}`}
                     onClick={() => setActiveTab('projects')}
                   >
                     {t('nav.projects')}
@@ -1600,7 +1612,7 @@ const Index = () => {
                 {/* Export - Visible for regular users, not for admin/administratie (they have it in Admin Panel) */}
                 {currentUser && !currentUser?.isAdmin && !isAdministratie(currentUser) && (
                   <button
-                    className={`text-[9px] sm:text-xs md:text-sm lg:text-base font-medium px-1.5 sm:px-2 md:px-2 lg:px-3 py-1.5 sm:py-1 md:py-1.5 lg:py-2 rounded transition-colors whitespace-nowrap min-h-[32px] sm:min-h-0 flex-shrink-0 ${activeTab === 'export' ? 'bg-orange-600 text-white dark:bg-orange-500' : 'text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-700'}`}
+                    className={`text-[9px] sm:text-xs md:text-sm lg:text-sm xl:text-base font-medium px-1 sm:px-1.5 md:px-2 lg:px-2.5 py-1.5 sm:py-1 md:py-1.5 lg:py-2 rounded transition-colors whitespace-nowrap min-h-[32px] sm:min-h-0 flex-shrink-0 ${activeTab === 'export' ? 'bg-orange-600 text-white dark:bg-orange-500' : 'text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-700'}`}
                     onClick={() => setActiveTab('export')}
                   >
                     {t('nav.export')}
@@ -1608,21 +1620,21 @@ const Index = () => {
                 )}
                 {currentUser?.isAdmin && !isAdministratie(currentUser) && (
                   <button
-                    className={`text-[9px] sm:text-xs md:text-sm lg:text-base font-medium px-1.5 sm:px-2 md:px-2 lg:px-3 py-1.5 sm:py-1 md:py-1.5 lg:py-2 rounded transition-colors whitespace-nowrap min-h-[32px] sm:min-h-0 flex-shrink-0 ${activeTab === 'bugreports' ? 'bg-orange-600 text-white dark:bg-orange-500' : 'text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-700'}`}
+                    className={`text-[9px] sm:text-xs md:text-sm lg:text-sm xl:text-base font-medium px-1 sm:px-1.5 md:px-2 lg:px-2.5 py-1.5 sm:py-1 md:py-1.5 lg:py-2 rounded transition-colors whitespace-nowrap min-h-[32px] sm:min-h-0 flex-shrink-0 ${activeTab === 'bugreports' ? 'bg-orange-600 text-white dark:bg-orange-500' : 'text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-700'}`}
                     onClick={() => setActiveTab('bugreports')}
                   >
                     {t('nav.reportBug')}
                   </button>
                 )}
                 <button
-                  className={`text-[9px] sm:text-xs md:text-sm lg:text-base font-medium px-1.5 sm:px-2 md:px-2 lg:px-3 py-1.5 sm:py-1 md:py-1.5 lg:py-2 rounded transition-colors whitespace-nowrap min-h-[32px] sm:min-h-0 flex-shrink-0 ${activeTab === 'overview' ? 'bg-orange-600 text-white dark:bg-orange-500' : 'text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-700'}`}
+                  className={`text-[9px] sm:text-xs md:text-sm lg:text-sm xl:text-base font-medium px-1 sm:px-1.5 md:px-2 lg:px-2.5 py-1.5 sm:py-1 md:py-1.5 lg:py-2 rounded transition-colors whitespace-nowrap min-h-[32px] sm:min-h-0 flex-shrink-0 ${activeTab === 'overview' ? 'bg-orange-600 text-white dark:bg-orange-500' : 'text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-700'}`}
                   onClick={() => setActiveTab('overview')}
                 >
                   {t('nav.overview')}
                 </button>
                 {(currentUser?.isAdmin || isAdministratie(currentUser)) && (
                   <button
-                    className={`text-[9px] sm:text-xs md:text-sm lg:text-base font-medium px-1.5 sm:px-2 md:px-2 lg:px-3 py-1.5 sm:py-1 md:py-1.5 lg:py-2 rounded transition-colors whitespace-nowrap min-h-[32px] sm:min-h-0 flex-shrink-0 ${activeTab === 'admin' ? 'bg-orange-600 text-white dark:bg-orange-500' : 'text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-700'}`}
+                    className={`text-[9px] sm:text-xs md:text-sm lg:text-sm xl:text-base font-medium px-1 sm:px-1.5 md:px-2 lg:px-2.5 py-1.5 sm:py-1 md:py-1.5 lg:py-2 rounded transition-colors whitespace-nowrap min-h-[32px] sm:min-h-0 flex-shrink-0 ${activeTab === 'admin' ? 'bg-orange-600 text-white dark:bg-orange-500' : 'text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-700'}`}
                     onClick={() => setActiveTab('admin')}
                   >
                     {t('nav.admin')}
@@ -1630,16 +1642,16 @@ const Index = () => {
                 )}
               </nav>
             {/* Controls - Theme, Language, Logout - All in one line */}
-            <div className="flex items-center gap-0.5 sm:gap-1 md:gap-1.5 lg:gap-2 ml-auto shrink-0 flex-nowrap">
-              <ThemeToggle />
+            <div className="flex items-center gap-0.5 sm:gap-0.5 md:gap-1 lg:gap-1.5 ml-auto shrink-0 flex-nowrap">
+              <ThemeToggle currentUser={currentUser} />
               <LanguageSelector />
               {currentUser && !isMobile && (
                 <button
                   onClick={() => setActiveTab('profile')}
-                  className="text-[10px] sm:text-xs md:text-sm text-gray-700 dark:text-gray-300 font-medium text-center hover:text-orange-600 dark:hover:text-orange-400 transition-colors cursor-pointer underline decoration-1 hover:decoration-2 whitespace-nowrap"
-                  title="Click to view and edit your profile"
+                  className="text-[10px] sm:text-xs md:text-xs lg:text-sm text-gray-700 dark:text-gray-300 font-medium text-center hover:text-orange-600 dark:hover:text-orange-400 transition-colors cursor-pointer underline decoration-1 hover:decoration-2 whitespace-nowrap"
+                  title={t('nav.clickToViewProfile')}
                 >
-                  {t('nav.welcome')}, {currentUser?.name || "User"}
+                  {t('nav.welcome')}, {currentUser?.name || t('common.user')}
                 </button>
               )}
               {currentUser && !isMobile && (
@@ -1655,11 +1667,11 @@ const Index = () => {
                   setIsLoggedIn(false);
                   setCurrentUser(null);
                   toast({
-                    title: "Logged Out",
-                    description: "You have been successfully logged out.",
+                    title: t('auth.loggedOut'),
+                    description: t('auth.loggedOutText'),
                   });
                 }}
-                className="border-orange-200 dark:border-orange-700 text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-700 h-5 sm:h-6 md:h-7 lg:h-8 text-[8px] sm:text-[9px] md:text-xs lg:text-sm px-1 sm:px-1.5 md:px-2 lg:px-3 py-0.5 whitespace-nowrap flex-shrink-0"
+                className="border-orange-200 dark:border-orange-700 text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-700 h-5 sm:h-6 md:h-6 lg:h-7 text-[8px] sm:text-[9px] md:text-xs lg:text-sm px-1 sm:px-1.5 md:px-1.5 lg:px-2 py-0.5 whitespace-nowrap flex-shrink-0"
               >
                 {t('nav.logout')}
               </Button>
@@ -1691,6 +1703,9 @@ const Index = () => {
               />
             )}
           </div>
+        )}
+        {activeTab === 'viewhours' && currentUser && !currentUser?.isAdmin && currentUser?.userType !== 'administratie' && (
+          <ViewHours currentUser={currentUser} />
         )}
         {activeTab === 'projects' && (
           canSeeProjects(currentUser) ? (
