@@ -6,3 +6,5 @@ ADD COLUMN IF NOT EXISTS admin_viewed BOOLEAN DEFAULT FALSE;
 CREATE INDEX IF NOT EXISTS idx_screenshots_admin_viewed ON public.screenshots(admin_viewed) WHERE admin_viewed = FALSE;
 
 
+
+

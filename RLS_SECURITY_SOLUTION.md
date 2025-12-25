@@ -91,3 +91,5 @@ Voor nog betere beveiliging:
 - ✅ Extra beveiligingslaag - RLS voegt database-level security toe
 - ⚠️ Niet perfect - Voor volledige beveiliging, migreer naar Supabase Auth
 
+
+

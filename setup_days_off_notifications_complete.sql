@@ -68,3 +68,5 @@ CREATE INDEX IF NOT EXISTS idx_days_off_notifications_created_at ON public.days_
 -- Done! The table is now ready to use.
 -- ============================================
 
+
+

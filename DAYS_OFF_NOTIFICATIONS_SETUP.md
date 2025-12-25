@@ -109,3 +109,5 @@ CREATE INDEX IF NOT EXISTS idx_days_off_notifications_created_at ON public.days_
 - `create_days_off_notifications_table.sql` - Maakt de tabel aan
 - `fix_days_off_notifications_rls.sql` - Fix RLS policies voor custom auth
 
+
+

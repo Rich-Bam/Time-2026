@@ -29,3 +29,5 @@ CREATE POLICY "Admins can delete notifications" ON public.days_off_notifications
   FOR DELETE
   USING (true); -- Allow all deletes, app will filter by admin status
 
+
+

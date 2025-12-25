@@ -128,3 +128,5 @@ Alleen de super admin (r.blance@bampro.nl) kan de error logs bekijken in het Adm
 - Controleer of de user email overeenkomt met `r.blance@bampro.nl`
 - Controleer of RLS policies correct zijn ingesteld
 
+
+

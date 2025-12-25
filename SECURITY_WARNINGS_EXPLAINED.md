@@ -84,3 +84,5 @@ Als je in de toekomst naar Supabase Auth migreert, kun je deze feature dan insch
 | RLS Disabled | ✅ Opgelost | RLS is ingeschakeld |
 | Leaked Password Protection | ⚠️ Niet relevant | Negeer of voeg custom check toe |
 
+
+

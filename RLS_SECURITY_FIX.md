@@ -75,3 +75,5 @@ Voor nu: **Gebruik Optie 3 (Edge Functions)** voor gevoelige operaties en behoud
 
 Voor de toekomst: **Migreer naar Supabase Auth** voor volledige beveiliging.
 
+
+

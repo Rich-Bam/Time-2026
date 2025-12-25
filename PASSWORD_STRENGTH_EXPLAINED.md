@@ -169,3 +169,5 @@ Browser → Jouw Server → HaveIBeenPwned API → Jouw Server → Browser
 - Gebruikers worden gewaarschuwd als ze een gecompromitteerd wachtwoord kiezen
 - Betere beveiliging zonder complexiteit
 
+
+

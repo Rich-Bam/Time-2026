@@ -63,3 +63,5 @@ CREATE INDEX IF NOT EXISTS idx_days_off_notifications_read_at ON public.days_off
 CREATE INDEX IF NOT EXISTS idx_days_off_notifications_user_unread ON public.days_off_notifications(user_id, read_at) WHERE read_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_days_off_notifications_created_at ON public.days_off_notifications(created_at DESC);
 
+
+

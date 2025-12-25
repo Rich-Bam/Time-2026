@@ -225,3 +225,5 @@ USING (auth.role() = 'service_role');
 -- 4. This provides a basic security layer while maintaining compatibility with custom auth
 -- 5. For stricter security, consider migrating to Supabase Auth in the future
 
+
+

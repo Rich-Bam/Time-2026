@@ -174,3 +174,5 @@ END $$;
 -- Check policies:
 -- SELECT * FROM pg_policies WHERE schemaname = 'public';
 
+
+

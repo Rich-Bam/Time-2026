@@ -218,3 +218,5 @@ END $$;
 -- SELECT tablename, rowsecurity FROM pg_tables WHERE schemaname = 'public';
 -- Should show rowsecurity = true for all tables
 
+
+

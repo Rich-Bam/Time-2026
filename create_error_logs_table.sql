@@ -69,3 +69,5 @@ CREATE INDEX IF NOT EXISTS idx_error_logs_user_id ON public.error_logs(user_id);
 CREATE INDEX IF NOT EXISTS idx_error_logs_resolved ON public.error_logs(resolved);
 CREATE INDEX IF NOT EXISTS idx_error_logs_severity ON public.error_logs(severity);
 
+
+

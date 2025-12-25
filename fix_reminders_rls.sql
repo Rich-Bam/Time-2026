@@ -60,3 +60,5 @@ CREATE POLICY "Admins can delete reminders" ON public.reminders
 
 
 
+
+

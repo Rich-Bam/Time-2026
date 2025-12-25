@@ -9,13 +9,19 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { hashPassword, verifyPassword, isPasswordHashed } from "@/utils/password";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 interface AuthSectionProps {
   onLogin: (status: boolean) => void;
   setCurrentUser: (user: any) => void;
 }
 
+// Feature flag: Set to true to enable account creation form
+// TODO: Enable this in the future when account creation should be available
+const ENABLE_ACCOUNT_CREATION = false;
+
 const AuthSection = ({ onLogin, setCurrentUser }: AuthSectionProps) => {
+  const { t } = useLanguage();
   const [loginData, setLoginData] = useState({ email: "", password: "" });
   const [rememberMe, setRememberMe] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -32,8 +38,8 @@ const AuthSection = ({ onLogin, setCurrentUser }: AuthSectionProps) => {
     e.preventDefault();
     if (!loginData.email || !loginData.password) {
       toast({
-        title: "Login Failed",
-        description: "Please enter valid credentials",
+        title: t('auth.loginFailed'),
+        description: t('auth.pleaseEnterCredentials'),
         variant: "destructive",
       });
       return;
@@ -47,8 +53,8 @@ const AuthSection = ({ onLogin, setCurrentUser }: AuthSectionProps) => {
       .single();
     if (error || !user) {
       toast({
-        title: "Login Failed",
-        description: "User not found",
+        title: t('auth.loginFailed'),
+        description: t('auth.userNotFound'),
         variant: "destructive",
       });
       return;
@@ -56,8 +62,8 @@ const AuthSection = ({ onLogin, setCurrentUser }: AuthSectionProps) => {
     // Check if user is approved (for new accounts, admin must approve)
     if (user.approved === false) {
       toast({
-        title: "Account Pending Approval",
-        description: "Your account is waiting for admin approval. Please contact an administrator.",
+        title: t('auth.accountPendingApproval'),
+        description: t('auth.accountPendingApprovalText'),
         variant: "destructive",
       });
       return;
@@ -82,8 +88,8 @@ const AuthSection = ({ onLogin, setCurrentUser }: AuthSectionProps) => {
     
     if (!passwordValid) {
       toast({
-        title: "Login Failed",
-        description: "Incorrect password",
+        title: t('auth.loginFailed'),
+        description: t('auth.incorrectPassword'),
         variant: "destructive",
       });
       return;
@@ -118,10 +124,10 @@ const AuthSection = ({ onLogin, setCurrentUser }: AuthSectionProps) => {
     setCurrentUser(user);
     onLogin(true);
     toast({
-      title: "Login Successful",
+      title: t('auth.loginSuccessful'),
       description: rememberMe 
-        ? `Welcome, ${user.name || user.email}! You will stay logged in for 7 days.`
-        : `Welcome, ${user.name || user.email}!`,
+        ? t('auth.welcomeRememberMe', { name: user.name || user.email })
+        : t('auth.welcome', { name: user.name || user.email }),
     });
   };
 
@@ -130,8 +136,8 @@ const AuthSection = ({ onLogin, setCurrentUser }: AuthSectionProps) => {
     e.preventDefault();
     if (!registerData.email || !registerData.password || !registerData.name) {
       toast({
-        title: "Ontbrekende informatie",
-        description: "Email, naam en wachtwoord zijn verplicht om een gebruiker aan te maken.",
+        title: t('auth.missingInformation'),
+        description: t('auth.missingInformationText'),
         variant: "destructive",
       });
       return;
@@ -140,8 +146,8 @@ const AuthSection = ({ onLogin, setCurrentUser }: AuthSectionProps) => {
     // Validate email domain - only @bampro.nl allowed
     if (!registerData.email.toLowerCase().endsWith('@bampro.nl')) {
       toast({
-        title: "Alleen BAMPRO Email Toegestaan",
-        description: "Je kunt alleen een account aanmaken met een @bampro.nl email adres. Voor andere email adressen moet je door een admin worden uitgenodigd.",
+        title: t('auth.onlyBamproEmail'),
+        description: t('auth.onlyBamproEmailText'),
         variant: "destructive",
         duration: 8000,
       });
@@ -151,8 +157,8 @@ const AuthSection = ({ onLogin, setCurrentUser }: AuthSectionProps) => {
     // Validate password length
     if (registerData.password.length < 6) {
       toast({
-        title: "Wachtwoord te kort",
-        description: "Wachtwoord moet minimaal 6 tekens lang zijn.",
+        title: t('auth.passwordTooShort'),
+        description: t('auth.passwordTooShortText'),
         variant: "destructive",
       });
       return;
@@ -175,15 +181,15 @@ const AuthSection = ({ onLogin, setCurrentUser }: AuthSectionProps) => {
     setRegisterLoading(false);
     if (error) {
       toast({
-        title: "Fout bij aanmaken gebruiker",
+        title: t('auth.errorCreatingUser'),
         description: error.message,
         variant: "destructive",
       });
       return;
     }
     toast({
-      title: "Account aangemaakt",
-      description: "Je account is aangemaakt en wacht op goedkeuring van een administrator. Je kunt inloggen zodra een administrator je account heeft goedgekeurd.",
+      title: t('auth.accountCreated'),
+      description: t('auth.accountCreatedText'),
     });
     // Clear form
     setRegisterData({ email: "", name: "", password: "" });
@@ -192,7 +198,7 @@ const AuthSection = ({ onLogin, setCurrentUser }: AuthSectionProps) => {
   // Handle password reset - send email via Supabase Auth
   const handleResetPassword = async () => {
     if (!resetEmail) {
-      setResetMessage("Voer een email adres in.");
+      setResetMessage(t('auth.enterEmail'));
       return;
     }
     setResetLoading(true);
@@ -206,7 +212,7 @@ const AuthSection = ({ onLogin, setCurrentUser }: AuthSectionProps) => {
       .single();
     
     if (userError || !user) {
-      setResetMessage("Gebruiker niet gevonden. Controleer je email adres.");
+      setResetMessage(t('auth.userNotFoundReset'));
       setResetLoading(false);
       return;
     }
@@ -237,9 +243,9 @@ const AuthSection = ({ onLogin, setCurrentUser }: AuthSectionProps) => {
         if (edgeError) {
           console.error("❌ Edge Function error:", edgeError);
           setResetMessage(
-            "Kon geen password reset email versturen. " +
-            "Fout: " + (edgeError.message || "Onbekende fout") +
-            ". Check de browser console (F12) voor meer details."
+            t('auth.resetEmailError') + " " +
+            t('auth.error') + ": " + (edgeError.message || t('auth.unknownError')) +
+            ". " + t('auth.checkConsole')
           );
           setResetLoading(false);
           return;
@@ -248,86 +254,74 @@ const AuthSection = ({ onLogin, setCurrentUser }: AuthSectionProps) => {
         if (!edgeData || !edgeData.success) {
           console.error("❌ Edge Function returned error:", edgeData);
           setResetMessage(
-            "Kon geen password reset email versturen. " +
-            "Fout: " + (edgeData?.error || edgeData?.message || "Onbekende fout") +
-            ". Check de browser console (F12) voor meer details."
+            t('auth.resetEmailError') + " " +
+            t('auth.error') + ": " + (edgeData?.error || edgeData?.message || t('auth.unknownError')) +
+            ". " + t('auth.checkConsole')
           );
           setResetLoading(false);
           return;
         }
 
         // Success via Edge Function
-        setResetMessage(
-          "Password reset email is verstuurd! " +
-          "Check je inbox (en spam folder) voor de reset link. " +
-          "De link is 1 uur geldig."
-        );
+        setResetMessage(t('auth.resetEmailSuccess'));
         setResetLoading(false);
         setShowResetModal(false);
         setResetEmail("");
         
         toast({
-          title: "Reset email verstuurd",
-          description: `Een password reset link is verstuurd naar ${resetEmail}. Check je inbox.`,
+          title: t('auth.resetEmailSent'),
+          description: t('auth.resetEmailSentText', { email: resetEmail }),
         });
         return;
       } catch (edgeErr: any) {
         console.error("Edge Function exception:", edgeErr);
-        setResetMessage(
-          "Kon geen password reset email versturen. " +
-          "De password-reset Edge Function is mogelijk niet gedeployed. " +
-          "Neem contact op met een administrator."
-        );
+        setResetMessage(t('auth.resetEmailError'));
         setResetLoading(false);
         return;
       }
     }
     
     // Success - email sent!
-    setResetMessage(
-      "Password reset email is verstuurd! " +
-      "Check je inbox (en spam folder) voor de reset link. " +
-      "De link is 1 uur geldig."
-    );
+    setResetMessage(t('auth.resetEmailSuccess'));
     setResetLoading(false);
     setShowResetModal(false); // Close modal after success
     setResetEmail(""); // Clear email
     
     toast({
-      title: "Reset email verstuurd",
-      description: `Een password reset link is verstuurd naar ${resetEmail}. Check je inbox.`,
+      title: t('auth.resetEmailSent'),
+      description: t('auth.resetEmailSentText', { email: resetEmail }),
     });
   };
 
   return (
-    <div className="max-w-3xl mx-auto grid gap-8 md:grid-cols-2">
+    <div className="max-w-md mx-auto">
       {/* Login card */}
       <Card>
         <CardHeader className="text-center">
           <CardDescription>
-            Login to start tracking time
+            {t('auth.loginToStart')}
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleLogin} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="login-email">Email</Label>
+              <Label htmlFor="login-email">{t('auth.email')}</Label>
               <Input
                 id="login-email"
                 type="email"
-                placeholder="Enter your email"
+                placeholder={t('auth.enterYourEmail')}
                 value={loginData.email}
                 onChange={(e) => setLoginData({ ...loginData, email: e.target.value })}
                 required
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="login-password">Password</Label>
+              <Label htmlFor="login-password">{t('auth.password')}</Label>
               <div className="relative">
                 <Input
                   id="login-password"
                   type={showPassword ? "text" : "password"}
-                  placeholder="Enter your password"
+                  placeholder={t('auth.enterYourPassword')}
                   value={loginData.password}
                   onChange={(e) => setLoginData({ ...loginData, password: e.target.value })}
                   required
@@ -341,7 +335,7 @@ const AuthSection = ({ onLogin, setCurrentUser }: AuthSectionProps) => {
                   onTouchStart={() => setShowPassword(true)}
                   onTouchEnd={() => setShowPassword(false)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 focus:outline-none"
-                  aria-label="Hold to show password"
+                  aria-label={t('auth.holdToShowPassword')}
                 >
                   <Eye className="h-4 w-4" />
                 </button>
@@ -358,109 +352,120 @@ const AuthSection = ({ onLogin, setCurrentUser }: AuthSectionProps) => {
                   htmlFor="remember-me"
                   className="text-sm font-normal cursor-pointer"
                 >
-                  Stay logged in (7 days)
+                  {t('auth.stayLoggedIn')}
                 </Label>
               </div>
               <Button variant="link" type="button" onClick={() => setShowResetModal(true)}>
-                Forgot Password?
+                {t('auth.forgotPassword')}
               </Button>
             </div>
             <Button type="submit" className="w-full">
-              Login
+              {t('auth.login')}
             </Button>
           </form>
         </CardContent>
       </Card>
-      {/* Create user card */}
-      <Card>
-        <CardHeader className="text-center">
-          <CardTitle className="flex items-center justify-center gap-2">
-            <User className="w-5 h-5 text-orange-500" />
-            Account Aanmaken
-          </CardTitle>
-          <CardDescription>
-            Alleen @bampro.nl email adressen kunnen een account aanmaken. Voor andere email adressen, vraag een admin om je uit te nodigen.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleRegister} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="register-email">Email (@bampro.nl vereist)</Label>
-              <Input
-                id="register-email"
-                type="email"
-                placeholder="naam@bampro.nl"
-                value={registerData.email}
-                onChange={(e) => setRegisterData({ ...registerData, email: e.target.value })}
-                required
-              />
-              {registerData.email && !registerData.email.toLowerCase().endsWith('@bampro.nl') && (
-                <p className="text-xs text-red-500">
-                  Alleen @bampro.nl email adressen kunnen een account aanmaken. Vraag een admin om je uit te nodigen voor andere email adressen.
-                </p>
-              )}
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="register-name">Name</Label>
-              <Input
-                id="register-name"
-                type="text"
-                placeholder="New User"
-                value={registerData.name}
-                onChange={(e) => setRegisterData({ ...registerData, name: e.target.value })}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="register-password">Wachtwoord</Label>
-              <Input
-                id="register-password"
-                type="password"
-                placeholder="Kies een wachtwoord (minimaal 6 tekens)"
-                value={registerData.password}
-                onChange={(e) => setRegisterData({ ...registerData, password: e.target.value })}
-                required
-                minLength={6}
-              />
-              {registerData.password && registerData.password.length > 0 && registerData.password.length < 6 && (
-                <p className="text-sm text-red-500">Wachtwoord moet minimaal 6 tekens lang zijn.</p>
-              )}
-            </div>
-            <Button 
-              type="submit" 
-              className="w-full" 
-              disabled={registerLoading || (registerData.password && registerData.password.length < 6)}
-            >
-              {registerLoading ? "Aanmaken..." : "Gebruiker Aanmaken"}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+      {/* Create user card - Hidden for now, but code preserved for future use */}
+      {/* To enable: Set ENABLE_ACCOUNT_CREATION to true at the top of this file */}
+      {ENABLE_ACCOUNT_CREATION && (
+        <Card>
+          <CardHeader className="text-center">
+            <CardTitle className="flex items-center justify-center gap-2">
+              <User className="w-5 h-5 text-orange-500" />
+              Account Aanmaken
+            </CardTitle>
+            <CardDescription>
+              Alleen @bampro.nl email adressen kunnen een account aanmaken. Voor andere email adressen, vraag een admin om je uit te nodigen.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleRegister} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="register-email">Email (@bampro.nl vereist)</Label>
+                <Input
+                  id="register-email"
+                  type="email"
+                  placeholder="naam@bampro.nl"
+                  value={registerData.email}
+                  onChange={(e) => setRegisterData({ ...registerData, email: e.target.value })}
+                  required
+                />
+                {registerData.email && !registerData.email.toLowerCase().endsWith('@bampro.nl') && (
+                  <p className="text-xs text-red-500">
+                    Alleen @bampro.nl email adressen kunnen een account aanmaken. Vraag een admin om je uit te nodigen voor andere email adressen.
+                  </p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="register-name">Name</Label>
+                <Input
+                  id="register-name"
+                  type="text"
+                  placeholder="New User"
+                  value={registerData.name}
+                  onChange={(e) => setRegisterData({ ...registerData, name: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="register-password">Wachtwoord</Label>
+                <Input
+                  id="register-password"
+                  type="password"
+                  placeholder="Kies een wachtwoord (minimaal 6 tekens)"
+                  value={registerData.password}
+                  onChange={(e) => setRegisterData({ ...registerData, password: e.target.value })}
+                  required
+                  minLength={6}
+                />
+                {registerData.password && registerData.password.length > 0 && registerData.password.length < 6 && (
+                  <p className="text-sm text-red-500">Wachtwoord moet minimaal 6 tekens lang zijn.</p>
+                )}
+              </div>
+              <Button 
+                type="submit" 
+                className="w-full" 
+                disabled={registerLoading || (registerData.password && registerData.password.length < 6)}
+              >
+                {registerLoading ? "Aanmaken..." : "Gebruiker Aanmaken"}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      )}
       {/* Reset Password Dialog */}
       <Dialog open={showResetModal} onOpenChange={setShowResetModal}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Wachtwoord Resetten</DialogTitle>
-            <DialogDescription>Voer je email adres in om een wachtwoord reset link te ontvangen.</DialogDescription>
+            <DialogTitle>{t('auth.resetPassword')}</DialogTitle>
+            <DialogDescription>{t('auth.resetPasswordDescription')}</DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
-            <Label htmlFor="reset-email">Email</Label>
+            <Label htmlFor="reset-email">{t('auth.email')}</Label>
             <Input
               id="reset-email"
               type="email"
-              placeholder="Enter your email"
+              placeholder={t('auth.enterYourEmail')}
               value={resetEmail}
               onChange={e => setResetEmail(e.target.value)}
               required
               disabled={resetLoading}
             />
             <Button onClick={handleResetPassword} disabled={resetLoading || !resetEmail} className="w-full">
-              {resetLoading ? "Verzenden..." : "Verstuur Reset Link"}
+              {resetLoading ? t('auth.sending') : t('auth.sendResetLink')}
             </Button>
             {resetMessage && (
               <div 
                 className={`text-sm text-center mt-2 p-3 rounded ${
-                  resetMessage.includes('verstuurd') || resetMessage.includes('inbox')
+                  resetMessage.includes(t('auth.resetEmailSuccess').substring(0, 10)) || 
+                  resetMessage.includes('verstuurd') || 
+                  resetMessage.includes('sent') ||
+                  resetMessage.includes('enviado') ||
+                  resetMessage.includes('αποστάλθηκε') ||
+                  resetMessage.includes('trimis') ||
+                  resetMessage.includes('wysłany') ||
+                  resetMessage.includes('gönderildi') ||
+                  resetMessage.includes('inbox')
                     ? 'bg-green-50 text-green-700 border border-green-200'
                     : 'bg-red-50 text-red-700 border border-red-200'
                 }`}
