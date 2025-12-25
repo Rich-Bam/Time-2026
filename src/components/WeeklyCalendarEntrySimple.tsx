@@ -1289,23 +1289,22 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
       const totalHours = dayEntries.reduce((sum, entry) => sum + (parseFloat(entry.hours) || 0), 0);
       const totalHoursHHMM = formatHoursHHMM(totalHours);
       
-      // Create header rows (similar to original template)
-      // Layout: Logo space on right, info on left
+      // Create header rows
       const headerRows = [
-        ["Employee Name:", currentUser.name || currentUser.email || "", "", "", "", "", "", "", "BAMPRO"], // Logo space
-        ["Date:", `From: ${formatDateDDMMYY(fromDate)}`, `To: ${formatDateDDMMYY(toDate)}`, "", "", "", "", "", ""],
-        ["Day:", `${formattedDate} ${dayName}`, "", "", "", "", "", "", ""],
-        ["Week Number:", weekNumber.toString(), "", "", "", "", "", "", ""],
-        ["Year:", new Date().getFullYear().toString(), "", "", "", "", "", "", ""],
+        ["Employee Name:", currentUser.name || currentUser.email || ""],
+        ["Date:", `From: ${formatDateDDMMYY(fromDate)}`, `To: ${formatDateDDMMYY(toDate)}`],
+        ["Day:", `${formattedDate} ${dayName}`],
+        ["Week Number:", weekNumber.toString()],
+        ["Year:", new Date().getFullYear().toString()],
         [""], // Empty row
       ];
 
-      // Create table headers
+      // Create table headers - only 6 columns
       const tableHeaders = [
-        ["Day", "Work Type", "Project Work Order", "From", "To", "Hours Worked", "Project Leader", "Car Mileage", "Work Performed"]
+        ["Day", "Work Type", "Project Work Order", "From", "To", "Hours Worked"]
       ];
 
-      // Format data rows for this day
+      // Format data rows for this day - only 6 columns
       const dataRows = dayEntries.map((entry) => [
         dayName,
         getWorkTypeLabel(entry.description || ""),
@@ -1313,12 +1312,9 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
         entry.startTime || "",
         entry.endTime || "",
         formatHoursHHMM(parseFloat(entry.hours) || 0),
-        "", // Projectleider - not in database yet
-        "", // Km stand auto - not in database yet
-        entry.notes || "",
       ]);
 
-      // Add total hours row at the bottom
+      // Add total hours row at the bottom - only 6 columns
       const totalRow = [
         "",
         "Total:",
@@ -1326,9 +1322,6 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
         "",
         "",
         totalHoursHHMM,
-        "",
-        "",
-        "",
       ];
 
       // Combine all rows
@@ -1337,17 +1330,14 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
       // Create worksheet from array
       const ws = XLSX.utils.aoa_to_sheet(allRows);
 
-      // Set column widths
+      // Set column widths - only 6 columns
       ws['!cols'] = [
-        { wch: 12 }, // Dag
-        { wch: 20 }, // Soort werk
-        { wch: 25 }, // Project Werkbon
-        { wch: 8 },  // Van
-        { wch: 8 },  // Tot
-        { wch: 15 }, // Gewerkte uren
-        { wch: 15 }, // Projectleider
-        { wch: 12 }, // Km stand auto
-        { wch: 35 }, // Uitgevoerde werkzaamheden
+        { wch: 12 }, // Day
+        { wch: 20 }, // Work Type
+        { wch: 25 }, // Project Work Order
+        { wch: 8 },  // From
+        { wch: 8 },  // To
+        { wch: 15 }, // Hours Worked
       ];
 
       // Store sheet with day index for sorting (dayIdx is already 0-6 for Monday-Sunday)

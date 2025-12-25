@@ -1390,52 +1390,63 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
     
     // Create header rows
     const headerRows = [
-      ["Naam werknemer:", currentUser.name || currentUser.email || ""],
-      ["Datum:", `Van: ${formatDateDDMMYY(fromDate)}`, `Tot: ${formatDateDDMMYY(toDate)}`],
-      ["Dag:", ""],
-      ["Weeknummer:", weekNumber.toString()],
-      [""], // Empty row
-      ["Jaar:", new Date().getFullYear().toString()],
+      ["Employee Name:", currentUser.name || currentUser.email || ""],
+      ["Date:", `From: ${formatDateDDMMYY(fromDate)}`, `To: ${formatDateDDMMYY(toDate)}`],
+      ["Day:", ""],
+      ["Week Number:", weekNumber.toString()],
+      ["Year:", new Date().getFullYear().toString()],
       [""], // Empty row
     ];
 
-    // Create table headers
+    // Create table headers - only 6 columns
     const tableHeaders = [
-      ["Dag", "Soort werk", "Project", "Werkbon", "Van", "Tot", "Gewerkte uren", "Projectleider", "Km stand auto", "Uitgevoerde werkzaamheden"]
+      ["Day", "Work Type", "Project Work Order", "From", "To", "Hours Worked"]
     ];
 
-    // Format data rows
-    const dataRows = data.map((entry) => [
-      getDayNameNL(entry.date),
-      getWorkTypeLabel(entry.description || ""),
-      entry.projects?.name || entry.project || "",
-      "", // Werkbon - not in database yet
-      entry.startTime || "",
-      entry.endTime || "",
-      formatHoursHHMM(entry.hours || 0),
-      "", // Projectleider - not in database yet
-      "", // Km stand auto - not in database yet
-      entry.notes || "",
-    ]);
+    // Format data rows - only 6 columns
+    const dataRows = data.map((entry) => {
+      const date = new Date(entry.date);
+      const dayNamesEN = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      const dayName = dayNamesEN[date.getDay()];
+      
+      return [
+        dayName,
+        getWorkTypeLabel(entry.description || ""),
+        entry.projects?.name || entry.project || "",
+        entry.startTime || "",
+        entry.endTime || "",
+        formatHoursHHMM(entry.hours || 0),
+      ];
+    });
+
+    // Calculate total hours
+    const totalHours = data.reduce((sum, entry) => sum + (parseFloat(entry.hours) || 0), 0);
+    const totalHoursHHMM = formatHoursHHMM(totalHours);
+    
+    // Add total hours row at the bottom
+    const totalRow = [
+      "",
+      "Total:",
+      "",
+      "",
+      "",
+      totalHoursHHMM,
+    ];
 
     // Combine all rows
-    const allRows = [...headerRows, ...tableHeaders, ...dataRows];
+    const allRows = [...headerRows, ...tableHeaders, ...dataRows, [""], totalRow];
 
     // Create worksheet from array
     const ws = XLSX.utils.aoa_to_sheet(allRows);
 
-    // Set column widths
+    // Set column widths - only 6 columns
     ws['!cols'] = [
-      { wch: 12 }, // Dag
-      { wch: 20 }, // Soort werk
-      { wch: 20 }, // Project
-      { wch: 12 }, // Werkbon
-      { wch: 8 },  // Van
-      { wch: 8 },  // Tot
-      { wch: 12 }, // Gewerkte uren
-      { wch: 15 }, // Projectleider
-      { wch: 12 }, // Km stand auto
-      { wch: 30 }, // Uitgevoerde werkzaamheden
+      { wch: 12 }, // Day
+      { wch: 20 }, // Work Type
+      { wch: 25 }, // Project Work Order
+      { wch: 8 },  // From
+      { wch: 8 },  // To
+      { wch: 15 }, // Hours Worked
     ];
 
     // Append worksheet to workbook
