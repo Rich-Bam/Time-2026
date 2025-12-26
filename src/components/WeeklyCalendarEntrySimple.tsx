@@ -2109,6 +2109,30 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
                         <div key={`submitted-${dayIdx}-${subIdx}`} className="bg-gray-100 dark:bg-gray-800 rounded-lg border border-gray-300 dark:border-gray-700 p-3 space-y-2">
                           <div className="flex items-center justify-between">
                             <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">{getWorkTypeLabel(submittedEntry.workType || "")}</span>
+                            {!isLocked && (
+                              <div className="flex items-center gap-1">
+                                <Button 
+                                  size="icon" 
+                                  variant="ghost" 
+                                  className="h-7 w-7"
+                                  onClick={() => handleEditEntry(submittedEntry, dateStr)}
+                                  title={t('common.edit')}
+                                >
+                                  <svg className="h-4 w-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                  </svg>
+                                </Button>
+                                <Button 
+                                  size="icon" 
+                                  variant="ghost" 
+                                  className="h-7 w-7"
+                                  onClick={() => handleDeleteEntry(submittedEntry.id!, dateStr)}
+                                  title={t('common.delete')}
+                                >
+                                  <Trash2 className="h-4 w-4 text-red-500" />
+                                </Button>
+                              </div>
+                            )}
                           </div>
                           <div className="text-xs text-gray-600 dark:text-gray-400">
                             <div><strong className="text-gray-900 dark:text-gray-200">{t('weekly.project')}:</strong> {submittedEntry.project || "-"}</div>
