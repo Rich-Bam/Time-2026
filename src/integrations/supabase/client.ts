@@ -12,4 +12,21 @@ const supabaseKey =
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
-export const supabase = createClient<Database>(supabaseUrl, supabaseKey);
+// Configure Supabase client with explicit headers to prevent 406 errors
+// This ensures compatibility with Supabase REST API in both development and production
+export const supabase = createClient<Database>(supabaseUrl, supabaseKey, {
+  db: {
+    schema: 'public',
+  },
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+  },
+  global: {
+    headers: {
+      'Accept': 'application/json',
+      'Content-Type': 'application/json',
+      'apikey': supabaseKey,
+    },
+  },
+});
