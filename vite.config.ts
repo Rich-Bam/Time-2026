@@ -16,6 +16,9 @@ export default defineConfig(({ mode }) => ({
     componentTagger(),
     VitePWA({
       registerType: 'autoUpdate',
+      devOptions: {
+        enabled: false // Disable PWA in development
+      },
       includeAssets: ['Bampro_Logo_klein.png', 'favicon.ico'],
       manifest: {
         name: 'BAMPRO MARINE - Urenregistratie',
@@ -52,9 +55,33 @@ export default defineConfig(({ mode }) => ({
         ]
       },
       workbox: {
+        navigateFallback: '/index.html',
+        navigateFallbackDenylist: [/^\/_/],
         globPatterns: ['**/*.{js,css,html,ico,png,svg,jpg,jpeg}'],
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // 5 MB instead of default 2 MB
+        // Clean up old caches automatically
+        cleanupOutdatedCaches: true,
+        // Skip waiting so updates activate immediately without requiring page reload
+        skipWaiting: true,
+        clientsClaim: true,
+        // Use NetworkFirst for navigation requests (HTML) to always get latest version
+        // This ensures the HTML always references the latest JS/CSS files
         runtimeCaching: [
+          {
+            urlPattern: /\.(?:html)$/,
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'html-cache',
+              expiration: {
+                maxEntries: 10,
+                maxAgeSeconds: 60 * 5 // Only cache HTML for 5 minutes
+              },
+              cacheableResponse: {
+                statuses: [0, 200]
+              }
+            }
+          },
+          // Cache Supabase API calls
           {
             urlPattern: /^https:\/\/.*\.supabase\.co\/.*/i,
             handler: 'NetworkFirst',
