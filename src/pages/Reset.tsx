@@ -78,21 +78,35 @@ const Reset = () => {
         return;
       }
       
-      // Also update password in custom users table if user exists
+      // IMPORTANT: Also update password in custom users table (required for login)
+      // The login code uses the custom users table, not Supabase Auth
+      // Use edge function to bypass RLS policies
       if (sessionData?.user?.email) {
         // Hash password before storing
         const hashedPassword = await hashPassword(newPassword);
-        const { error: dbError } = await supabase
-          .from("users")
-          .update({ 
-            password: hashedPassword, // Store hashed password
-            must_change_password: false 
-          })
-          .eq("email", sessionData.user.email);
         
-        if (dbError) {
-          console.warn("Could not update password in users table:", dbError);
-          // Don't fail if this errors - auth password is already set
+        // Call edge function to update password in users table (bypasses RLS)
+        try {
+          const { data: updateData, error: updateError } = await supabase.functions.invoke('update-password', {
+            body: {
+              email: sessionData.user.email,
+              password: hashedPassword,
+            },
+          });
+          
+          if (updateError || !updateData?.success) {
+            console.error("❌ Edge function failed to update password:", updateError, updateData);
+            setMessage("Fout: Kon wachtwoord niet bijwerken in database. Error: " + (updateError?.message || updateData?.error || "Unknown error") + ". De update-password edge function moet mogelijk worden gedeployed.");
+            setLoading(false);
+            return;
+          }
+          
+          console.log("✅ Password updated in both Auth and users table via edge function");
+        } catch (fetchError: any) {
+          console.error("❌ Failed to call update-password edge function:", fetchError);
+          setMessage("Fout: Kon update-password edge function niet aanroepen. Error: " + fetchError.message + ". De function moet worden gedeployed in Supabase Dashboard → Edge Functions.");
+          setLoading(false);
+          return;
         }
       }
       

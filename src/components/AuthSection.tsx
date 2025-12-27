@@ -44,17 +44,92 @@ const AuthSection = ({ onLogin, setCurrentUser }: AuthSectionProps) => {
       });
       return;
     }
+    
     // Query Supabase users table for a user with this email
     // Note: We need password for login verification, so we select it explicitly
-    const { data: user, error } = await supabase
-      .from("users")
-      .select("id, email, name, password, isAdmin, must_change_password, approved, created_at, photo_url, phone_number, userType")
-      .eq("email", loginData.email)
-      .single();
+    // Add retry logic for temporary network/API failures
+    let user = null;
+    let error = null;
+    let lastError = null;
+    
+    // Retry up to 3 times with exponential backoff
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const { data, error: queryError } = await supabase
+        .from("users")
+        .select("id, email, name, password, isAdmin, must_change_password, approved, created_at, photo_url, phone_number, userType")
+        .eq("email", loginData.email)
+        .single();
+      
+      if (!queryError && data) {
+        user = data;
+        error = null;
+        break; // Success, exit retry loop
+      }
+      
+      lastError = queryError;
+      
+      // Log error details for debugging
+      console.error(`Login attempt ${attempt} failed:`, {
+        error: queryError,
+        code: queryError?.code,
+        message: queryError?.message,
+        details: queryError?.details,
+        hint: queryError?.hint,
+        email: loginData.email,
+      });
+      
+      // Don't retry on certain errors (e.g., user doesn't exist)
+      if (queryError?.code === 'PGRST116' || queryError?.message?.includes('No rows')) {
+        // User doesn't exist, no point retrying
+        error = queryError;
+        break;
+      }
+      
+      // If not last attempt, wait before retry (exponential backoff)
+      if (attempt < 3) {
+        await new Promise(resolve => setTimeout(resolve, attempt * 500)); // 500ms, 1000ms delays
+      } else {
+        error = queryError;
+      }
+    }
+    
+    // Handle errors with better error messages
     if (error || !user) {
+      // Check for specific error types
+      const errorMessage = error?.message || '';
+      const errorCode = error?.code || '';
+      
+      // Different error messages for different error types
+      let userMessage = t('auth.userNotFound');
+      
+      if (errorCode === 'PGRST116' || errorMessage.includes('No rows')) {
+        // User truly doesn't exist
+        userMessage = t('auth.userNotFound');
+      } else if (errorCode === '406' || errorMessage.includes('Not Acceptable')) {
+        // 406 error - API compatibility issue
+        userMessage = 'API error. Probeer het opnieuw of ververs de pagina.';
+        console.error('406 Error detected - this should be fixed with headers configuration');
+      } else if (errorCode === '403' || errorMessage.includes('permission') || errorMessage.includes('RLS')) {
+        // RLS policy blocking access
+        userMessage = 'Toegang geweigerd. Neem contact op met een administrator.';
+        console.error('RLS Policy blocking access:', error);
+      } else if (errorMessage.includes('network') || errorMessage.includes('fetch')) {
+        // Network error
+        userMessage = 'Netwerkfout. Check je internetverbinding en probeer het opnieuw.';
+      } else {
+        // Generic error - log full details
+        console.error('Login error details:', {
+          error,
+          code: errorCode,
+          message: errorMessage,
+          email: loginData.email,
+        });
+        userMessage = `Login fout: ${errorMessage || 'Onbekende fout'}. Probeer het opnieuw.`;
+      }
+      
       toast({
         title: t('auth.loginFailed'),
-        description: t('auth.userNotFound'),
+        description: userMessage,
         variant: "destructive",
       });
       return;
