@@ -25,6 +25,78 @@
 
   <body>
     <div id="root"></div>
+    <script>
+      // Service Worker Cleanup Script
+      // This runs BEFORE React loads to unregister old service workers
+      // that might be serving cached JavaScript files
+      (function() {
+        // Only run in production (not localhost)
+        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+          return; // Skip in development
+        }
+
+        const CURRENT_VERSION = '2.0.1';
+        const VERSION_KEY = 'app-version';
+        const storedVersion = localStorage.getItem(VERSION_KEY);
+        const urlParams = new URLSearchParams(window.location.search);
+        const shouldClear = urlParams.get('clearCache') === 'true' || storedVersion !== CURRENT_VERSION;
+
+        if (!shouldClear && storedVersion === CURRENT_VERSION) {
+          return; // Version matches, no cleanup needed
+        }
+
+        console.log('🧹 Cleaning up old service workers and cache...');
+
+        // Wait for all cleanup operations to complete before reloading
+        Promise.all([
+          // Unregister all service workers
+          ('serviceWorker' in navigator 
+            ? navigator.serviceWorker.getRegistrations().then(function(registrations) {
+                return Promise.all(registrations.map(function(reg) {
+                  return reg.unregister().then(function(success) {
+                    if (success) console.log('✅ Service worker unregistered');
+                    return success;
+                  });
+                }));
+              })
+            : Promise.resolve([])),
+          // Clear all caches
+          ('caches' in window
+            ? caches.keys().then(function(names) {
+                return Promise.all(names.map(function(name) {
+                  return caches.delete(name);
+                })).then(function() {
+                  console.log('✅ Caches cleared');
+                });
+              })
+            : Promise.resolve())
+        ]).then(function() {
+          // Update version and clear localStorage (keep language preference)
+          var language = localStorage.getItem('language');
+          localStorage.clear();
+          if (language) {
+            localStorage.setItem('language', language);
+          }
+          localStorage.setItem(VERSION_KEY, CURRENT_VERSION);
+
+          console.log('✅ Cleanup completed, reloading...');
+
+          // Remove clearCache parameter if present and reload
+          if (urlParams.has('clearCache')) {
+            urlParams.delete('clearCache');
+            var newUrl = window.location.pathname + (urlParams.toString() ? '?' + urlParams.toString() : '');
+            window.location.replace(newUrl);
+          } else {
+            // Reload page to get fresh version
+            window.location.reload();
+          }
+        }).catch(function(error) {
+          console.error('❌ Error during cleanup:', error);
+          // Even if cleanup fails, try to reload
+          window.location.reload();
+        });
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
