@@ -35,14 +35,17 @@
           return; // Skip in development
         }
 
-        const CURRENT_VERSION = '2.0.1';
+        const CURRENT_VERSION = '2.0.3';
         const VERSION_KEY = 'app-version';
         const storedVersion = localStorage.getItem(VERSION_KEY);
         const urlParams = new URLSearchParams(window.location.search);
         const shouldClear = urlParams.get('clearCache') === 'true' || storedVersion !== CURRENT_VERSION;
 
-        if (!shouldClear && storedVersion === CURRENT_VERSION) {
-          return; // Version matches, no cleanup needed
+        // Always clear cache if version doesn't match OR if explicit request
+        // This ensures users always get the latest code after a deployment
+        if (!shouldClear) {
+          // Version matches, skip cleanup for this version
+          return;
         }
 
         console.log('🧹 Cleaning up old service workers and cache...');
