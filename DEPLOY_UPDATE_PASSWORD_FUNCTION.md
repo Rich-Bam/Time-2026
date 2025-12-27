@@ -49,3 +49,4 @@ De password reset werkt in Supabase Auth, maar de applicatie gebruikt een custom
 4. Edge function update de `users` tabel met service_role (bypass RLS)
 5. Login werkt nu met het nieuwe wachtwoord! ✅
 
+

@@ -97,3 +97,4 @@ Als het probleem aanhoudt na deze stappen, controleer:
 - API rate limits
 - RLS policies op users table
 
+

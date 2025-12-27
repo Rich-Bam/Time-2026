@@ -93,3 +93,4 @@ Na deployment:
 3. **Check Network tab** - Kijk welke JS files worden geladen
 4. **Check Application → Service Workers** - Zie welke service worker actief is
 
+

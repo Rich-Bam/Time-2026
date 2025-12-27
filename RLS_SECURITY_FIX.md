@@ -77,3 +77,9 @@ Voor de toekomst: **Migreer naar Supabase Auth** voor volledige beveiliging.
 
 
 
+
+
+
+
+
+

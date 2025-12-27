@@ -86,3 +86,9 @@ Als je in de toekomst naar Supabase Auth migreert, kun je deze feature dan insch
 
 
 
+
+
+
+
+
+

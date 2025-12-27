@@ -52,3 +52,9 @@ CREATE POLICY "Anyone can delete error logs" ON public.error_logs
 -- De app controleert al of de gebruiker super admin is voordat delete wordt toegestaan
 -- Deze policies laten iedereen toe omdat de app-level security al de controle doet
 
+
+
+
+
+
+

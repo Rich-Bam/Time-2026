@@ -8,3 +8,9 @@ CREATE INDEX IF NOT EXISTS idx_screenshots_admin_viewed ON public.screenshots(ad
 
 
 
+
+
+
+
+
+

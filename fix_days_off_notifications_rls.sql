@@ -31,3 +31,9 @@ CREATE POLICY "Admins can delete notifications" ON public.days_off_notifications
 
 
 
+
+
+
+
+
+

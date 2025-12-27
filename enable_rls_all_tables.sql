@@ -4,6 +4,10 @@
 -- This script enables RLS and creates policies for all tables
 -- Run this in Supabase SQL Editor
 -- ============================================
+-- ⚠️ WARNING: This script uses auth.role() = 'authenticated' for users table
+-- which will BLOCK LOGIN if you use custom authentication!
+-- See RLS_POLICY_IMPORTANT.md for correct policy for users table.
+-- ============================================
 
 -- ============================================
 -- 1. USERS TABLE
@@ -16,7 +20,11 @@ DROP POLICY IF EXISTS "Admins can insert users" ON public.users;
 DROP POLICY IF EXISTS "Users can update their own data" ON public.users;
 DROP POLICY IF EXISTS "Admins can delete users" ON public.users;
 
+-- ⚠️ WARNING: This policy will BLOCK LOGIN with custom authentication!
+-- The app uses custom auth, so auth.role() is always 'anon', not 'authenticated'
+-- This policy should be: USING (true) OR USING (auth.role() = 'anon' OR auth.role() = 'service_role')
 -- Policy: Authenticated users can view all users (for user list, etc.)
+-- ⚠️ DO NOT USE THIS FOR CUSTOM AUTH! Use FIX_RLS_USERS_SIMPLE.sql instead!
 CREATE POLICY "Authenticated users can view all users"
 ON public.users FOR SELECT
 USING (auth.role() = 'authenticated');

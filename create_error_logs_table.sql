@@ -71,3 +71,9 @@ CREATE INDEX IF NOT EXISTS idx_error_logs_severity ON public.error_logs(severity
 
 
 
+
+
+
+
+
+
