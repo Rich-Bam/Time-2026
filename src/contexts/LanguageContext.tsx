@@ -362,6 +362,31 @@ const translations: Record<Language, Record<string, string>> = {
     'weekly.noData': 'Geen Data',
     'weekly.noEntriesForWeek': 'Geen entries gevonden voor deze week.',
     
+    // Time Overview
+    'overview.title': 'Project Overzicht',
+    'overview.subtitle': 'Uren per project - {name} uren',
+    'overview.allTime': 'Alle tijd',
+    'overview.thisMonth': 'Deze maand',
+    'overview.thisWeek': 'Deze week',
+    'overview.totalHours': 'Totaal Uren',
+    'overview.projects': 'Projecten',
+    'overview.avgPerProject': 'Gemiddeld per Project',
+    'overview.project': 'Project',
+    'overview.entries': 'Entries',
+    'overview.percentage': 'Percentage',
+    'overview.visualization': 'Visualisatie',
+    'overview.total': 'TOTAAL',
+    'overview.loading': 'Laden...',
+    'overview.noHoursFound': 'Geen uren gevonden voor de geselecteerde periode.',
+    
+    // Admin Panel Tabs
+    'admin.tab.users': 'Gebruikers',
+    'admin.tab.weeks': 'Weken',
+    'admin.tab.reminders': 'Herinneringen',
+    'admin.tab.export': 'Exporteren',
+    'admin.tab.overtime': 'Overuren',
+    'admin.tab.timebuzzer': 'Timebuzzer',
+    
     // Common
     'common.loading': 'Laden...',
     'common.error': 'Fout',
@@ -723,6 +748,31 @@ const translations: Record<Language, Record<string, string>> = {
     'weekly.noData': 'No Data',
     'weekly.noEntriesForWeek': 'No entries found for this week.',
     
+    // Time Overview
+    'overview.title': 'Project Overview',
+    'overview.subtitle': 'Hours per project - {name} hours',
+    'overview.allTime': 'All time',
+    'overview.thisMonth': 'This month',
+    'overview.thisWeek': 'This week',
+    'overview.totalHours': 'Total Hours',
+    'overview.projects': 'Projects',
+    'overview.avgPerProject': 'Avg per Project',
+    'overview.project': 'Project',
+    'overview.entries': 'Entries',
+    'overview.percentage': 'Percentage',
+    'overview.visualization': 'Visualization',
+    'overview.total': 'TOTAL',
+    'overview.loading': 'Loading...',
+    'overview.noHoursFound': 'No hours found for the selected period.',
+    
+    // Admin Panel Tabs
+    'admin.tab.users': 'Users',
+    'admin.tab.weeks': 'Weeks',
+    'admin.tab.reminders': 'Reminders',
+    'admin.tab.export': 'Export',
+    'admin.tab.overtime': 'Overtime',
+    'admin.tab.timebuzzer': 'Timebuzzer',
+    
     // Common
     'common.loading': 'Loading...',
     'common.error': 'Error',
@@ -943,6 +993,31 @@ const translations: Record<Language, Record<string, string>> = {
     'weekly.exportFailed': 'Exportación Fallida',
     'weekly.noData': 'Sin Datos',
     'weekly.noEntriesForWeek': 'No se encontraron entradas para esta semana.',
+    
+    // Time Overview
+    'overview.title': 'Resumen del Proyecto',
+    'overview.subtitle': 'Horas por proyecto - {name} horas',
+    'overview.allTime': 'Todo el tiempo',
+    'overview.thisMonth': 'Este mes',
+    'overview.thisWeek': 'Esta semana',
+    'overview.totalHours': 'Horas Totales',
+    'overview.projects': 'Proyectos',
+    'overview.avgPerProject': 'Promedio por Proyecto',
+    'overview.project': 'Proyecto',
+    'overview.entries': 'Entradas',
+    'overview.percentage': 'Porcentaje',
+    'overview.visualization': 'Visualización',
+    'overview.total': 'TOTAL',
+    'overview.loading': 'Cargando...',
+    'overview.noHoursFound': 'No se encontraron horas para el período seleccionado.',
+    
+    // Admin Panel Tabs
+    'admin.tab.users': 'Usuarios',
+    'admin.tab.weeks': 'Semanas',
+    'admin.tab.reminders': 'Recordatorios',
+    'admin.tab.export': 'Exportar',
+    'admin.tab.overtime': 'Horas Extra',
+    'admin.tab.timebuzzer': 'Timebuzzer',
     
     // Common
     'common.loading': 'Cargando...',
@@ -1187,6 +1262,31 @@ const translations: Record<Language, Record<string, string>> = {
     'weekly.noData': 'Χωρίς Δεδομένα',
     'weekly.noEntriesForWeek': 'Δεν βρέθηκαν καταχωρήσεις για αυτή την εβδομάδα.',
     
+    // Time Overview
+    'overview.title': 'Επισκόπηση Έργου',
+    'overview.subtitle': 'Ώρες ανά έργο - {name} ώρες',
+    'overview.allTime': 'Όλος ο χρόνος',
+    'overview.thisMonth': 'Αυτό το μήνα',
+    'overview.thisWeek': 'Αυτή την εβδομάδα',
+    'overview.totalHours': 'Συνολικές Ώρες',
+    'overview.projects': 'Έργα',
+    'overview.avgPerProject': 'Μέσος όρος ανά Έργο',
+    'overview.project': 'Έργο',
+    'overview.entries': 'Καταχωρήσεις',
+    'overview.percentage': 'Ποσοστό',
+    'overview.visualization': 'Απεικόνιση',
+    'overview.total': 'ΣΥΝΟΛΟ',
+    'overview.loading': 'Φόρτωση...',
+    'overview.noHoursFound': 'Δεν βρέθηκαν ώρες για την επιλεγμένη περίοδο.',
+    
+    // Admin Panel Tabs
+    'admin.tab.users': 'Χρήστες',
+    'admin.tab.weeks': 'Εβδομάδες',
+    'admin.tab.reminders': 'Υπενθυμίσεις',
+    'admin.tab.export': 'Εξαγωγή',
+    'admin.tab.overtime': 'Υπερωρίες',
+    'admin.tab.timebuzzer': 'Timebuzzer',
+    
     // Common
     'common.loading': 'Φόρτωση...',
     'common.error': 'Σφάλμα',
@@ -1408,6 +1508,31 @@ const translations: Record<Language, Record<string, string>> = {
     'weekly.noData': 'Fără Date',
     'weekly.noEntriesForWeek': 'Nu s-au găsit intrări pentru această săptămână.',
     
+    // Time Overview
+    'overview.title': 'Prezentare Generală Proiect',
+    'overview.subtitle': 'Ore pe proiect - {name} ore',
+    'overview.allTime': 'Tot timpul',
+    'overview.thisMonth': 'Luna aceasta',
+    'overview.thisWeek': 'Săptămâna aceasta',
+    'overview.totalHours': 'Ore Totale',
+    'overview.projects': 'Proiecte',
+    'overview.avgPerProject': 'Medie pe Proiect',
+    'overview.project': 'Proiect',
+    'overview.entries': 'Intrări',
+    'overview.percentage': 'Procent',
+    'overview.visualization': 'Vizualizare',
+    'overview.total': 'TOTAL',
+    'overview.loading': 'Se încarcă...',
+    'overview.noHoursFound': 'Nu s-au găsit ore pentru perioada selectată.',
+    
+    // Admin Panel Tabs
+    'admin.tab.users': 'Utilizatori',
+    'admin.tab.weeks': 'Săptămâni',
+    'admin.tab.reminders': 'Mementouri',
+    'admin.tab.export': 'Export',
+    'admin.tab.overtime': 'Ore Suplimentare',
+    'admin.tab.timebuzzer': 'Timebuzzer',
+    
     // Common
     'common.loading': 'Se încarcă...',
     'common.error': 'Eroare',
@@ -1627,6 +1752,31 @@ const translations: Record<Language, Record<string, string>> = {
     'weekly.exportFailed': 'Eksport Nieudany',
     'weekly.noData': 'Brak Danych',
     'weekly.noEntriesForWeek': 'Nie znaleziono wpisów dla tego tygodnia.',
+    
+    // Time Overview
+    'overview.title': 'Przegląd Projektu',
+    'overview.subtitle': 'Godziny na projekt - {name} godzin',
+    'overview.allTime': 'Cały czas',
+    'overview.thisMonth': 'Ten miesiąc',
+    'overview.thisWeek': 'Ten tydzień',
+    'overview.totalHours': 'Całkowite Godziny',
+    'overview.projects': 'Projekty',
+    'overview.avgPerProject': 'Średnia na Projekt',
+    'overview.project': 'Projekt',
+    'overview.entries': 'Wpisy',
+    'overview.percentage': 'Procent',
+    'overview.visualization': 'Wizualizacja',
+    'overview.total': 'SUMA',
+    'overview.loading': 'Ładowanie...',
+    'overview.noHoursFound': 'Nie znaleziono godzin dla wybranego okresu.',
+    
+    // Admin Panel Tabs
+    'admin.tab.users': 'Użytkownicy',
+    'admin.tab.weeks': 'Tygodnie',
+    'admin.tab.reminders': 'Przypomnienia',
+    'admin.tab.export': 'Eksport',
+    'admin.tab.overtime': 'Nadgodziny',
+    'admin.tab.timebuzzer': 'Timebuzzer',
     
     // Common
     'common.loading': 'Ładowanie...',
@@ -1946,6 +2096,31 @@ const translations: Record<Language, Record<string, string>> = {
     'weekly.exportFailed': 'Dışa Aktarma Başarısız',
     'weekly.noData': 'Veri Yok',
     'weekly.noEntriesForWeek': 'Bu hafta için giriş bulunamadı.',
+    
+    // Time Overview
+    'overview.title': 'Proje Özeti',
+    'overview.subtitle': 'Proje başına saatler - {name} saat',
+    'overview.allTime': 'Tüm zaman',
+    'overview.thisMonth': 'Bu ay',
+    'overview.thisWeek': 'Bu hafta',
+    'overview.totalHours': 'Toplam Saatler',
+    'overview.projects': 'Projeler',
+    'overview.avgPerProject': 'Proje Başına Ortalama',
+    'overview.project': 'Proje',
+    'overview.entries': 'Girişler',
+    'overview.percentage': 'Yüzde',
+    'overview.visualization': 'Görselleştirme',
+    'overview.total': 'TOPLAM',
+    'overview.loading': 'Yükleniyor...',
+    'overview.noHoursFound': 'Seçilen dönem için saat bulunamadı.',
+    
+    // Admin Panel Tabs
+    'admin.tab.users': 'Kullanıcılar',
+    'admin.tab.weeks': 'Haftalar',
+    'admin.tab.reminders': 'Hatırlatmalar',
+    'admin.tab.export': 'Dışa Aktar',
+    'admin.tab.overtime': 'Fazla Mesai',
+    'admin.tab.timebuzzer': 'Timebuzzer',
     
     // Common
     'common.loading': 'Yükleniyor...',

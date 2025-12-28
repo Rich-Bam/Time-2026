@@ -2182,40 +2182,40 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
               <TabsList className="inline-flex w-max min-w-full gap-1 p-1">
                 <TabsTrigger value="users" className="flex items-center justify-center gap-1 text-xs px-3 py-2 whitespace-nowrap shrink-0">
                   <Users className="h-3 w-3" />
-                  <span>Users</span>
+                  <span>{t('admin.tab.users')}</span>
                 </TabsTrigger>
                 <TabsTrigger value="weeks" className="flex items-center justify-center gap-1 text-xs px-3 py-2 whitespace-nowrap shrink-0">
                   <Calendar className="h-3 w-3" />
-                  <span>Weeks</span>
+                  <span>{t('admin.tab.weeks')}</span>
                 </TabsTrigger>
                 <TabsTrigger value="reminders" className="flex items-center justify-center gap-1 text-xs px-3 py-2 whitespace-nowrap shrink-0">
                   <AlertTriangle className="h-3 w-3" />
-                  <span>Remind</span>
+                  <span>{t('admin.tab.reminders')}</span>
                 </TabsTrigger>
                 <TabsTrigger value="export" className="flex items-center justify-center gap-1 text-xs px-3 py-2 whitespace-nowrap shrink-0">
                   <Download className="h-3 w-3" />
-                  <span>Export</span>
+                  <span>{t('admin.tab.export')}</span>
                 </TabsTrigger>
                 <TabsTrigger value="overtime" className="flex items-center justify-center gap-1 text-xs px-3 py-2 whitespace-nowrap shrink-0">
                   <BarChart3 className="h-3 w-3" />
-                  <span>OT</span>
+                  <span>{t('admin.tab.overtime')}</span>
                 </TabsTrigger>
                 {currentUser?.email === SUPER_ADMIN_EMAIL && (
                   <TabsTrigger value="timebuzzer" className="flex items-center justify-center gap-1 text-xs px-3 py-2 whitespace-nowrap shrink-0">
                     <CalendarIcon className="h-3 w-3" />
-                    <span>TB</span>
+                    <span>{t('admin.tab.timebuzzer')}</span>
                   </TabsTrigger>
                 )}
                 {(currentUser?.isAdmin || currentUser?.userType === 'administratie' || currentUser?.email === SUPER_ADMIN_EMAIL) && (
                   <TabsTrigger value="daysOff" className="flex items-center justify-center gap-1 text-xs px-3 py-2 whitespace-nowrap shrink-0">
                     <Clock className="h-3 w-3" />
-                    <span>Days</span>
+                    <span>{t('admin.daysOff')}</span>
                   </TabsTrigger>
                 )}
                 {currentUser?.email === SUPER_ADMIN_EMAIL && (
                   <TabsTrigger value="errors" className="flex items-center justify-center gap-1 text-xs px-3 py-2 whitespace-nowrap shrink-0">
                     <AlertTriangle className="h-3 w-3" />
-                    <span>Errors</span>
+                    <span>{t('admin.errors')}</span>
                   </TabsTrigger>
                 )}
               </TabsList>
@@ -2224,31 +2224,28 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
             <TabsList className={`grid w-full grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-1 sm:gap-2`}>
               <TabsTrigger value="users" className="flex items-center justify-center gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-4 py-2">
                 <Users className="h-3 w-3 sm:h-4 sm:w-4" />
-                <span>Users</span>
+                <span>{t('admin.tab.users')}</span>
               </TabsTrigger>
               <TabsTrigger value="weeks" className="flex items-center justify-center gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-4 py-2">
                 <Calendar className="h-3 w-3 sm:h-4 sm:w-4" />
-                <span>Weeks</span>
+                <span>{t('admin.tab.weeks')}</span>
               </TabsTrigger>
               <TabsTrigger value="reminders" className="flex items-center justify-center gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-4 py-2">
                 <AlertTriangle className="h-3 w-3 sm:h-4 sm:w-4" />
-                <span className="hidden xs:inline">Reminders</span>
-                <span className="xs:hidden">Remind</span>
+                <span>{t('admin.tab.reminders')}</span>
               </TabsTrigger>
               <TabsTrigger value="export" className="flex items-center justify-center gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-4 py-2">
                 <Download className="h-3 w-3 sm:h-4 sm:w-4" />
-                <span>Export</span>
+                <span>{t('admin.tab.export')}</span>
               </TabsTrigger>
               <TabsTrigger value="overtime" className="flex items-center justify-center gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-4 py-2">
                 <BarChart3 className="h-3 w-3 sm:h-4 sm:w-4" />
-                <span className="hidden xs:inline">Overtime</span>
-                <span className="xs:hidden">OT</span>
+                <span>{t('admin.tab.overtime')}</span>
               </TabsTrigger>
               {currentUser?.email === SUPER_ADMIN_EMAIL && (
                 <TabsTrigger value="timebuzzer" className="flex items-center justify-center gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-4 py-2">
                   <CalendarIcon className="h-3 w-3 sm:h-4 sm:w-4" />
-                  <span className="hidden xs:inline">Timebuzzer</span>
-                  <span className="xs:hidden">TB</span>
+                  <span>{t('admin.tab.timebuzzer')}</span>
                 </TabsTrigger>
               )}
               {(currentUser?.isAdmin || currentUser?.userType === 'administratie' || currentUser?.email === SUPER_ADMIN_EMAIL) && (
@@ -2856,27 +2853,27 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
         {/* Reminders Tab */}
         <TabsContent value="reminders" className="space-y-6">
           {/* Send Reminder Section - Available for admin and administratie */}
-          <div className="p-4 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg">
-            <h3 className="text-base sm:text-lg font-semibold mb-3 text-blue-800 dark:text-blue-200">{t('admin.sendReminder')}</h3>
-            <p className="text-xs sm:text-sm text-blue-700 dark:text-blue-300 mb-4">{t('admin.sendReminderDescription')}</p>
-            <div className="mb-4">
-              <Label className="text-sm font-semibold mb-2 block">{t('admin.selectUsers')}</Label>
-              <div className="max-h-48 overflow-y-auto border rounded-lg p-3 bg-white dark:bg-gray-700">
+          <div className="p-5 sm:p-6 bg-blue-50 dark:bg-blue-900/30 border-2 border-blue-300 dark:border-blue-700 rounded-xl shadow-lg">
+            <h3 className="text-lg sm:text-xl font-bold mb-3 text-blue-900 dark:text-blue-100">{t('admin.sendReminder')}</h3>
+            <p className="text-sm text-blue-800 dark:text-blue-200 mb-5 leading-relaxed">{t('admin.sendReminderDescription')}</p>
+            <div className="mb-6">
+              <Label className="text-sm sm:text-base font-bold mb-2 block">{t('admin.selectUsers')}</Label>
+              <div className="max-h-96 sm:max-h-[500px] overflow-y-auto border-2 border-blue-200 dark:border-blue-700 rounded-lg p-4 bg-white dark:bg-gray-700 shadow-inner">
                 {users.length === 0 ? (
-                  <p className="text-sm text-gray-500 dark:text-gray-400">{t('admin.noUsers')}</p>
+                  <p className="text-base text-gray-500 dark:text-gray-400">{t('admin.noUsers')}</p>
                 ) : (
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     {users.map(user => (
-                      <div key={user.id} className="flex items-center gap-2">
+                      <div key={user.id} className="flex items-center gap-2.5 p-1.5 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors">
                         <input
                           type="checkbox"
                           id={`reminder-user-${user.id}`}
                           checked={reminderUserIds.includes(user.id.toString())}
                           onChange={() => toggleReminderUser(user.id.toString())}
-                          className="h-4 w-4"
+                          className="h-4 w-4 cursor-pointer"
                         />
-                        <Label htmlFor={`reminder-user-${user.id}`} className="text-sm cursor-pointer text-gray-900 dark:text-gray-100">
-                          {user.name || user.email} {user.isAdmin && <span className="text-xs text-blue-600 dark:text-blue-400">(Admin)</span>}
+                        <Label htmlFor={`reminder-user-${user.id}`} className="text-sm sm:text-base cursor-pointer text-gray-900 dark:text-gray-100 font-medium">
+                          {user.name || user.email} {user.isAdmin && <span className="text-sm text-blue-600 dark:text-blue-400 font-semibold">(Admin)</span>}
                         </Label>
                       </div>
                     ))}
@@ -2884,12 +2881,14 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                 )}
               </div>
               {reminderUserIds.length > 0 && (
-                <p className="text-xs text-blue-600 dark:text-blue-400 mt-2">{reminderUserIds.length} user(s) selected</p>
+                <p className="text-sm sm:text-base font-semibold text-blue-600 dark:text-blue-400 mt-3">
+                  {reminderUserIds.length} {reminderUserIds.length === 1 ? 'gebruiker' : 'gebruikers'} geselecteerd
+                </p>
               )}
             </div>
-            <div className={`flex ${isMobile ? 'flex-col' : 'flex-row flex-wrap'} gap-3 sm:gap-4 ${isMobile ? '' : 'items-end'} w-full`}>
-              <div className={isMobile ? 'w-full' : ''}>
-                <Label className="text-sm">{t('admin.weekNumber')}</Label>
+            <div className={`flex ${isMobile ? 'flex-col' : 'flex-row flex-wrap'} gap-4 sm:gap-5 ${isMobile ? '' : 'items-end'} w-full`}>
+              <div className={`${isMobile ? 'w-full' : 'flex-1 min-w-[150px]'}`}>
+                <Label className="text-sm sm:text-base font-semibold mb-2 block">{t('admin.weekNumber')}</Label>
                 <Input 
                   type="number" 
                   value={reminderWeekNumber} 
@@ -2897,11 +2896,11 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                   placeholder={t('admin.weekNumberPlaceholder')}
                   min="1"
                   max="53"
-                  className="h-10 sm:h-9"
+                  className="h-10 sm:h-10 text-sm sm:text-base"
                 />
               </div>
-              <div className={isMobile ? 'w-full' : ''}>
-                <Label className="text-sm">{t('admin.year')}</Label>
+              <div className={`${isMobile ? 'w-full' : 'flex-1 min-w-[150px]'}`}>
+                <Label className="text-sm sm:text-base font-semibold mb-2 block">{t('admin.year')}</Label>
                 <Input 
                   type="number" 
                   value={reminderYear} 
@@ -2909,12 +2908,12 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                   placeholder={t('admin.yearPlaceholder')}
                   min="2020"
                   max="2100"
-                  className="h-10 sm:h-9"
+                  className="h-10 sm:h-10 text-sm sm:text-base"
                 />
               </div>
               <Button 
                 onClick={handleSendReminder}
-                className={`${isMobile ? 'w-full' : ''} h-10 sm:h-9 bg-blue-600 hover:bg-blue-700`}
+                className={`${isMobile ? 'w-full' : ''} h-10 sm:h-10 text-sm sm:text-base font-semibold bg-blue-600 hover:bg-blue-700 shadow-md`}
                 size={isMobile ? "lg" : "default"}
                 disabled={reminderUserIds.length === 0 || !reminderWeekNumber || !reminderYear}
               >

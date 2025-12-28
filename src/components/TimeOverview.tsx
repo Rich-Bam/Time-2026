@@ -6,12 +6,14 @@ import { BarChart3, Clock, Calendar, TrendingUp } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 interface TimeOverviewProps {
   currentUser: any;
 }
 
 const TimeOverview = ({ currentUser }: TimeOverviewProps) => {
+  const { t } = useLanguage();
   const [timesheet, setTimesheet] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -94,26 +96,26 @@ const TimeOverview = ({ currentUser }: TimeOverviewProps) => {
         <CardHeader className="p-4 sm:p-6">
           <div className={`flex ${isMobile ? 'flex-col' : 'items-center justify-between'} gap-3 sm:gap-0`}>
             <div>
-              <CardTitle className="text-lg sm:text-xl">Project Overview</CardTitle>
-              <CardDescription className="text-sm">Hours per project - {currentUser?.name || "Your"} hours</CardDescription>
+              <CardTitle className="text-lg sm:text-xl">{t('overview.title')}</CardTitle>
+              <CardDescription className="text-sm">{t('overview.subtitle', { name: currentUser?.name || t('common.user') })}</CardDescription>
             </div>
             <Select value={timePeriod} onValueChange={(value: "all" | "month" | "week") => setTimePeriod(value)}>
               <SelectTrigger className={`${isMobile ? 'w-full' : 'w-40'} h-10 sm:h-9`}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All time</SelectItem>
-                <SelectItem value="month">This month</SelectItem>
-                <SelectItem value="week">This week</SelectItem>
+                <SelectItem value="all">{t('overview.allTime')}</SelectItem>
+                <SelectItem value="month">{t('overview.thisMonth')}</SelectItem>
+                <SelectItem value="week">{t('overview.thisWeek')}</SelectItem>
               </SelectContent>
             </Select>
           </div>
         </CardHeader>
         <CardContent className="p-4 sm:p-6 pt-0">
           {loading ? (
-            <div className="text-center py-8 text-sm">Loading...</div>
+            <div className="text-center py-8 text-sm">{t('overview.loading')}</div>
           ) : projectHours.length === 0 ? (
-            <div className="text-center py-8 text-sm text-gray-500">No hours found for the selected period.</div>
+            <div className="text-center py-8 text-sm text-gray-500">{t('overview.noHoursFound')}</div>
           ) : isMobile ? (
             /* Mobile: Card Layout */
             <div className="space-y-3">
@@ -124,7 +126,7 @@ const TimeOverview = ({ currentUser }: TimeOverviewProps) => {
                     <div className="flex justify-between items-start mb-2">
                       <div className="flex-1">
                         <h4 className="font-semibold text-sm text-gray-900">{project.name}</h4>
-                        <div className="text-xs text-gray-600 mt-1">{project.entries} entries</div>
+                        <div className="text-xs text-gray-600 mt-1">{project.entries} {t('overview.entries')}</div>
                       </div>
                       <div className="text-right">
                         <div className="font-bold text-sm text-orange-600">{project.hours.toFixed(2)}h</div>
@@ -137,10 +139,10 @@ const TimeOverview = ({ currentUser }: TimeOverviewProps) => {
               })}
               <div className="border-t-2 border-gray-400 rounded-lg p-3 bg-gray-50 font-bold">
                 <div className="flex justify-between items-center">
-                  <span className="text-sm">TOTAL</span>
+                  <span className="text-sm">{t('overview.total')}</span>
                   <div className="text-right">
                     <div className="text-sm">{totalHours.toFixed(2)}h</div>
-                    <div className="text-xs text-gray-600">{filteredEntries.length} entries</div>
+                    <div className="text-xs text-gray-600">{filteredEntries.length} {t('overview.entries')}</div>
                   </div>
                 </div>
               </div>
@@ -151,11 +153,11 @@ const TimeOverview = ({ currentUser }: TimeOverviewProps) => {
               <table className="min-w-full border text-sm">
                 <thead>
                   <tr className="bg-gray-100">
-                    <th className="p-3 text-left border">Project</th>
-                    <th className="p-3 text-right border">Total Hours</th>
-                    <th className="p-3 text-right border">Entries</th>
-                    <th className="p-3 text-left border">Percentage</th>
-                    <th className="p-3 text-left border">Visualization</th>
+                    <th className="p-3 text-left border">{t('overview.project')}</th>
+                    <th className="p-3 text-right border">{t('overview.totalHours')}</th>
+                    <th className="p-3 text-right border">{t('overview.entries')}</th>
+                    <th className="p-3 text-left border">{t('overview.percentage')}</th>
+                    <th className="p-3 text-left border">{t('overview.visualization')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -176,7 +178,7 @@ const TimeOverview = ({ currentUser }: TimeOverviewProps) => {
                     );
                   })}
                   <tr className="border-t-2 border-gray-400 bg-gray-50 font-bold">
-                    <td className="p-3 border">TOTAL</td>
+                    <td className="p-3 border">{t('overview.total')}</td>
                     <td className="p-3 border text-right">{totalHours.toFixed(2)}h</td>
                     <td className="p-3 border text-right">{filteredEntries.length}</td>
                     <td className="p-3 border">100%</td>
@@ -197,7 +199,7 @@ const TimeOverview = ({ currentUser }: TimeOverviewProps) => {
               <Clock className="h-6 w-6 sm:h-8 sm:w-8 text-orange-600" />
               <div className="ml-3 sm:ml-4">
                 <p className="text-xs sm:text-sm font-medium text-gray-600">
-                  {timePeriod === "all" ? "Total Hours" : timePeriod === "month" ? "This Month" : "This Week"}
+                  {timePeriod === "all" ? t('overview.totalHours') : timePeriod === "month" ? t('overview.thisMonth') : t('overview.thisWeek')}
                 </p>
                 <p className="text-xl sm:text-2xl font-bold text-gray-900">{loading ? "-" : totalHours.toFixed(1) + "h"}</p>
               </div>
@@ -209,7 +211,7 @@ const TimeOverview = ({ currentUser }: TimeOverviewProps) => {
             <div className="flex items-center">
               <BarChart3 className="h-6 w-6 sm:h-8 sm:w-8 text-purple-600" />
               <div className="ml-3 sm:ml-4">
-                <p className="text-xs sm:text-sm font-medium text-gray-600">Projects</p>
+                <p className="text-xs sm:text-sm font-medium text-gray-600">{t('overview.projects')}</p>
                 <p className="text-xl sm:text-2xl font-bold text-gray-900">{loading ? "-" : projectHours.length}</p>
               </div>
             </div>
@@ -220,7 +222,7 @@ const TimeOverview = ({ currentUser }: TimeOverviewProps) => {
             <div className="flex items-center">
               <TrendingUp className="h-6 w-6 sm:h-8 sm:w-8 text-green-600" />
               <div className="ml-3 sm:ml-4">
-                <p className="text-xs sm:text-sm font-medium text-gray-600">Avg per Project</p>
+                <p className="text-xs sm:text-sm font-medium text-gray-600">{t('overview.avgPerProject')}</p>
                 <p className="text-xl sm:text-2xl font-bold text-gray-900">
                   {loading ? "-" : projectHours.length > 0 ? (totalHours / projectHours.length).toFixed(1) + "h" : "0h"}
                 </p>
