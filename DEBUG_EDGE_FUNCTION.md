@@ -1,113 +1,125 @@
-# Debug: Edge Function Test
+# Debug Edge Function - Stap voor Stap
 
-## Stap 1: Check Environment Variabelen
+Als je de fout ziet: **"Failed to send a request to the Edge Function"**, volg deze stappen:
 
-Open je browser console (F12) en typ:
+## Stap 1: Check Edge Function Logs
+
+1. Ga naar **Supabase Dashboard** → **Edge Functions** → **Functions**
+2. Klik op **`send-reminder-email`**
+3. Klik op de **"Logs"** tab (of "View logs")
+4. Kijk naar de meest recente logs
+5. **Wat zie je?**
+   - ❌ Error messages? → Noteer de exacte error
+   - ❌ Geen logs? → De function wordt niet aangeroepen
+   - ✅ Logs maar geen errors? → Check de response
+
+## Stap 2: Test de Edge Function Direct
+
+1. Ga naar **Supabase Dashboard** → **Edge Functions** → **Functions** → **`send-reminder-email`**
+2. Klik op **"Invoke"** of **"Test"** knop (als beschikbaar)
+3. Of gebruik de browser console:
 
 ```javascript
-console.log("Supabase URL:", import.meta.env.VITE_SUPABASE_URL);
-console.log("Anon Key:", import.meta.env.VITE_SUPABASE_ANON_KEY ? "✅ Set" : "❌ Missing");
+// Test in browser console (op je website)
+const testPayload = {
+  userIds: ["jouw-user-id"], // Vervang met een echte user ID
+  weekNumber: 51,
+  year: 2025,
+  message: "Test reminder"
+};
+
+const { data, error } = await supabase.functions.invoke('send-reminder-email', {
+  body: testPayload
+});
+
+console.log("Response:", data);
+console.log("Error:", error);
 ```
 
-**Verwacht resultaat:**
-- Supabase URL: `https://bgddtkiekjcdhcmrnxsi.supabase.co`
-- Anon Key: `✅ Set`
+## Stap 3: Check Secrets
 
-## Stap 2: Test Edge Function Direct
+1. Ga naar **Edge Functions** → **Secrets**
+2. Check of deze secrets bestaan:
+   - ✅ `RESEND_API_KEY` (moet een waarde hebben)
+   - ✅ `RESEND_FROM_EMAIL` (moet een waarde hebben)
+3. **Als secrets ontbreken:**
+   - Voeg ze toe (zie `ADD_RESEND_SECRETS.md`)
+   - **Re-deploy de function** (belangrijk!)
 
-In browser console (F12), typ:
+## Stap 4: Re-deploy de Edge Function
 
-```javascript
-fetch("https://bgddtkiekjcdhcmrnxsi.supabase.co/functions/v1/invite-user", {
-  method: "POST",
-  headers: {
-    "Content-Type": "application/json",
-    "Authorization": "Bearer JE_ANON_KEY_HIER"
-  },
-  body: JSON.stringify({
-    email: "test@example.com",
-    name: "Test User",
-    isAdmin: false
-  })
-})
-.then(r => r.json())
-.then(console.log)
-.catch(console.error);
-```
+**⚠️ BELANGRIJK:** Na het toevoegen van secrets of het wijzigen van code, moet je de function opnieuw deployen!
 
-**Vervang `JE_ANON_KEY_HIER` met je echte anon key!**
+1. Ga naar **Edge Functions** → **Functions** → **`send-reminder-email`**
+2. Scroll naar beneden
+3. Klik op **"Deploy"** of **"Redeploy"**
+4. Wacht tot deployment klaar is
+5. Check de **"UPDATED"** tijd - moet "just now" zijn
 
-**Mogelijke resultaten:**
-- `{success: true}` → Edge Function werkt!
-- `{error: "..."}` → Edge Function error
-- `404` → Function niet gedeployed
-- `401/403` → Authentication probleem
-- Network error → CORS of URL probleem
+## Stap 5: Check de Code
 
-## Stap 3: Check Supabase Dashboard
+Als je de code handmatig hebt aangepast, check:
 
-1. Ga naar: https://supabase.com/dashboard
-2. Selecteer project: `bgddtkiekjcdhcmrnxsi`
-3. Ga naar **Edge Functions** → **Functions**
-4. Staat `invite-user` in de lijst?
-   - **NEE** → Volg `DEPLOY_EDGE_FUNCTION.md` om hem te deployen
-   - **JA** → Ga naar **Logs** en check voor errors
+1. **Syntax errors?**
+   - Ga naar **Edge Functions** → **Functions** → **`send-reminder-email`**
+   - Kijk of er rode onderstrepingen zijn
+   - Check of de code correct is geformatteerd
 
-## Stap 4: Check Supabase Logs
+2. **Email adres correct?**
+   - Moet een geverifieerd email adres zijn in Resend
+   - Check **Resend Dashboard** → **Domains** → of `bampro-uren.nl` geverifieerd is
+   - Of gebruik `support@bampro-uren.nl` als die geverifieerd is
 
-1. Ga naar **Edge Functions** → **Logs**
-2. Klik op `invite-user`
-3. Kijk naar recente logs
-4. Welke errors zie je?
+## Stap 6: Check Network Request
 
-## Stap 5: Test Direct in Supabase Dashboard
-
-1. Ga naar **Authentication** → **Users**
-2. Klik op **"Invite user"** (rechtsboven)
-3. Voer je email in
-4. Klik **"Send invitation"**
-5. **Krijg je WEL een email?**
-   - **JA** → Supabase email werkt, maar Edge Function niet
-   - **NEE** → Supabase email service probleem
+1. Open **Browser Developer Tools** (F12)
+2. Ga naar **Network** tab
+3. Verstuur een reminder
+4. Klik op de `send-reminder-email` request
+5. Check:
+   - **Status code:** Moet 200 zijn (niet 404, 500, etc.)
+   - **Request payload:** Check of `userIds`, `weekNumber`, `year` correct zijn
+   - **Response:** Wat staat er in de response?
 
 ## Veelvoorkomende Problemen
 
-### Probleem 1: Edge Function niet gedeployed
-**Symptoom:** 404 error in console
-**Oplossing:** Deploy de function via Supabase Dashboard
+### Probleem: "Failed to load response data"
+**Oorzaak:** Edge Function crasht voordat het een response kan sturen
+**Oplossing:**
+- Check Edge Function logs voor errors
+- Check of alle secrets correct zijn ingesteld
+- Re-deploy de function
 
-### Probleem 2: Verkeerde anon key
-**Symptoom:** 401/403 error
-**Oplossing:** Check `.env.local` of Netlify environment variables
+### Probleem: "404 Not Found"
+**Oorzaak:** Edge Function is niet gedeployed
+**Oplossing:**
+- Check of `send-reminder-email` in de Functions lijst staat
+- Deploy de function opnieuw
 
-### Probleem 3: Email al geregistreerd
-**Symptoom:** "already registered" error
-**Oplossing:** Verwijder user uit Supabase Auth → Users, of gebruik ander email
+### Probleem: "RESEND_API_KEY secret is not configured"
+**Oorzaak:** Secret ontbreekt of verkeerde naam
+**Oplossing:**
+- Check of secret exact heet: `RESEND_API_KEY` (hoofdletters!)
+- Re-deploy de function na het toevoegen van secrets
 
-### Probleem 4: CORS probleem
-**Symptoom:** Network error of CORS error
-**Oplossing:** Check of Edge Function CORS headers heeft (zou automatisch moeten)
+### Probleem: "Invalid request body"
+**Oorzaak:** Verkeerde data format
+**Oplossing:**
+- Check of `userIds` een array is
+- Check of `weekNumber` en `year` nummers zijn (niet strings)
 
-### Probleem 5: Edge Function error
-**Symptoom:** 500 error
-**Oplossing:** Check Supabase logs voor details
+## Test Checklist
 
+- [ ] Edge Function staat in Functions lijst
+- [ ] Edge Function heeft een URL
+- [ ] Edge Function is recent gedeployed ("just now" of recent)
+- [ ] Secrets `RESEND_API_KEY` en `RESEND_FROM_EMAIL` bestaan
+- [ ] Email adres is geverifieerd in Resend
+- [ ] Edge Function logs tonen geen errors
+- [ ] Network request heeft status 200
+- [ ] Response bevat data (niet alleen error)
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+Als alles is aangevinkt maar het werkt nog niet, deel:
+1. Screenshot van Edge Function logs
+2. Screenshot van Network request (Request + Response tabs)
+3. Exacte error message

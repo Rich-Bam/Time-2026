@@ -2053,15 +2053,105 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
       return;
     }
 
+    // Send reminder emails via Edge Function
+    try {
+      // Ensure userIds is an array of strings
+      const userIdsArray = reminderUserIds.map(id => id.toString());
+      
+      console.log("Calling Edge Function with:", {
+        userIds: userIdsArray,
+        weekNumber: weekNum,
+        year: year,
+      });
+
+      // Use direct fetch instead of supabase.functions.invoke to avoid CORS header issues
+      // Get Supabase URL and key from environment or client
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://bgddtkiekjcdhcmrnxsi.supabase.co';
+      const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJnZGR0a2lla2pjZGhjbXJueHNpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYxMDUzNDAsImV4cCI6MjA2NjM0NzI4NH0.CRQWYmCm0PnqcKiJC_5215Z5TxQcNJqfBE0URUW_a9o';
+      const { data: { session } } = await supabase.auth.getSession();
+      const accessToken = session?.access_token;
+
+      const response = await fetch(`${supabaseUrl}/functions/v1/send-reminder-email`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken || supabaseKey}`,
+          'apikey': supabaseKey,
+          // Only include essential headers, no cache-control headers to avoid CORS issues
+        },
+        body: JSON.stringify({
+          userIds: userIdsArray,
+          weekNumber: weekNum,
+          year: year,
+          message: `Please fill in your hours for week ${weekNum} of ${year}.`,
+        }),
+      });
+
+      let emailData = null;
+      let emailError = null;
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        try {
+          emailError = JSON.parse(errorText);
+        } catch {
+          emailError = { message: errorText || `HTTP ${response.status}` };
+        }
+      } else {
+        try {
+          emailData = await response.json();
+        } catch (parseError) {
+          emailError = { message: 'Failed to parse response' };
+        }
+      }
+
+      console.log("Edge Function response:", { emailData, emailError });
+
+      if (emailError) {
+        console.error("Error sending reminder emails:", emailError);
+        // Don't fail the whole operation if email fails - reminders are already saved
+        toast({
+          title: "Reminders Saved",
+          description: `Reminders saved to database, but email sending failed: ${emailError.message}`,
+          variant: "default",
+        });
+      } else if (emailData) {
+        const sentCount = emailData.sent || 0;
+        const failedCount = emailData.failed || 0;
+        
+        if (sentCount > 0 && failedCount === 0) {
+          toast({
+            title: "Reminders Sent",
+            description: `Reminders and emails sent successfully to ${sentCount} user(s) for week ${weekNum} of ${year}.`,
+          });
+        } else if (sentCount > 0 && failedCount > 0) {
+          toast({
+            title: "Partial Success",
+            description: `Reminders saved. Emails sent to ${sentCount} user(s), but ${failedCount} failed. Check Edge Function logs for details.`,
+            variant: "default",
+          });
+        } else {
+          toast({
+            title: "Reminders Saved",
+            description: `Reminders saved to database, but no emails were sent. Check Edge Function configuration.`,
+            variant: "default",
+          });
+        }
+      }
+    } catch (emailErr: any) {
+      console.error("Error calling email Edge Function:", emailErr);
+      // Don't fail the whole operation if email fails - reminders are already saved
+      toast({
+        title: "Reminders Saved",
+        description: `Reminders saved to database, but email sending failed. Check if Edge Function is deployed.`,
+        variant: "default",
+      });
+    }
+
     const userNames = reminderUserIds.map(userId => {
       const user = users.find(u => u.id.toString() === userId);
       return user?.name || user?.email || "User";
     }).join(", ");
-
-    toast({
-      title: "Reminders Sent",
-      description: `Reminders sent to ${reminderUserIds.length} user(s): ${userNames} for week ${weekNum} of ${year}.`,
-    });
 
     // Reset form
     setReminderUserIds([]);
