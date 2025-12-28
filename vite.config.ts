@@ -81,7 +81,17 @@ export default defineConfig(({ mode }) => ({
               }
             }
           },
-          // Cache Supabase API calls
+          // Cache Supabase API calls, but exclude auth/login queries
+          {
+            urlPattern: /^https:\/\/.*\.supabase\.co\/rest\/v1\/users.*/i,
+            handler: 'NetworkOnly', // Never cache user queries (login, etc.)
+            options: {
+              cacheableResponse: {
+                statuses: [0, 200]
+              }
+            }
+          },
+          // Cache other Supabase API calls
           {
             urlPattern: /^https:\/\/.*\.supabase\.co\/.*/i,
             handler: 'NetworkFirst',

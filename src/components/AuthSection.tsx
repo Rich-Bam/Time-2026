@@ -53,6 +53,7 @@ const AuthSection = ({ onLogin, setCurrentUser }: AuthSectionProps) => {
     let lastError = null;
     
     // Retry up to 3 times with exponential backoff
+    // Note: Login queries are not cached by service worker (NetworkOnly strategy)
     for (let attempt = 1; attempt <= 3; attempt++) {
       const { data, error: queryError } = await supabase
         .from("users")

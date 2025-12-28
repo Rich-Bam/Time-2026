@@ -27,6 +27,10 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseKey, {
       'Accept': 'application/json',
       'Content-Type': 'application/json',
       'apikey': supabaseKey,
+      // Add cache control headers to prevent caching of auth queries
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0',
     },
   },
 });
