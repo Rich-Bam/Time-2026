@@ -597,16 +597,47 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
       console.log("🔵 UserType:", form.userType);
       
       // Use Supabase client's functions.invoke() method - this handles auth and CORS automatically
-      console.log("🔵 Calling supabase.functions.invoke('invite-user')...");
+      console.log("🔵 Calling invite-user Edge Function...");
       
       const isAdmin = form.userType === 'admin' || form.userType === 'super_admin';
-      const { data, error } = await supabase.functions.invoke('invite-user', {
-        body: {
+      
+      // Use direct fetch instead of supabase.functions.invoke to avoid CORS header issues
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://bgddtkiekjcdhcmrnxsi.supabase.co';
+      const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJnZGR0a2lla2pjZGhjbXJueHNpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYxMDUzNDAsImV4cCI6MjA2NjM0NzI4NH0.CRQWYmCm0PnqcKiJC_5215Z5TxQcNJqfBE0URUW_a9o';
+      const { data: { session } } = await supabase.auth.getSession();
+      const accessToken = session?.access_token;
+
+      const response = await fetch(`${supabaseUrl}/functions/v1/invite-user`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken || supabaseKey}`,
+          'apikey': supabaseKey,
+        },
+        body: JSON.stringify({
           email: form.email,
           name: form.name || form.email,
           isAdmin: isAdmin,
-        },
+        }),
       });
+
+      let data = null;
+      let error = null;
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        try {
+          error = JSON.parse(errorText);
+        } catch {
+          error = { message: errorText || `HTTP ${response.status}` };
+        }
+      } else {
+        try {
+          data = await response.json();
+        } catch (parseError) {
+          error = { message: 'Failed to parse response' };
+        }
+      }
       
       console.log("🔵 Edge Function response:", { data, error });
       console.log("🔵 Error details:", error ? {
