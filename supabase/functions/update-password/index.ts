@@ -18,7 +18,9 @@ type UpdatePasswordPayload = {
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, cache-control, pragma, expires, x-supabase-api-version, accept, accept-language, if-modified-since, if-none-match, x-requested-with",
+  "Access-Control-Allow-Methods": "POST, OPTIONS, GET",
+  "Access-Control-Max-Age": "86400",
 };
 
 Deno.serve(async (req) => {

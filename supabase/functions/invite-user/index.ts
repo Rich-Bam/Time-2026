@@ -34,7 +34,15 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/677a8104-55ff-4a8e-a1c2-02170ea8e822',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'invite-user/index.ts:36',message:'Edge Function called',data:{method:req.method,hasBody:!!req.body},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
+    
     const { email, name, isAdmin = false } = (await req.json()) as InvitePayload;
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/677a8104-55ff-4a8e-a1c2-02170ea8e822',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'invite-user/index.ts:40',message:'Request parsed',data:{email,name,isAdmin},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
 
     if (!email || !name) {
       return new Response(JSON.stringify({ error: "Email and name are required" }), {
@@ -46,8 +54,15 @@ Deno.serve(async (req) => {
     // Get Supabase credentials
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/677a8104-55ff-4a8e-a1c2-02170ea8e822',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'invite-user/index.ts:47',message:'Environment check',data:{hasSupabaseUrl:!!supabaseUrl,hasServiceRoleKey:!!serviceRoleKey,urlLength:supabaseUrl?.length||0,keyLength:serviceRoleKey?.length||0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
 
     if (!supabaseUrl || !serviceRoleKey) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/677a8104-55ff-4a8e-a1c2-02170ea8e822',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'invite-user/index.ts:51',message:'Missing credentials',data:{hasSupabaseUrl:!!supabaseUrl,hasServiceRoleKey:!!serviceRoleKey},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
       return new Response(JSON.stringify({ error: "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY" }), {
         headers: corsHeaders,
         status: 500,
@@ -55,39 +70,81 @@ Deno.serve(async (req) => {
     }
 
     const supabase = createClient(supabaseUrl, serviceRoleKey);
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/677a8104-55ff-4a8e-a1c2-02170ea8e822',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'invite-user/index.ts:57',message:'Supabase client created',data:{url:supabaseUrl,hasClient:!!supabase},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
 
     // Get the app URL from environment or use default
     const appUrl = Deno.env.get("APP_URL") || "https://bampro-uren.nl";
 
-    // Check if user already exists in auth
-    const { data: existingUser } = await supabase.auth.admin.getUserByEmail(email);
+    // Check if user already exists in auth using listUsers (getUserByEmail doesn't exist in this version)
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/677a8104-55ff-4a8e-a1c2-02170ea8e822',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'invite-user/index.ts:63',message:'Checking existing user via listUsers',data:{email},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+    // #endregion
+    
+    const { data: authUsersData, error: listError } = await supabase.auth.admin.listUsers();
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/677a8104-55ff-4a8e-a1c2-02170ea8e822',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'invite-user/index.ts:66',message:'List users result',data:{hasError:!!listError,errorMessage:listError?.message,usersCount:authUsersData?.users?.length||0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+    // #endregion
+    
+    if (listError) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/677a8104-55ff-4a8e-a1c2-02170ea8e822',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'invite-user/index.ts:70',message:'Failed to list users',data:{errorMessage:listError.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion
+      return new Response(JSON.stringify({ 
+        error: "Failed to check existing users",
+        details: listError.message
+      }), {
+        headers: corsHeaders,
+        status: 500,
+      });
+    }
+    
+    const existingAuthUser = authUsersData.users.find(u => u.email === email);
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/677a8104-55ff-4a8e-a1c2-02170ea8e822',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'invite-user/index.ts:78',message:'Existing user check result',data:{hasExistingUser:!!existingAuthUser,userId:existingAuthUser?.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+    // #endregion
     
     let user;
     let inviteLink;
+    const isExistingUser = !!existingAuthUser;
 
-    if (existingUser?.user) {
-      // User already exists in auth - generate a new invite link
+    if (existingAuthUser) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/677a8104-55ff-4a8e-a1c2-02170ea8e822',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'invite-user/index.ts:115',message:'User exists in auth, generating password reset link',data:{userId:existingAuthUser.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion
+      // User already exists in auth - generate a password reset link (not invite, since user is already registered)
       const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
-        type: "invite",
+        type: "recovery",
         email: email,
         options: {
-          redirectTo: `${appUrl}/invite-confirm`,
+          redirectTo: `${appUrl}/reset`,
         },
       });
 
       if (linkError || !linkData) {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/677a8104-55ff-4a8e-a1c2-02170ea8e822',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'invite-user/index.ts:127',message:'Failed to generate recovery link',data:{linkErrorMessage:linkError?.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+        // #endregion
         return new Response(JSON.stringify({ 
-          error: "Failed to generate invite link",
-          details: linkError?.message || "Could not generate invitation link"
+          error: "Failed to generate password reset link",
+          details: linkError?.message || "Could not generate password reset link"
         }), {
           headers: corsHeaders,
           status: 400,
         });
       }
 
-      user = existingUser.user;
+      user = existingAuthUser;
       inviteLink = linkData.properties.action_link;
     } else {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/677a8104-55ff-4a8e-a1c2-02170ea8e822',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'invite-user/index.ts:91',message:'Creating new user in auth',data:{email,name,isAdmin},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+      // #endregion
+      
       // Create new user in Supabase Auth
       const {
         data: { user: newUser },
@@ -99,8 +156,15 @@ Deno.serve(async (req) => {
         },
         redirectTo: `${appUrl}/invite-confirm`,
       });
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/677a8104-55ff-4a8e-a1c2-02170ea8e822',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'invite-user/index.ts:103',message:'Auth user creation result',data:{hasNewUser:!!newUser,hasAuthError:!!authError,authErrorMessage:authError?.message,userId:newUser?.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+      // #endregion
 
       if (authError || !newUser) {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/677a8104-55ff-4a8e-a1c2-02170ea8e822',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'invite-user/index.ts:106',message:'Auth creation failed',data:{authErrorMessage:authError?.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+        // #endregion
         return new Response(JSON.stringify({ 
           error: authError?.message || "Failed to invite user",
           details: "Could not create user in Supabase Auth"
@@ -134,52 +198,112 @@ Deno.serve(async (req) => {
       inviteLink = linkData.properties.action_link;
     }
 
-    // Create matching row in public.users table using service_role (bypasses RLS)
+    // Create or update matching row in public.users table using service_role (bypasses RLS)
+    // The supabase client is created with serviceRoleKey, so it should bypass RLS
+    console.log("Creating/updating user in database with service_role...");
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/677a8104-55ff-4a8e-a1c2-02170ea8e822',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'invite-user/index.ts:200',message:'Checking if user exists in database',data:{userId:user.id,email},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+    // #endregion
+    
+    // Check if user already exists in public.users table
+    const { data: existingDbUser, error: checkError } = await supabase
+      .from("users")
+      .select("id, email, name")
+      .eq("id", user.id)
+      .single();
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/677a8104-55ff-4a8e-a1c2-02170ea8e822',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'invite-user/index.ts:210',message:'User existence check result',data:{hasExistingDbUser:!!existingDbUser,hasCheckError:!!checkError,checkErrorCode:checkError?.code},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+    // #endregion
+    
     const tempPassword = Math.random().toString(36).slice(-12) + Math.random().toString(36).slice(-12) + "A1!";
     
-    const { error: dbError } = await supabase.from("users").insert({
-      id: user.id,
-      email,
-      name,
-      password: tempPassword,
-      isAdmin,
-      must_change_password: true,
-      approved: true,
-    });
+    let insertedUser;
+    let dbError;
+    
+    if (existingDbUser) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/677a8104-55ff-4a8e-a1c2-02170ea8e822',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'invite-user/index.ts:218',message:'User exists, updating',data:{userId:user.id,email,name,isAdmin},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+      // #endregion
+      // User already exists - update instead of insert
+      const { data: updatedUser, error: updateError } = await supabase
+        .from("users")
+        .update({ 
+          name, 
+          isAdmin, 
+          approved: true, 
+          must_change_password: true 
+        })
+        .eq("id", user.id)
+        .select();
+      
+      insertedUser = updatedUser;
+      dbError = updateError;
+    } else {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/677a8104-55ff-4a8e-a1c2-02170ea8e822',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'invite-user/index.ts:232',message:'User does not exist, inserting',data:{userId:user.id,email,name,isAdmin},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+      // #endregion
+      // User does not exist - insert new
+      const { data: newUser, error: insertError } = await supabase.from("users").insert({
+        id: user.id,
+        email,
+        name,
+        password: tempPassword,
+        isAdmin,
+        must_change_password: true,
+        approved: true,
+      }).select();
+      
+      insertedUser = newUser;
+      dbError = insertError;
+    }
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/677a8104-55ff-4a8e-a1c2-02170ea8e822',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'invite-user/index.ts:152',message:'Database insert result',data:{hasInsertedUser:!!insertedUser,hasDbError:!!dbError,dbErrorCode:dbError?.code,dbErrorMessage:dbError?.message,dbErrorDetails:dbError?.details,dbErrorHint:dbError?.hint,isRLSError:dbError?.message?.includes('row-level security')||dbError?.message?.includes('RLS')},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+    // #endregion
 
     if (dbError) {
-      // If user already exists in users table, try update
-      if (dbError.code === "23505") { // Unique constraint violation
-        const { error: updateError } = await supabase
-          .from("users")
-          .update({ name, isAdmin, approved: true, must_change_password: true })
-          .eq("id", user.id);
-        
-        if (updateError) {
-          return new Response(JSON.stringify({ error: `Failed to create/update user: ${dbError.message}` }), {
-            headers: corsHeaders,
-            status: 400,
-          });
-        }
-      } else {
-        return new Response(JSON.stringify({ error: `Failed to create user: ${dbError.message}` }), {
-          headers: corsHeaders,
-          status: 400,
-        });
-      }
+      console.error("Database error:", dbError);
+      console.error("Error code:", dbError.code);
+      console.error("Error message:", dbError.message);
+      console.error("Error details:", dbError.details);
+      console.error("Error hint:", dbError.hint);
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/677a8104-55ff-4a8e-a1c2-02170ea8e822',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'invite-user/index.ts:250',message:'Database operation failed',data:{dbErrorCode:dbError.code,dbErrorMessage:dbError.message,isRLSError:dbError.message?.includes('row-level security')||dbError.message?.includes('RLS')},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+      // #endregion
+      
+      // Check if it's an RLS error
+      const isRLSError = dbError.message.includes("row-level security") || dbError.message.includes("RLS");
+      return new Response(JSON.stringify({ 
+        error: `Failed to create/update user: ${dbError.message}`,
+        details: `Code: ${dbError.code}, Hint: ${dbError.hint || 'none'}`,
+        rlsIssue: isRLSError,
+        solution: isRLSError ? "Run fix_invite_user_rls_COMPLETE.sql in Supabase SQL Editor" : "Check database logs"
+      }), {
+        headers: corsHeaders,
+        status: 400,
+      });
+    } else {
+      console.log("User created/updated successfully in database:", insertedUser);
     }
 
-    // Send invite email via Resend
+    // Send invite email via Resend (optional - if not configured, user is still created)
     const resendApiKey = Deno.env.get("RESEND_API_KEY");
     const resendFromEmail = Deno.env.get("RESEND_FROM_EMAIL") || "support@bampro-uren.nl";
 
+    // If Resend is not configured, still return success but log a warning
     if (!resendApiKey) {
+      console.warn("RESEND_API_KEY not configured - user created but no email sent");
       return new Response(JSON.stringify({ 
-        error: "RESEND_API_KEY secret is not configured",
-        details: "Please add RESEND_API_KEY secret in Supabase Dashboard → Edge Functions → Secrets"
+        success: true, 
+        userId: user.id,
+        warning: "User created successfully, but invitation email was not sent because RESEND_API_KEY is not configured. Please add RESEND_API_KEY secret in Supabase Dashboard → Edge Functions → Secrets",
+        message: "User invited successfully. Please configure Resend to send invitation emails." 
       }), {
         headers: corsHeaders,
-        status: 500,
+        status: 200,
       });
     }
 
@@ -285,17 +409,16 @@ To get started, please click the link below to set up your password and activate
 
 ${inviteLink}
 
-Important: This invitation link will expire in 7 days.
+Important: This invitation link will expire in 7 days. If you have any questions or need assistance, please contact your administrator.
 
 What's next?
 1. Click the activation link above
 2. Set a secure password for your account
 3. Log in and start tracking your hours
 
-If you have any questions or need assistance, please contact your administrator.
-
 ---
 This is an automated invitation from BAMPRO MARINE Timesheet System.
+You are receiving this email because you have been invited to join our platform.
     `.trim();
 
     // Send email via Resend
@@ -349,6 +472,10 @@ This is an automated invitation from BAMPRO MARINE Timesheet System.
       });
     }
   } catch (err) {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/677a8104-55ff-4a8e-a1c2-02170ea8e822',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'invite-user/index.ts:379',message:'Unhandled exception',data:{errorMessage:err instanceof Error ? err.message : String(err),errorStack:err instanceof Error ? err.stack : undefined,errorName:err instanceof Error ? err.name : typeof err},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+    // #endregion
+    
     console.error("Edge Function error:", err);
     return new Response(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }), {
       headers: corsHeaders,

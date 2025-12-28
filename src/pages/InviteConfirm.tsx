@@ -72,7 +72,15 @@ const InviteConfirm = () => {
       // Update password in Supabase Auth
       const { error: authError } = await supabase.auth.updateUser({ password: newPassword });
       if (authError) {
-        setMessage("Fout bij het instellen van wachtwoord: " + authError.message);
+        // Handle specific error: password same as old password
+        if (authError.message?.includes("should be different from the old password") || 
+            authError.message?.includes("same as the old password")) {
+          // For new users, this shouldn't happen, but if it does, try to reset the password first
+          // by signing out and using the recovery flow
+          setMessage("Het nieuwe wachtwoord moet anders zijn dan je huidige wachtwoord. Probeer een ander wachtwoord of vraag een nieuwe activatielink aan.");
+        } else {
+          setMessage("Fout bij het instellen van wachtwoord: " + authError.message);
+        }
         setLoading(false);
         return;
       }

@@ -40,19 +40,19 @@ const Reset = () => {
     setMessage("");
     
     if (!newPassword || newPassword.length < 6) {
-      setMessage("Wachtwoord moet minimaal 6 tekens lang zijn.");
+      setMessage("Password must be at least 6 characters long.");
       setLoading(false);
       return;
     }
     
     if (newPassword !== confirmPassword) {
-      setMessage("Wachtwoorden komen niet overeen.");
+      setMessage("Passwords do not match.");
       setLoading(false);
       return;
     }
     
     if (!accessToken) {
-      setMessage("Ontbrekende of ongeldige toegangstoken.");
+      setMessage("Missing or invalid access token.");
       setLoading(false);
       return;
     }
@@ -65,7 +65,7 @@ const Reset = () => {
       });
       
       if (sessionError) {
-        setMessage("Sessie fout: " + sessionError.message);
+        setMessage("Session error: " + sessionError.message);
         setLoading(false);
         return;
       }
@@ -73,7 +73,13 @@ const Reset = () => {
       // Update password in Supabase Auth
       const { error: authError } = await supabase.auth.updateUser({ password: newPassword });
       if (authError) {
-        setMessage("Fout bij het instellen van wachtwoord: " + authError.message);
+        // Handle specific error: password same as old password
+        if (authError.message?.includes("should be different from the old password") || 
+            authError.message?.includes("same as the old password")) {
+          setMessage("The new password must be different from your current password. Please choose a different password.");
+        } else {
+          setMessage("Error setting password: " + authError.message);
+        }
         setLoading(false);
         return;
       }
@@ -96,7 +102,7 @@ const Reset = () => {
           
           if (updateError || !updateData?.success) {
             console.error("❌ Edge function failed to update password:", updateError, updateData);
-            setMessage("Fout: Kon wachtwoord niet bijwerken in database. Error: " + (updateError?.message || updateData?.error || "Unknown error") + ". De update-password edge function moet mogelijk worden gedeployed.");
+            setMessage("Error: Could not update password in database. Error: " + (updateError?.message || updateData?.error || "Unknown error") + ". The update-password edge function may need to be deployed.");
             setLoading(false);
             return;
           }
@@ -104,7 +110,7 @@ const Reset = () => {
           console.log("✅ Password updated in both Auth and users table via edge function");
         } catch (fetchError: any) {
           console.error("❌ Failed to call update-password edge function:", fetchError);
-          setMessage("Fout: Kon update-password edge function niet aanroepen. Error: " + fetchError.message + ". De function moet worden gedeployed in Supabase Dashboard → Edge Functions.");
+          setMessage("Error: Could not call update-password edge function. Error: " + fetchError.message + ". The function must be deployed in Supabase Dashboard → Edge Functions.");
           setLoading(false);
           return;
         }
@@ -112,14 +118,14 @@ const Reset = () => {
       
       // Success!
       setPasswordReset(true);
-      setMessage("Wachtwoord succesvol gereset! Je kunt nu inloggen met je nieuwe wachtwoord.");
+      setMessage("Password successfully set! You can now log in with your new password.");
       
       toast({
-        title: "Wachtwoord gereset!",
-        description: "Je wachtwoord is succesvol gewijzigd. Je kunt nu inloggen.",
+        title: "Password Set!",
+        description: "Your password has been successfully set. You can now log in.",
       });
     } catch (error: any) {
-      setMessage("Fout: " + (error.message || "Onbekende fout"));
+      setMessage("Error: " + (error.message || "Unknown error"));
     } finally {
       setLoading(false);
     }
@@ -137,10 +143,10 @@ const Reset = () => {
             />
           </div>
           <CardTitle className="text-2xl text-orange-600">
-            Wachtwoord Resetten
+            Set Your Password
           </CardTitle>
           <CardDescription>
-            {passwordReset ? "Je wachtwoord is succesvol gewijzigd" : "Stel een nieuw wachtwoord in"}
+            {passwordReset ? "Your password has been successfully changed" : "Set up your password to activate your account"}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -148,23 +154,23 @@ const Reset = () => {
             passwordReset ? (
               <div className="space-y-4">
                 <div className="text-center p-4 bg-green-50 text-green-700 border border-green-200 rounded">
-                  <p className="font-semibold mb-2">✅ Wachtwoord succesvol gereset!</p>
-                  <p className="text-sm">Je kunt nu inloggen met je nieuwe wachtwoord.</p>
+                  <p className="font-semibold mb-2">✅ Password successfully set!</p>
+                  <p className="text-sm">You can now log in with your new password.</p>
                 </div>
                 <Link to="/">
                   <Button className="w-full bg-orange-600 hover:bg-orange-700">
-                    Ga naar Inlog Scherm
+                    Go to Login Screen
                   </Button>
                 </Link>
               </div>
             ) : (
               <form onSubmit={handleReset} className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="new-password">Nieuw Wachtwoord</Label>
+                  <Label htmlFor="new-password">New Password</Label>
                   <Input
                     id="new-password"
                     type="password"
-                    placeholder="Voer nieuw wachtwoord in (minimaal 6 tekens)"
+                    placeholder="Enter new password (minimum 6 characters)"
                     value={newPassword}
                     onChange={e => setNewPassword(e.target.value)}
                     required
@@ -172,11 +178,11 @@ const Reset = () => {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="confirm-password">Bevestig Wachtwoord</Label>
+                  <Label htmlFor="confirm-password">Confirm Password</Label>
                   <Input
                     id="confirm-password"
                     type="password"
-                    placeholder="Bevestig je wachtwoord"
+                    placeholder="Confirm your password"
                     value={confirmPassword}
                     onChange={e => setConfirmPassword(e.target.value)}
                     required
@@ -188,12 +194,12 @@ const Reset = () => {
                   className="w-full bg-orange-600 hover:bg-orange-700" 
                   disabled={loading || !newPassword || !confirmPassword}
                 >
-                  {loading ? "Bezig..." : "Wachtwoord Resetten"}
+                  {loading ? "Setting Password..." : "Set Password"}
                 </Button>
                 {message && (
                   <div 
                     className={`text-sm text-center mt-2 p-3 rounded ${
-                      message.includes('succesvol') || message.includes('gereset')
+                      message.includes('successfully') || message.includes('success')
                         ? 'bg-green-50 text-green-700 border border-green-200'
                         : 'bg-red-50 text-red-700 border border-red-200'
                     }`}
@@ -205,7 +211,7 @@ const Reset = () => {
             )
           ) : (
             <div className="text-center text-red-500 p-4 bg-red-50 rounded border border-red-200">
-              Ontbrekende of ongeldige reset link. Controleer of je de volledige link uit de email hebt gebruikt.
+              Missing or invalid reset link. Please check that you have used the complete link from the email.
             </div>
           )}
         </CardContent>

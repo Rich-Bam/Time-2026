@@ -607,6 +607,10 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
       const { data: { session } } = await supabase.auth.getSession();
       const accessToken = session?.access_token;
 
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/677a8104-55ff-4a8e-a1c2-02170ea8e822',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AdminPanel.tsx:610',message:'About to call Edge Function',data:{email:form.email,name:form.name,isAdmin,hasAccessToken:!!accessToken,hasSupabaseKey:!!supabaseKey},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
+      
       const response = await fetch(`${supabaseUrl}/functions/v1/invite-user`, {
         method: 'POST',
         headers: {
@@ -620,12 +624,19 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
           isAdmin: isAdmin,
         }),
       });
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/677a8104-55ff-4a8e-a1c2-02170ea8e822',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AdminPanel.tsx:627',message:'Fetch response received',data:{status:response.status,statusText:response.statusText,ok:response.ok,headers:Object.fromEntries(response.headers.entries())},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
 
       let data = null;
       let error = null;
 
       if (!response.ok) {
         const errorText = await response.text();
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/677a8104-55ff-4a8e-a1c2-02170ea8e822',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AdminPanel.tsx:633',message:'Response not OK, parsing error',data:{status:response.status,errorText:errorText.substring(0,500)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+        // #endregion
         try {
           error = JSON.parse(errorText);
         } catch {
@@ -634,12 +645,22 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
       } else {
         try {
           data = await response.json();
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/677a8104-55ff-4a8e-a1c2-02170ea8e822',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AdminPanel.tsx:640',message:'Response OK, parsed data',data:{hasData:!!data,hasSuccess:data?.success,hasError:!!data?.error,errorMessage:data?.error},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+          // #endregion
         } catch (parseError) {
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/677a8104-55ff-4a8e-a1c2-02170ea8e822',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AdminPanel.tsx:643',message:'Failed to parse response',data:{parseError:parseError instanceof Error ? parseError.message : String(parseError)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+          // #endregion
           error = { message: 'Failed to parse response' };
         }
       }
       
       console.log("🔵 Edge Function response:", { data, error });
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/677a8104-55ff-4a8e-a1c2-02170ea8e822',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AdminPanel.tsx:650',message:'Final response analysis',data:{hasData:!!data,hasError:!!error,errorMessage:error?.message,dataError:data?.error,success:data?.success},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
       console.log("🔵 Error details:", error ? {
         message: error.message,
         name: error.name,
@@ -732,9 +753,18 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
     }
     
     // Fallback: create user directly (no email sent)
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/677a8104-55ff-4a8e-a1c2-02170ea8e822',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AdminPanel.tsx:755',message:'Fallback: creating user directly',data:{email:form.email,name:form.name,userType:form.userType},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+    // #endregion
+    
     // Hash password before storing
     const hashedPassword = await hashPassword(form.password);
     const isAdmin = form.userType === 'admin' || form.userType === 'super_admin';
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/677a8104-55ff-4a8e-a1c2-02170ea8e822',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AdminPanel.tsx:759',message:'About to insert user directly',data:{email:form.email,hasHashedPassword:!!hashedPassword,isAdmin,userType:form.userType},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+    // #endregion
+    
     const { error: insertError } = await supabase.from("users").insert([
       {
         email: form.email,
@@ -746,6 +776,10 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
         approved: true, // Admins can create users directly, so they're auto-approved
       },
     ]);
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/677a8104-55ff-4a8e-a1c2-02170ea8e822',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AdminPanel.tsx:771',message:'Direct insert result',data:{hasInsertError:!!insertError,insertErrorCode:insertError?.code,insertErrorMessage:insertError?.message,insertErrorDetails:insertError?.details,isRLSError:insertError?.message?.includes('row-level security')||insertError?.message?.includes('RLS')},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+    // #endregion
     
     if (insertError) {
       toast({
@@ -1578,6 +1612,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
       fetchUsers();
     }
   };
+
   // Change user type (super admin, admin, administratie, or user)
   const handleChangeUserType = async (userId: string, userEmail: string, newUserType: string) => {
     try {
@@ -1775,25 +1810,92 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
 
   // Delete user
   const handleDeleteUser = async (userId: string, userEmail: string) => {
+    // Prevent deleting super admin
     if (userEmail === SUPER_ADMIN_EMAIL) {
-      toast({ title: "Action not allowed", description: "You cannot delete the super admin.", variant: "destructive" });
+      toast({ 
+        title: "Action not allowed", 
+        description: "You cannot delete the super admin.", 
+        variant: "destructive" 
+      });
       return;
     }
-    if (userId === currentUser.id) {
-      toast({ title: "Action not allowed", description: "You cannot delete your own account.", variant: "destructive" });
+    
+    // Prevent deleting own account
+    if (String(userId) === String(currentUser.id)) {
+      toast({ 
+        title: "Action not allowed", 
+        description: "You cannot delete your own account.", 
+        variant: "destructive" 
+      });
       return;
     }
+    
+    // Confirm deletion
     const confirmText = window.prompt(`Type DELETE to confirm deletion of user ${userEmail}`);
     if (confirmText !== "DELETE") {
       toast({ title: "Cancelled", description: "User was not deleted." });
       return;
     }
-    const { error } = await supabase.from("users").delete().eq("id", userId);
-    if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-    } else {
-      toast({ title: "User deleted" });
+    
+    try {
+      // Try to use Edge Function first (if it exists) to also delete from Auth
+      try {
+        const { data, error: edgeError } = await supabase.functions.invoke('delete-user', {
+          body: { userId, userEmail }
+        });
+
+        if (!edgeError && data?.success) {
+          toast({ 
+            title: "User deleted", 
+            description: `User ${userEmail} has been successfully deleted.`,
+          });
+          fetchUsers();
+          return;
+        } else if (edgeError) {
+          console.warn("Edge function failed, trying direct delete:", edgeError);
+          // Fall through to direct delete
+        }
+      } catch (fetchError) {
+        console.warn("Edge function not available, trying direct delete:", fetchError);
+        // Fall through to direct delete
+      }
+
+      // Fallback: Delete user from database directly
+      const { error: deleteError } = await supabase
+        .from("users")
+        .delete()
+        .eq("id", userId);
+
+      if (deleteError) {
+        console.error("Delete error:", deleteError);
+        
+        // Check if it's an RLS error
+        const isRLSError = deleteError.message?.includes('row-level security') || deleteError.message?.includes('RLS');
+        
+        toast({ 
+          title: "Error deleting user", 
+          description: isRLSError 
+            ? "Row-level security policy prevents deletion. Please check RLS policies or use an Edge Function."
+            : deleteError.message || "Failed to delete user.",
+          variant: "destructive" 
+        });
+        return;
+      }
+
+      toast({ 
+        title: "User deleted", 
+        description: `User ${userEmail} has been successfully deleted from the database.`,
+      });
+      
+      // Refresh users list
       fetchUsers();
+    } catch (error: any) {
+      console.error("Error deleting user:", error);
+      toast({ 
+        title: "Error", 
+        description: error.message || "An unexpected error occurred while deleting the user.",
+        variant: "destructive" 
+      });
     }
   };
 
