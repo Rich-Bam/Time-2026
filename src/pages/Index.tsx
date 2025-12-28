@@ -846,7 +846,10 @@ const Index = () => {
       setExporting(false);
       return;
     }
-    const rows = (data || []).map((row) => ({ 
+    // Filter out admin adjustments (entries without startTime/endTime are admin adjustments)
+    // Only export entries that have both startTime and endTime - these are user-created entries
+    const filteredData = (data || []).filter(e => e.startTime && e.endTime);
+    const rows = filteredData.map((row) => ({ 
       ...row, 
       project: row.projects?.name || "",
       user_name: users.find(u => u.id === row.user_id)?.name || "",
@@ -891,8 +894,11 @@ const Index = () => {
       setExporting(false);
       return;
     }
+    // Filter out admin adjustments (entries without startTime/endTime are admin adjustments)
+    // Only export entries that have both startTime and endTime - these are user-created entries
+    const filteredData = (data || []).filter(e => e.startTime && e.endTime);
     const selectedUser = users.find(u => u.id === selectedUserId);
-    const rows = (data || []).map((row) => ({ 
+    const rows = filteredData.map((row) => ({ 
       ...row, 
       project: row.projects?.name || "",
       user_name: selectedUser?.name || selectedUser?.email || "",
@@ -939,8 +945,12 @@ const Index = () => {
     const selectedUser = users.find(u => u.id === selectedUserId);
     const userName = selectedUser?.name || selectedUser?.email || "user";
     
+    // Filter out admin adjustments (entries without startTime/endTime are admin adjustments)
+    // Only export entries that have both startTime and endTime - these are user-created entries
+    const filteredData = (data || []).filter(e => e.startTime && e.endTime);
+    
     // Format data for PDF
-    const formattedData = (data || []).map((row) => {
+    const formattedData = filteredData.map((row) => {
       return {
         Date: formatDateDDMMYY(row.date),
         Day: getDayNameNL(row.date),
@@ -1228,8 +1238,23 @@ const Index = () => {
       return;
     }
 
+    // Filter out admin adjustments (entries without startTime/endTime are admin adjustments)
+    // Only export entries that have both startTime and endTime - these are user-created entries
+    // This matches the behavior of Weekly Entry and View Hours
+    const filteredData = data.filter(e => e.startTime && e.endTime);
+
+    if (filteredData.length === 0) {
+      toast({
+        title: "No Data",
+        description: "No hours found for the selected period.",
+        variant: "destructive",
+      });
+      setExporting(false);
+      return;
+    }
+
     // Format data for better Excel/PDF export
-    const formattedDataForExport = data.map((entry) => ({
+    const formattedDataForExport = filteredData.map((entry) => ({
       date: entry.date,
       description: entry.description || "",
       projects: entry.projects,
@@ -1268,7 +1293,7 @@ const Index = () => {
     setExporting(false);
     toast({
       title: "Export Successful",
-      description: `${data.length} entries exported to ${filename}`,
+      description: `${filteredData.length} entries exported to ${filename}`,
     });
   };
 
@@ -1348,8 +1373,23 @@ const Index = () => {
       return;
     }
 
+    // Filter out admin adjustments (entries without startTime/endTime are admin adjustments)
+    // Only export entries that have both startTime and endTime - these are user-created entries
+    // This matches the behavior of Weekly Entry and View Hours
+    const filteredData = data.filter(e => e.startTime && e.endTime);
+
+    if (filteredData.length === 0) {
+      toast({
+        title: "No Data",
+        description: "No hours found for the selected period.",
+        variant: "destructive",
+      });
+      setExporting(false);
+      return;
+    }
+
     // Format data for PDF
-    const formattedData = data.map((entry) => {
+    const formattedData = filteredData.map((entry) => {
       return {
         Date: formatDateDDMMYY(entry.date),
         Day: getDayNameNL(entry.date),
@@ -1376,7 +1416,7 @@ const Index = () => {
     setExporting(false);
     toast({
       title: "PDF Export Successful",
-      description: `${data.length} entries exported to ${filename}`,
+      description: `${filteredData.length} entries exported to ${filename}`,
     });
   };
 

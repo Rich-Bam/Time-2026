@@ -1503,6 +1503,20 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
       return;
     }
 
+    // Filter out admin adjustments (entries without startTime/endTime are admin adjustments)
+    // Only export entries that have both startTime and endTime - these are user-created entries
+    // This matches the behavior of Weekly Entry and View Hours
+    const filteredData = data.filter(e => e.startTime && e.endTime);
+
+    if (filteredData.length === 0) {
+      toast({
+        title: t('weekly.noData'),
+        description: t('weekly.noEntriesForWeek'),
+        variant: "destructive",
+      });
+      return;
+    }
+
     // Get work type label for each entry
     const getWorkTypeLabel = (desc: string) => {
       const workType = workTypes.find(wt => String(wt.value) === String(desc));
@@ -1572,7 +1586,7 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
     };
 
     // Format data rows
-    data.forEach((entry, idx) => {
+    filteredData.forEach((entry, idx) => {
       const date = new Date(entry.date);
       const dayNames = [
         t('weekly.sunday'),
@@ -1597,11 +1611,11 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
     });
 
     // Calculate total hours
-    const totalHours = data.reduce((sum, entry) => sum + (parseFloat(entry.hours) || 0), 0);
+    const totalHours = filteredData.reduce((sum, entry) => sum + (parseFloat(entry.hours) || 0), 0);
     const totalHoursHHMM = formatHoursHHMM(totalHours);
     
     // Add total row
-    const totalRowIndex = 8 + data.length;
+    const totalRowIndex = 8 + filteredData.length;
     const totalRow = worksheet.getRow(totalRowIndex);
       totalRow.getCell(2).value = t('weekly.total');
     totalRow.getCell(2).font = { bold: true };

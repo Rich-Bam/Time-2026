@@ -262,14 +262,36 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
 
   // Fetch users
   const fetchUsers = async () => {
-    setLoading(true);
-    const { data, error } = await supabase.from("users").select("id, email, name, isAdmin, must_change_password, approved, can_use_timebuzzer, timebuzzer_user_id, userType");
-    if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-    } else {
-      setUsers(data || []);
+    try {
+      setLoading(true);
+      console.log('🔵 fetchUsers: Fetching users from database...');
+      
+      const { data, error } = await supabase
+        .from("users")
+        .select("id, email, name, isAdmin, must_change_password, approved, can_use_timebuzzer, timebuzzer_user_id, userType")
+        .order("email", { ascending: true });
+      
+      if (error) {
+        console.error('❌ fetchUsers error:', error);
+        toast({ title: "Error", description: error.message, variant: "destructive" });
+        setUsers([]);
+      } else {
+        console.log('✅ fetchUsers: Successfully fetched', data?.length || 0, 'users');
+        console.log('🔵 fetchUsers: Sample user data:', data?.[0] ? {
+          id: data[0].id,
+          email: data[0].email,
+          isAdmin: data[0].isAdmin,
+          userType: data[0].userType
+        } : 'No users found');
+        setUsers(data || []);
+      }
+    } catch (error: any) {
+      console.error('❌ fetchUsers unexpected error:', error);
+      toast({ title: "Error", description: error.message || "Failed to fetch users", variant: "destructive" });
+      setUsers([]);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   useEffect(() => {
@@ -408,10 +430,15 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
         return;
       }
 
+      // Filter out admin adjustments (entries without startTime/endTime are admin adjustments)
+      // Only use entries that have both startTime and endTime - these are user-created entries
+      // This matches the behavior of Weekly Entry, View Hours, and Export
+      const filteredData = (data || []).filter((e: any) => e.startTime && e.endTime);
+
       // Group entries by user and date, and store detailed entry information
       const userDateMap: Record<string, Record<string, { totalHours: number; entries: any[] }>> = {};
       
-      (data || []).forEach((entry: any) => {
+      filteredData.forEach((entry: any) => {
         const userId = String(entry.user_id);
         const date = entry.date;
         
@@ -1474,14 +1501,32 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
 
   // Get current user type
   const getUserType = (user: any): string => {
+    if (!user) return 'user';
+    
+    // First check if user is super admin by email
     if (user.email === SUPER_ADMIN_EMAIL) {
       return 'super_admin';
     }
+    
     // Check if user has userType field (new field), otherwise fall back to isAdmin
     if (user.userType) {
       return user.userType;
     }
-    return user.isAdmin ? 'admin' : 'user';
+    
+    // Fallback: check isAdmin for backward compatibility
+    const result = user.isAdmin ? 'admin' : 'user';
+    
+    // Debug logging for specific users
+    if (user.email === 'richardbl184@gmail.com' || user.email === 'B.van.der.hoek@bampro.nl') {
+      console.log('🔵 getUserType for', user.email, ':', JSON.stringify({ 
+        userType: user.userType, 
+        isAdmin: user.isAdmin, 
+        result,
+        userId: user.id 
+      }));
+    }
+    
+    return result;
   };
 
   // Reset password
@@ -1502,54 +1547,156 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
       fetchUsers();
     }
   };
-  // Change user type (super admin, admin, or user)
+  // Change user type (super admin, admin, administratie, or user)
   const handleChangeUserType = async (userId: string, userEmail: string, newUserType: string) => {
-    // Prevent super admin from changing their own account type
-    if (currentUser?.email === SUPER_ADMIN_EMAIL && String(userId) === String(currentUser.id)) {
+    try {
+      console.log('🔵 handleChangeUserType called:', { userId, userEmail, newUserType, currentUserEmail: currentUser?.email, currentUserId: currentUser?.id });
+      
+      // Validate input
+      if (!userId || !userEmail || !newUserType) {
+        toast({
+          title: "Error",
+          description: "Missing required parameters",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      // Validate userType value
+      const validUserTypes = ['user', 'administratie', 'admin', 'super_admin'];
+      if (!validUserTypes.includes(newUserType)) {
+        toast({
+          title: "Error",
+          description: `Invalid user type: ${newUserType}`,
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      // Prevent super admin from changing their own account type
+      if (currentUser?.email === SUPER_ADMIN_EMAIL && String(userId) === String(currentUser.id)) {
+        toast({
+          title: "Action not allowed",
+          description: "You cannot change your own account type as super admin.",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      // Prevent changing super admin email's user type (for other super admin accounts)
+      if (userEmail === SUPER_ADMIN_EMAIL && newUserType !== 'super_admin') {
+        toast({
+          title: "Action not allowed",
+          description: "You cannot change the super admin's user type.",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      // Prevent users from removing their own admin rights
+      if (String(userId) === String(currentUser.id) && newUserType !== 'admin' && newUserType !== 'super_admin' && newUserType !== 'administratie') {
+        toast({
+          title: "Action not allowed",
+          description: "You cannot remove your own admin rights.",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      // Set isAdmin flag: true for admin and super_admin, false for user and administratie
+      const isAdmin = newUserType === 'admin' || newUserType === 'super_admin';
+      
+      console.log('🔵 Updating user in database:', { 
+        userId, 
+        userEmail,
+        isAdmin, 
+        userType: newUserType,
+        updateData: { isAdmin, userType: newUserType }
+      });
+      
+      // First, verify the user exists
+      const { data: existingUser, error: fetchError } = await supabase
+        .from("users")
+        .select("id, email, isAdmin, userType")
+        .eq("id", userId)
+        .single();
+      
+      if (fetchError || !existingUser) {
+        console.error('❌ User not found:', fetchError);
+        toast({
+          title: "Error",
+          description: `User not found: ${fetchError?.message || 'Unknown error'}`,
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      console.log('🔵 Current user data:', existingUser);
+      
+      // Perform the update
+      const { data: updatedData, error: updateError } = await supabase
+        .from("users")
+        .update({ 
+          isAdmin: isAdmin,
+          userType: newUserType 
+        })
+        .eq("id", userId)
+        .select("id, email, isAdmin, userType");
+      
+      if (updateError) {
+        console.error('❌ Update error:', updateError);
+        toast({
+          title: "Error",
+          description: `Failed to update user type: ${updateError.message}`,
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      console.log('✅ Update successful, updated data:', updatedData);
+      
+      // Verify the update was successful by fetching the user again
+      const { data: verifyData, error: verifyError } = await supabase
+        .from("users")
+        .select("id, email, isAdmin, userType")
+        .eq("id", userId)
+        .single();
+      
+      if (verifyError || !verifyData) {
+        console.error('❌ Verification error:', verifyError);
+        toast({
+          title: "Warning",
+          description: "Update may not have been saved. Please refresh the page.",
+          variant: "destructive",
+        });
+      } else {
+        console.log('✅ Verified update:', verifyData);
+        
+        const typeLabels: Record<string, string> = {
+          'super_admin': t('admin.userType.superAdmin'),
+          'admin': t('admin.userType.admin'),
+          'administratie': t('admin.userType.administratie'),
+          'user': t('admin.userType.user')
+        };
+        
+        toast({
+          title: "User type updated",
+          description: `${userEmail} is now ${typeLabels[newUserType] || newUserType}.`,
+        });
+      }
+      
+      // Force refresh users list
+      console.log('🔵 Refreshing users list...');
+      await fetchUsers();
+      console.log('✅ Users list refreshed');
+      
+    } catch (error: any) {
+      console.error('❌ Unexpected error in handleChangeUserType:', error);
       toast({
-        title: "Action not allowed",
-        description: "You cannot change your own account type as super admin.",
+        title: "Error",
+        description: `An unexpected error occurred: ${error.message || 'Unknown error'}`,
         variant: "destructive",
       });
-      return;
-    }
-    // Prevent changing super admin email's user type (for other super admin accounts)
-    if (userEmail === SUPER_ADMIN_EMAIL && newUserType !== 'super_admin') {
-      toast({
-        title: "Action not allowed",
-        description: "You cannot change the super admin's user type.",
-        variant: "destructive",
-      });
-      return;
-    }
-    // Prevent users from removing their own admin rights (unless they are super admin changing themselves, which is already blocked above)
-    if (String(userId) === String(currentUser.id) && newUserType !== 'admin' && newUserType !== 'super_admin') {
-      toast({
-        title: "Action not allowed",
-        description: "You cannot remove your own admin rights.",
-        variant: "destructive",
-      });
-      return;
-    }
-    
-    const isAdmin = newUserType === 'admin' || newUserType === 'super_admin';
-    const { error } = await supabase.from("users").update({ 
-      isAdmin: isAdmin,
-      userType: newUserType 
-    }).eq("id", userId);
-    if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-    } else {
-      const typeLabels: Record<string, string> = {
-        'super_admin': t('admin.userType.superAdmin'),
-        'admin': t('admin.userType.admin'),
-        'user': t('admin.userType.user')
-      };
-      toast({
-        title: "User type updated",
-        description: `${userEmail} is now ${typeLabels[newUserType] || newUserType}.`,
-      });
-      fetchUsers();
     }
   };
 
@@ -2177,8 +2324,8 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
       </div>
       )}
 
-          {/* Pending Users Section - Only for admins, not for administratie */}
-          {currentUser?.isAdmin && !isAdministratie(currentUser) && users.filter(u => u.approved === false).length > 0 && (
+          {/* Pending Users Section - For admins and administratie users */}
+          {isAdminOrAdministratie(currentUser) && users.filter(u => u.approved === false).length > 0 && (
         <div className="mb-6 sm:mb-8">
           <h3 className="text-base sm:text-lg font-semibold mb-2 text-orange-600 dark:text-orange-400">{t('admin.pendingApproval')}</h3>
           {isMobile ? (
@@ -2242,8 +2389,8 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
         </div>
       )}
       
-          {/* Existing Users Section - Only for admins, not for administratie */}
-          {currentUser?.isAdmin && !isAdministratie(currentUser) && (
+          {/* Existing Users Section - For admins and administratie users */}
+          {isAdminOrAdministratie(currentUser) && (
           <div>
         <h3 className="text-base sm:text-lg font-semibold mb-2 text-gray-900 dark:text-gray-100">{t('admin.existingUsers')}</h3>
         {loading ? (
@@ -2361,6 +2508,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                   <div className="flex justify-between items-center gap-2">
                     <span className="text-gray-600 dark:text-gray-400 whitespace-nowrap shrink-0">{t('admin.userType')}:</span>
                     <Select 
+                      key={`user-type-card-${user.id}-${user.userType || user.isAdmin ? 'admin' : 'user'}`}
                       value={getUserType(user)} 
                       onValueChange={(value) => handleChangeUserType(user.id, user.email, value)}
                       disabled={
@@ -2598,6 +2746,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                     </td>
                     <td className="p-2 border border-gray-300 dark:border-gray-700">
                       <Select 
+                        key={`user-type-${user.id}-${user.userType || user.isAdmin ? 'admin' : 'user'}`}
                         value={getUserType(user)} 
                         onValueChange={(value) => handleChangeUserType(user.id, user.email, value)}
                         disabled={
@@ -3192,7 +3341,10 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                   setExporting(false);
                   return;
                 }
-                const rows = (data || []).map((row: any) => ({ 
+                // Filter out admin adjustments (entries without startTime/endTime are admin adjustments)
+                // Only export entries that have both startTime and endTime - these are user-created entries
+                const filteredData = (data || []).filter((e: any) => e.startTime && e.endTime);
+                const rows = filteredData.map((row: any) => ({ 
                   ...row, 
                   project: row.projects?.name || "",
                   user_name: users.find((u: any) => u.id === row.user_id)?.name || "",
@@ -3243,7 +3395,10 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                   setExporting(false);
                   return;
                 }
-                const formattedData = (data || []).map((row: any) => {
+                // Filter out admin adjustments (entries without startTime/endTime are admin adjustments)
+                // Only export entries that have both startTime and endTime - these are user-created entries
+                const filteredData = (data || []).filter((e: any) => e.startTime && e.endTime);
+                const formattedData = filteredData.map((row: any) => {
                   const user = users.find((u: any) => u.id === row.user_id);
                   return {
                     Date: formatDateDDMMYY(row.date),

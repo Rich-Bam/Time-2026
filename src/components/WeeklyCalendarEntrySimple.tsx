@@ -1361,11 +1361,25 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
       return;
     }
 
+    // Filter out admin adjustments (entries without startTime/endTime are admin adjustments)
+    // Only export entries that have both startTime and endTime - these are user-created entries
+    // This matches the behavior of Weekly Entry and View Hours
+    const filteredData = data.filter(e => e.startTime && e.endTime);
+
+    if (filteredData.length === 0) {
+      toast({
+        title: t('weekly.noData'),
+        description: t('weekly.noEntriesForWeek'),
+        variant: "destructive",
+      });
+      return;
+    }
+
     // Group entries by day
     const entriesByDay: Record<string, any[]> = {};
     weekDates.forEach(date => {
       const dateStr = date.toISOString().split('T')[0];
-      entriesByDay[dateStr] = data.filter(entry => entry.date === dateStr);
+      entriesByDay[dateStr] = filteredData.filter(entry => entry.date === dateStr);
     });
 
     // Load logo image

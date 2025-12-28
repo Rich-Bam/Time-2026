@@ -121,7 +121,12 @@ const ViewHours = ({ currentUser }: { currentUser: any }) => {
         return;
       }
 
-      setEntries(data || []);
+      // Filter out admin adjustments (entries without startTime/endTime are admin adjustments)
+      // Only show entries that have both startTime and endTime - these are user-created entries
+      // This matches the behavior of Weekly Entry
+      const filteredData = (data || []).filter(e => e.startTime && e.endTime);
+
+      setEntries(filteredData);
     } catch (err: any) {
       toast({
         title: t('common.error'),
@@ -324,6 +329,8 @@ const ViewHours = ({ currentUser }: { currentUser: any }) => {
 };
 
 export default ViewHours;
+
+
 
 
 

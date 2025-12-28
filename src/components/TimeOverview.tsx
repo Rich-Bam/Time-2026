@@ -60,6 +60,11 @@ const TimeOverview = ({ currentUser }: TimeOverviewProps) => {
     filteredEntries = timesheet.filter(e => isInRange(e.date, startOfMonth, endOfMonth));
   }
 
+  // Filter out admin adjustments (entries without startTime/endTime are admin adjustments)
+  // Only use entries that have both startTime and endTime - these are user-created entries
+  // This matches the behavior of Weekly Entry, View Hours, and Export
+  filteredEntries = filteredEntries.filter(e => e.startTime && e.endTime);
+
   // Calculate hours per project
   const projectHoursMap: Record<string, { hours: number; entries: number }> = {};
   filteredEntries.forEach(e => {
