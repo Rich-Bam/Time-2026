@@ -36,6 +36,16 @@ const Index = () => {
     return user?.userType === 'administratie';
   };
   
+  // Helper function to check if user is tester type
+  const isTester = (user: any): boolean => {
+    return user?.userType === 'tester';
+  };
+  
+  // Helper function to check if user is weekly_only type
+  const isWeeklyOnly = (user: any): boolean => {
+    return user?.userType === 'weekly_only';
+  };
+  
   // Helper function to check if user can see projects (admin or administratie)
   const canSeeProjects = (user: any): boolean => {
     return user?.isAdmin || isAdministratie(user);
@@ -1630,8 +1640,8 @@ const Index = () => {
                     >
                       {t('nav.weekly')}
                     </button>
-                    {/* View Hours - Only for normal users (not admins or administratie) */}
-                    {currentUser && !currentUser?.isAdmin && currentUser?.userType !== 'administratie' && (
+                    {/* View Hours - Only for normal users (not admins, administratie, tester, or weekly_only) */}
+                    {currentUser && !currentUser?.isAdmin && currentUser?.userType !== 'administratie' && !isTester(currentUser) && !isWeeklyOnly(currentUser) && (
                       <button
                         className={`text-[9px] sm:text-xs md:text-sm lg:text-sm xl:text-base font-medium px-1 sm:px-1.5 md:px-2 lg:px-2.5 py-1.5 sm:py-1 md:py-1.5 lg:py-2 rounded transition-colors whitespace-nowrap min-h-[32px] sm:min-h-0 flex-shrink-0 ${activeTab === 'viewhours' ? 'bg-orange-600 text-white dark:bg-orange-500' : 'text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-700'}`}
                         onClick={() => setActiveTab('viewhours')}
@@ -1649,8 +1659,8 @@ const Index = () => {
                     {t('nav.projects')}
                   </button>
                 )}
-                {/* Export - Visible for regular users, not for admin/administratie (they have it in Admin Panel) */}
-                {currentUser && !currentUser?.isAdmin && !isAdministratie(currentUser) && (
+                {/* Export - Visible for regular users, not for admin/administratie/tester/weekly_only (they have it in Admin Panel or don't need it) */}
+                {currentUser && !currentUser?.isAdmin && !isAdministratie(currentUser) && !isTester(currentUser) && !isWeeklyOnly(currentUser) && (
                   <button
                     className={`text-[9px] sm:text-xs md:text-sm lg:text-sm xl:text-base font-medium px-1 sm:px-1.5 md:px-2 lg:px-2.5 py-1.5 sm:py-1 md:py-1.5 lg:py-2 rounded transition-colors whitespace-nowrap min-h-[32px] sm:min-h-0 flex-shrink-0 ${activeTab === 'export' ? 'bg-orange-600 text-white dark:bg-orange-500' : 'text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-700'}`}
                     onClick={() => setActiveTab('export')}
@@ -1666,12 +1676,15 @@ const Index = () => {
                     {t('nav.reportBug')}
                   </button>
                 )}
-                <button
-                  className={`text-[9px] sm:text-xs md:text-sm lg:text-sm xl:text-base font-medium px-1 sm:px-1.5 md:px-2 lg:px-2.5 py-1.5 sm:py-1 md:py-1.5 lg:py-2 rounded transition-colors whitespace-nowrap min-h-[32px] sm:min-h-0 flex-shrink-0 ${activeTab === 'overview' ? 'bg-orange-600 text-white dark:bg-orange-500' : 'text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-700'}`}
-                  onClick={() => setActiveTab('overview')}
-                >
-                  {t('nav.overview')}
-                </button>
+                {/* Overview - Not visible for tester or weekly_only users */}
+                {!isTester(currentUser) && !isWeeklyOnly(currentUser) && (
+                  <button
+                    className={`text-[9px] sm:text-xs md:text-sm lg:text-sm xl:text-base font-medium px-1 sm:px-1.5 md:px-2 lg:px-2.5 py-1.5 sm:py-1 md:py-1.5 lg:py-2 rounded transition-colors whitespace-nowrap min-h-[32px] sm:min-h-0 flex-shrink-0 ${activeTab === 'overview' ? 'bg-orange-600 text-white dark:bg-orange-500' : 'text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-700'}`}
+                    onClick={() => setActiveTab('overview')}
+                  >
+                    {t('nav.overview')}
+                  </button>
+                )}
                 {(currentUser?.isAdmin || isAdministratie(currentUser)) && (
                   <button
                     className={`text-[9px] sm:text-xs md:text-sm lg:text-sm xl:text-base font-medium px-1 sm:px-1.5 md:px-2 lg:px-2.5 py-1.5 sm:py-1 md:py-1.5 lg:py-2 rounded transition-colors whitespace-nowrap min-h-[32px] sm:min-h-0 flex-shrink-0 ${activeTab === 'admin' ? 'bg-orange-600 text-white dark:bg-orange-500' : 'text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-700'}`}
@@ -1744,7 +1757,7 @@ const Index = () => {
             )}
           </div>
         )}
-        {activeTab === 'viewhours' && currentUser && !currentUser?.isAdmin && currentUser?.userType !== 'administratie' && (
+        {activeTab === 'viewhours' && currentUser && !currentUser?.isAdmin && currentUser?.userType !== 'administratie' && !isTester(currentUser) && !isWeeklyOnly(currentUser) && (
           <ViewHours currentUser={currentUser} />
         )}
         {activeTab === 'projects' && (
@@ -1754,10 +1767,10 @@ const Index = () => {
             <div className="p-8 text-center text-red-600 font-semibold">You do not have permission to view this page.</div>
           )
         )}
-        {activeTab === 'overview' && (
+        {activeTab === 'overview' && !isTester(currentUser) && !isWeeklyOnly(currentUser) && (
           <TimeOverview currentUser={currentUser} />
         )}
-        {activeTab === 'export' && !currentUser?.isAdmin && !isAdministratie(currentUser) && (
+        {activeTab === 'export' && !currentUser?.isAdmin && !isAdministratie(currentUser) && !isTester(currentUser) && !isWeeklyOnly(currentUser) && (
           <Card className="shadow-lg border-orange-100 w-full overflow-x-auto">
             <CardHeader className="bg-gradient-to-r from-orange-50 to-orange-100 dark:from-orange-900/30 dark:to-orange-800/30 rounded-t-lg p-4 sm:p-6">
               <CardTitle className="flex items-center text-orange-900 dark:text-orange-100 text-lg sm:text-xl">

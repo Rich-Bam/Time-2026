@@ -262,36 +262,14 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
 
   // Fetch users
   const fetchUsers = async () => {
-    try {
-      setLoading(true);
-      console.log('🔵 fetchUsers: Fetching users from database...');
-      
-      const { data, error } = await supabase
-        .from("users")
-        .select("id, email, name, isAdmin, must_change_password, approved, can_use_timebuzzer, timebuzzer_user_id, userType")
-        .order("email", { ascending: true });
-      
-      if (error) {
-        console.error('❌ fetchUsers error:', error);
-        toast({ title: "Error", description: error.message, variant: "destructive" });
-        setUsers([]);
-      } else {
-        console.log('✅ fetchUsers: Successfully fetched', data?.length || 0, 'users');
-        console.log('🔵 fetchUsers: Sample user data:', data?.[0] ? {
-          id: data[0].id,
-          email: data[0].email,
-          isAdmin: data[0].isAdmin,
-          userType: data[0].userType
-        } : 'No users found');
-        setUsers(data || []);
-      }
-    } catch (error: any) {
-      console.error('❌ fetchUsers unexpected error:', error);
-      toast({ title: "Error", description: error.message || "Failed to fetch users", variant: "destructive" });
-      setUsers([]);
-    } finally {
-      setLoading(false);
+    setLoading(true);
+    const { data, error } = await supabase.from("users").select("id, email, name, isAdmin, must_change_password, approved, can_use_timebuzzer, timebuzzer_user_id, userType");
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      setUsers(data || []);
     }
+    setLoading(false);
   };
 
   useEffect(() => {
@@ -376,8 +354,8 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
       if (overtimePeriod === "week") {
         if (!overtimeSelectedWeek || !overtimeSelectedYear) {
           toast({
-            title: t('admin.missingInformation'),
-            description: t('admin.selectWeekAndYear'),
+            title: "Missing Information",
+            description: "Please select a week and year.",
             variant: "destructive",
           });
           setOvertimeLoading(false);
@@ -430,15 +408,10 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
         return;
       }
 
-      // Filter out admin adjustments (entries without startTime/endTime are admin adjustments)
-      // Only use entries that have both startTime and endTime - these are user-created entries
-      // This matches the behavior of Weekly Entry, View Hours, and Export
-      const filteredData = (data || []).filter((e: any) => e.startTime && e.endTime);
-
       // Group entries by user and date, and store detailed entry information
       const userDateMap: Record<string, Record<string, { totalHours: number; entries: any[] }>> = {};
       
-      filteredData.forEach((entry: any) => {
+      (data || []).forEach((entry: any) => {
         const userId = String(entry.user_id);
         const date = entry.date;
         
@@ -597,70 +570,18 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
       console.log("🔵 UserType:", form.userType);
       
       // Use Supabase client's functions.invoke() method - this handles auth and CORS automatically
-      console.log("🔵 Calling invite-user Edge Function...");
+      console.log("🔵 Calling supabase.functions.invoke('invite-user')...");
       
       const isAdmin = form.userType === 'admin' || form.userType === 'super_admin';
-      
-      // Use direct fetch instead of supabase.functions.invoke to avoid CORS header issues
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://bgddtkiekjcdhcmrnxsi.supabase.co';
-      const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJnZGR0a2lla2pjZGhjbXJueHNpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYxMDUzNDAsImV4cCI6MjA2NjM0NzI4NH0.CRQWYmCm0PnqcKiJC_5215Z5TxQcNJqfBE0URUW_a9o';
-      const { data: { session } } = await supabase.auth.getSession();
-      const accessToken = session?.access_token;
-
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/677a8104-55ff-4a8e-a1c2-02170ea8e822',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AdminPanel.tsx:610',message:'About to call Edge Function',data:{email:form.email,name:form.name,isAdmin,hasAccessToken:!!accessToken,hasSupabaseKey:!!supabaseKey},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
-      
-      const response = await fetch(`${supabaseUrl}/functions/v1/invite-user`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken || supabaseKey}`,
-          'apikey': supabaseKey,
-        },
-        body: JSON.stringify({
+      const { data, error } = await supabase.functions.invoke('invite-user', {
+        body: {
           email: form.email,
           name: form.name || form.email,
           isAdmin: isAdmin,
-        }),
+        },
       });
       
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/677a8104-55ff-4a8e-a1c2-02170ea8e822',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AdminPanel.tsx:627',message:'Fetch response received',data:{status:response.status,statusText:response.statusText,ok:response.ok,headers:Object.fromEntries(response.headers.entries())},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
-
-      let data = null;
-      let error = null;
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/677a8104-55ff-4a8e-a1c2-02170ea8e822',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AdminPanel.tsx:633',message:'Response not OK, parsing error',data:{status:response.status,errorText:errorText.substring(0,500)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-        // #endregion
-        try {
-          error = JSON.parse(errorText);
-        } catch {
-          error = { message: errorText || `HTTP ${response.status}` };
-        }
-      } else {
-        try {
-          data = await response.json();
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/677a8104-55ff-4a8e-a1c2-02170ea8e822',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AdminPanel.tsx:640',message:'Response OK, parsed data',data:{hasData:!!data,hasSuccess:data?.success,hasError:!!data?.error,errorMessage:data?.error},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-          // #endregion
-        } catch (parseError) {
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/677a8104-55ff-4a8e-a1c2-02170ea8e822',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AdminPanel.tsx:643',message:'Failed to parse response',data:{parseError:parseError instanceof Error ? parseError.message : String(parseError)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-          // #endregion
-          error = { message: 'Failed to parse response' };
-        }
-      }
-      
       console.log("🔵 Edge Function response:", { data, error });
-      
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/677a8104-55ff-4a8e-a1c2-02170ea8e822',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AdminPanel.tsx:650',message:'Final response analysis',data:{hasData:!!data,hasError:!!error,errorMessage:error?.message,dataError:data?.error,success:data?.success},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
       console.log("🔵 Error details:", error ? {
         message: error.message,
         name: error.name,
@@ -753,18 +674,9 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
     }
     
     // Fallback: create user directly (no email sent)
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/677a8104-55ff-4a8e-a1c2-02170ea8e822',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AdminPanel.tsx:755',message:'Fallback: creating user directly',data:{email:form.email,name:form.name,userType:form.userType},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
-    // #endregion
-    
     // Hash password before storing
     const hashedPassword = await hashPassword(form.password);
     const isAdmin = form.userType === 'admin' || form.userType === 'super_admin';
-    
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/677a8104-55ff-4a8e-a1c2-02170ea8e822',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AdminPanel.tsx:759',message:'About to insert user directly',data:{email:form.email,hasHashedPassword:!!hashedPassword,isAdmin,userType:form.userType},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
-    // #endregion
-    
     const { error: insertError } = await supabase.from("users").insert([
       {
         email: form.email,
@@ -776,10 +688,6 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
         approved: true, // Admins can create users directly, so they're auto-approved
       },
     ]);
-    
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/677a8104-55ff-4a8e-a1c2-02170ea8e822',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AdminPanel.tsx:771',message:'Direct insert result',data:{hasInsertError:!!insertError,insertErrorCode:insertError?.code,insertErrorMessage:insertError?.message,insertErrorDetails:insertError?.details,isRLSError:insertError?.message?.includes('row-level security')||insertError?.message?.includes('RLS')},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
-    // #endregion
     
     if (insertError) {
       toast({
@@ -905,9 +813,6 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
     if (currentUser?.email !== SUPER_ADMIN_EMAIL) return;
     
     setErrorLogsLoading(true);
-    // Clear error logs state first to ensure fresh data
-    setErrorLogs([]);
-    
     try {
       const { data, error } = await supabase.functions.invoke('error-logs', {
         body: {
@@ -1100,7 +1005,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
 
         if (fallbackError) {
           toast({
-            title: t('common.error'),
+            title: "Error",
             description: fallbackError.message,
             variant: "destructive",
           });
@@ -1109,15 +1014,15 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
       }
 
       toast({
-        title: t('common.success'),
-        description: t('admin.errorMarkedAsResolved'),
+        title: "Success",
+        description: "Error marked as resolved",
       });
       setSelectedErrorLog(null);
       setErrorLogNotes("");
       fetchErrorLogs();
     } catch (error: any) {
       toast({
-        title: t('common.error'),
+        title: "Error",
         description: error.message,
         variant: "destructive",
       });
@@ -1126,10 +1031,11 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
 
   // Delete error log - via edge function for security
   const handleDeleteErrorLog = async (errorId: string) => {
-    if (!confirm(t('admin.deleteErrorLog'))) return;
+    if (!confirm("Are you sure you want to delete this error log?")) return;
 
     try {
-      const { data, error } = await supabase.functions.invoke('error-logs', {
+      const { error } = await supabase.functions.invoke('error-logs', {
+        method: 'DELETE',
         body: {
           action: 'delete',
           id: errorId,
@@ -1137,10 +1043,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
       });
 
       if (error) {
-        // Always try fallback if edge function fails
-        console.log('Edge function error, using direct delete fallback:', error.message);
-        
-        // Fallback to direct query
+        // Fallback to direct query if edge function doesn't exist
         const { error: fallbackError } = await supabase
           .from('error_logs')
           .delete()
@@ -1148,314 +1051,126 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
 
         if (fallbackError) {
           toast({
-            title: t('common.error'),
-            description: fallbackError.message || error.message,
+            title: "Error",
+            description: fallbackError.message,
             variant: "destructive",
           });
           return;
         }
-        
-        toast({
-          title: t('common.success'),
-          description: t('admin.errorLogDeleted'),
-        });
-        fetchErrorLogs();
-      } else {
-        // Success from edge function
-        toast({
-          title: t('common.success'),
-          description: data?.message || t('admin.errorLogDeleted'),
-        });
-        fetchErrorLogs();
       }
-    } catch (error: any) {
-      // If edge function throws an exception, try fallback
-      console.log('Edge function exception, using direct delete fallback:', error);
-      try {
-        const { error: fallbackError } = await supabase
-          .from('error_logs')
-          .delete()
-          .eq('id', errorId);
 
-        if (fallbackError) {
-          toast({
-            title: t('common.error'),
-            description: fallbackError.message || error.message,
-            variant: "destructive",
-          });
-        } else {
-          toast({
-            title: t('common.success'),
-            description: t('admin.errorLogDeleted'),
-          });
-          fetchErrorLogs();
-        }
-      } catch (fallbackException: any) {
-        toast({
-          title: t('common.error'),
-          description: fallbackException.message || error.message,
-          variant: "destructive",
-        });
-      }
+      toast({
+        title: "Success",
+        description: "Error log deleted",
+      });
+      fetchErrorLogs();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
     }
   };
 
   // Delete all error logs
   const handleDeleteAllErrors = async () => {
-    if (!confirm(t('admin.deleteAllErrorsConfirm'))) return;
+    if (!confirm("Are you sure you want to delete ALL error logs? This action cannot be undone.")) return;
 
     try {
-      console.log('Starting delete all errors...');
-      
-      // First get all error logs to count them properly
-      // Use the EXACT same query as fetchErrorLogs (including no filters) to ensure RLS policies work the same way
-      let queryBefore = supabase
-        .from('error_logs')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(1000); // Get all, not just 100
-      
-      // Don't apply any filters - we want ALL error logs for deletion
-      const { data: allErrorLogsBefore, error: selectBeforeError } = await queryBefore;
-      
-      console.log('Error logs before deletion:', allErrorLogsBefore?.length || 0);
-      
-      if (selectBeforeError) {
-        console.error('Error selecting error logs:', selectBeforeError);
-        toast({
-          title: t('common.error'),
-          description: selectBeforeError.message || t('admin.failedToFetchErrorLogs'),
-          variant: "destructive",
-        });
-        return;
-      }
-      
-      const countBefore = allErrorLogsBefore?.length || 0;
-
-      // Try edge function first
       const { data, error } = await supabase.functions.invoke('error-logs', {
+        method: 'DELETE',
         body: {
           action: 'delete-all',
         },
       });
 
       if (error) {
-        // Always try fallback if edge function fails (it might not exist or have issues)
-        console.log('Edge function error, using direct delete fallback:', error.message);
+        // Check if it's a network/404 error that should fallback
+        const shouldFallback = error.message?.includes('404') || 
+                              error.message?.includes('CORS') || 
+                              error.message?.includes('Failed to send') ||
+                              error.message?.includes('NetworkError');
         
-        // Fallback: Delete all records by selecting all records first (EXACT same query as fetchErrorLogs)
-        // This ensures RLS policies work the same way
-        let queryDelete = supabase
-          .from('error_logs')
-          .select('*')
-          .order('created_at', { ascending: false })
-          .limit(1000); // Get all, not just 100
-        
-        // Don't apply any filters - we want ALL error logs for deletion
-        const { data: allErrorLogs, error: selectError } = await queryDelete;
-        
-        console.log('Fetched error logs for deletion:', allErrorLogs?.length || 0);
-        
-        if (selectError) {
-          console.error('Error selecting error logs for deletion:', selectError);
-          toast({
-            title: t('common.error'),
-            description: selectError.message || error.message || t('admin.failedToFetchErrorLogsRLS'),
-            variant: "destructive",
-          });
-          return;
-        }
-        
-        if (!allErrorLogs || allErrorLogs.length === 0) {
-          console.log('No error logs found to delete (might be RLS policy issue)');
-          // Clear state anyway in case there are cached errors
-          setErrorLogs([]);
-          toast({
-            title: t('admin.info'),
-            description: t('admin.noErrorLogsFound'),
-          });
-          await fetchErrorLogs();
-          return;
-        }
-        
-        if (allErrorLogs && allErrorLogs.length > 0) {
-          // Delete in batches to avoid potential issues
-          const ids = allErrorLogs.map(log => log.id);
-          console.log('Deleting error logs with IDs:', ids);
+        if (shouldFallback) {
+          // Fallback to direct query if edge function doesn't exist
+          // First get count
+          const { count: countBefore } = await supabase
+            .from('error_logs')
+            .select('*', { count: 'exact', head: true });
           
-          // Delete the records - don't use .select() after .delete()
           const { error: fallbackError } = await supabase
             .from('error_logs')
             .delete()
-            .in('id', ids);
-
-          console.log('Delete result:', { fallbackError });
+            .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all (using a condition that matches all)
 
           if (fallbackError) {
-            console.error('Error deleting error logs:', fallbackError);
             toast({
               title: "Error",
-              description: fallbackError.message || error.message,
+              description: fallbackError.message,
               variant: "destructive",
             });
             return;
           }
           
-          console.log('Successfully deleted error logs');
+          // Verify deletion
+          const { count: countAfter } = await supabase
+            .from('error_logs')
+            .select('*', { count: 'exact', head: true });
+          
+          toast({
+            title: "Success",
+            description: `All error logs deleted (${countBefore || 0} deleted, ${countAfter || 0} remaining)`,
+          });
         } else {
-          console.log('No error logs found to delete');
+          // Real error from edge function
+          toast({
+            title: "Error",
+            description: error.message,
+            variant: "destructive",
+          });
+          return;
         }
-        
-        // Verify deletion by fetching again (same query as fetchErrorLogs)
-        const { data: allErrorLogsAfter, error: selectAfterError } = await supabase
-          .from('error_logs')
-          .select('*')
-          .order('created_at', { ascending: false })
-          .limit(1000);
-        
-        console.log('Error logs after deletion:', allErrorLogsAfter?.length || 0);
-        
-        const countAfter = allErrorLogsAfter?.length || 0;
-        const deletedCount = countBefore - countAfter;
-        
-        toast({
-          title: "Success",
-          description: `All error logs deleted (${deletedCount} deleted, ${countAfter} remaining)`,
-        });
-        
-        // Clear the error logs state immediately
-        setErrorLogs([]);
-        
-        // Wait a moment before refreshing to ensure deletion is complete
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        // Force refresh after deletion
-        await fetchErrorLogs();
       } else {
         // Success from edge function
-        console.log('Edge function deleted successfully');
-        
-        // Clear the error logs state immediately
-        setErrorLogs([]);
-        
-        toast({
-          title: t('common.success'),
-          description: data?.message || t('admin.allErrorLogsDeleted'),
-        });
-        
-        // Wait a moment before refreshing to ensure deletion is complete
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        // Also delete any ResizeObserver errors that might have been logged during the delete operation
-        try {
-          const { data: resizeObserverLogs } = await supabase
-            .from('error_logs')
-            .select('*')
-            .ilike('error_message', '%ResizeObserver%')
-            .order('created_at', { ascending: false });
-          
-          if (resizeObserverLogs && resizeObserverLogs.length > 0) {
-            const resizeIds = resizeObserverLogs.map(log => log.id);
-            await supabase
-              .from('error_logs')
-              .delete()
-              .in('id', resizeIds);
-          }
-        } catch (e) {
-          // Ignore errors here - we're just cleaning up
-        }
-        
-        // Force refresh after deletion
-        await new Promise(resolve => setTimeout(resolve, 500));
-        await fetchErrorLogs();
-      }
-    } catch (error: any) {
-      // If edge function throws an exception, try fallback
-      console.error('Edge function exception, using direct delete fallback:', error);
-      try {
-        // Get all error logs first (same query as fetchErrorLogs)
-        const { data: allErrorLogsBefore, error: selectBeforeError } = await supabase
-          .from('error_logs')
-          .select('*')
-          .order('created_at', { ascending: false })
-          .limit(1000);
-        
-        console.log('Exception handler - Error logs before deletion:', allErrorLogsBefore?.length || 0);
-        
-        if (selectBeforeError) {
-          console.error('Error selecting error logs:', selectBeforeError);
-          toast({
-            title: t('common.error'),
-            description: selectBeforeError.message || error.message,
-            variant: "destructive",
-          });
-          return;
-        }
-        
-        const countBefore = allErrorLogsBefore?.length || 0;
-        
-        if (allErrorLogsBefore && allErrorLogsBefore.length > 0) {
-          // Delete all records by their IDs
-          const ids = allErrorLogsBefore.map(log => log.id);
-          console.log('Exception handler - Deleting error logs with IDs:', ids);
-          
-          const { error: fallbackError } = await supabase
-            .from('error_logs')
-            .delete()
-            .in('id', ids);
-
-          if (fallbackError) {
-            console.error('Error deleting error logs:', fallbackError);
-            toast({
-              title: "Error",
-              description: fallbackError.message || error.message,
-              variant: "destructive",
-            });
-            return;
-          }
-          
-          console.log('Exception handler - Successfully deleted error logs');
-        }
-        
-        // Verify deletion (same query as fetchErrorLogs)
-        const { data: allErrorLogsAfter, error: selectAfterError } = await supabase
-          .from('error_logs')
-          .select('*')
-          .order('created_at', { ascending: false })
-          .limit(1000);
-        
-        console.log('Exception handler - Error logs after deletion:', allErrorLogsAfter?.length || 0);
-        
-        const countAfter = allErrorLogsAfter?.length || 0;
-        const deletedCount = countBefore - countAfter;
-        
-        // Clear the error logs state immediately
-        setErrorLogs([]);
-        
         toast({
           title: "Success",
-          description: `All error logs deleted (${deletedCount} deleted, ${countAfter} remaining)`,
-        });
-        
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        await fetchErrorLogs();
-      } catch (fallbackException: any) {
-        console.error('Fallback exception:', fallbackException);
-        toast({
-          title: "Error",
-          description: fallbackException.message || error.message,
-          variant: "destructive",
+          description: data?.message || "All error logs deleted",
         });
       }
+      
+      // Wait a moment before refreshing to ensure deletion is complete
+      // and to avoid showing newly logged errors immediately
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Also delete any ResizeObserver errors that might have been logged during the delete operation
+      try {
+        await supabase
+          .from('error_logs')
+          .delete()
+          .ilike('error_message', '%ResizeObserver%');
+      } catch (e) {
+        // Ignore errors here - we're just cleaning up
+      }
+      
+      fetchErrorLogs();
+    } catch (error: any) {
+      console.error('Error deleting all error logs:', error);
+      toast({
+        title: "Error",
+        description: error.message || 'Failed to delete all error logs',
+        variant: "destructive",
+      });
     }
   };
 
   // Delete only ResizeObserver errors
   const handleDeleteResizeObserverErrors = async () => {
-    if (!confirm(t('admin.deleteResizeObserverErrorsConfirm'))) return;
+    if (!confirm("Are you sure you want to delete all ResizeObserver errors?")) return;
 
     try {
       const { data, error } = await supabase.functions.invoke('error-logs', {
+        method: 'DELETE',
         body: {
           action: 'delete-by-message',
           messagePattern: 'ResizeObserver',
@@ -1463,91 +1178,50 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
       });
 
       if (error) {
-        // Always try fallback if edge function fails
-        console.log('Edge function error, using direct delete fallback:', error.message);
+        // Check if it's a network/404 error that should fallback
+        const shouldFallback = error.message?.includes('404') || 
+                              error.message?.includes('CORS') || 
+                              error.message?.includes('Failed to send') ||
+                              error.message?.includes('NetworkError');
         
-        // Get all ResizeObserver errors first (same query style as fetchErrorLogs)
-        const { data: resizeObserverLogs, error: selectError } = await supabase
-          .from('error_logs')
-          .select('*')
-          .ilike('error_message', '%ResizeObserver%')
-          .order('created_at', { ascending: false });
-        
-        if (selectError) {
-          toast({
-            title: t('common.error'),
-            description: selectError.message || error.message,
-            variant: "destructive",
-          });
-          return;
-        }
-        
-        if (resizeObserverLogs && resizeObserverLogs.length > 0) {
-          // Delete all ResizeObserver errors by their IDs
-          const ids = resizeObserverLogs.map(log => log.id);
+        if (shouldFallback) {
+          // Fallback to direct query if edge function doesn't exist
           const { error: fallbackError } = await supabase
             .from('error_logs')
             .delete()
-            .in('id', ids);
+            .ilike('error_message', '%ResizeObserver%');
 
           if (fallbackError) {
             toast({
-              title: t('common.error'),
-              description: fallbackError.message || error.message,
+              title: "Error",
+              description: fallbackError.message,
               variant: "destructive",
             });
             return;
           }
-          
-          toast({
-            title: t('common.success'),
-            description: t('admin.resizeObserverErrorsDeleted') + ` (${ids.length} ${t('common.delete')})`,
-          });
         } else {
-          toast({
-            title: t('admin.info'),
-            description: t('admin.noResizeObserverErrors'),
-          });
-        }
-        
-        fetchErrorLogs();
-      } else {
-        // Success from edge function
-        toast({
-          title: "Success",
-          description: data?.message || "All ResizeObserver errors deleted",
-        });
-        fetchErrorLogs();
-      }
-    } catch (error: any) {
-      // If edge function throws an exception, try fallback
-      console.error('Edge function exception, using direct delete fallback:', error);
-      try {
-        const { error: fallbackError } = await supabase
-          .from('error_logs')
-          .delete()
-          .ilike('error_message', '%ResizeObserver%');
-
-        if (fallbackError) {
+          // Real error from edge function
           toast({
             title: "Error",
-            description: fallbackError.message || error.message,
+            description: error.message,
             variant: "destructive",
           });
-        } else {
-          toast({
-            title: "Success",
-            description: "All ResizeObserver errors deleted",
-          });
-          fetchErrorLogs();
+          return;
         }
-      } catch (fallbackException: any) {
-        toast({
-          title: "Error",
-          description: fallbackException.message || error.message,
-          variant: "destructive",
-        });
       }
+
+      toast({
+        title: "Success",
+        description: data?.message || "All ResizeObserver errors deleted",
+      });
+      fetchErrorLogs();
+    } catch (error: any) {
+      console.error('Error deleting ResizeObserver errors:', error);
+      toast({
+        title: "Error",
+        description: error.message || 'Failed to delete ResizeObserver errors',
+        variant: "destructive",
+      });
     }
   };
 
@@ -1566,32 +1240,14 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
 
   // Get current user type
   const getUserType = (user: any): string => {
-    if (!user) return 'user';
-    
-    // First check if user is super admin by email
     if (user.email === SUPER_ADMIN_EMAIL) {
       return 'super_admin';
     }
-    
     // Check if user has userType field (new field), otherwise fall back to isAdmin
     if (user.userType) {
       return user.userType;
     }
-    
-    // Fallback: check isAdmin for backward compatibility
-    const result = user.isAdmin ? 'admin' : 'user';
-    
-    // Debug logging for specific users
-    if (user.email === 'richardbl184@gmail.com' || user.email === 'B.van.der.hoek@bampro.nl') {
-      console.log('🔵 getUserType for', user.email, ':', JSON.stringify({ 
-        userType: user.userType, 
-        isAdmin: user.isAdmin, 
-        result,
-        userId: user.id 
-      }));
-    }
-    
-    return result;
+    return user.isAdmin ? 'admin' : 'user';
   };
 
   // Reset password
@@ -1612,157 +1268,54 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
       fetchUsers();
     }
   };
-
-  // Change user type (super admin, admin, administratie, or user)
+  // Change user type (super admin, admin, or user)
   const handleChangeUserType = async (userId: string, userEmail: string, newUserType: string) => {
-    try {
-      console.log('🔵 handleChangeUserType called:', { userId, userEmail, newUserType, currentUserEmail: currentUser?.email, currentUserId: currentUser?.id });
-      
-      // Validate input
-      if (!userId || !userEmail || !newUserType) {
-        toast({
-          title: "Error",
-          description: "Missing required parameters",
-          variant: "destructive",
-        });
-        return;
-      }
-      
-      // Validate userType value
-      const validUserTypes = ['user', 'administratie', 'admin', 'super_admin'];
-      if (!validUserTypes.includes(newUserType)) {
-        toast({
-          title: "Error",
-          description: `Invalid user type: ${newUserType}`,
-          variant: "destructive",
-        });
-        return;
-      }
-      
-      // Prevent super admin from changing their own account type
-      if (currentUser?.email === SUPER_ADMIN_EMAIL && String(userId) === String(currentUser.id)) {
-        toast({
-          title: "Action not allowed",
-          description: "You cannot change your own account type as super admin.",
-          variant: "destructive",
-        });
-        return;
-      }
-      
-      // Prevent changing super admin email's user type (for other super admin accounts)
-      if (userEmail === SUPER_ADMIN_EMAIL && newUserType !== 'super_admin') {
-        toast({
-          title: "Action not allowed",
-          description: "You cannot change the super admin's user type.",
-          variant: "destructive",
-        });
-        return;
-      }
-      
-      // Prevent users from removing their own admin rights
-      if (String(userId) === String(currentUser.id) && newUserType !== 'admin' && newUserType !== 'super_admin' && newUserType !== 'administratie') {
-        toast({
-          title: "Action not allowed",
-          description: "You cannot remove your own admin rights.",
-          variant: "destructive",
-        });
-        return;
-      }
-      
-      // Set isAdmin flag: true for admin and super_admin, false for user and administratie
-      const isAdmin = newUserType === 'admin' || newUserType === 'super_admin';
-      
-      console.log('🔵 Updating user in database:', { 
-        userId, 
-        userEmail,
-        isAdmin, 
-        userType: newUserType,
-        updateData: { isAdmin, userType: newUserType }
-      });
-      
-      // First, verify the user exists
-      const { data: existingUser, error: fetchError } = await supabase
-        .from("users")
-        .select("id, email, isAdmin, userType")
-        .eq("id", userId)
-        .single();
-      
-      if (fetchError || !existingUser) {
-        console.error('❌ User not found:', fetchError);
-        toast({
-          title: "Error",
-          description: `User not found: ${fetchError?.message || 'Unknown error'}`,
-          variant: "destructive",
-        });
-        return;
-      }
-      
-      console.log('🔵 Current user data:', existingUser);
-      
-      // Perform the update
-      const { data: updatedData, error: updateError } = await supabase
-        .from("users")
-        .update({ 
-          isAdmin: isAdmin,
-          userType: newUserType 
-        })
-        .eq("id", userId)
-        .select("id, email, isAdmin, userType");
-      
-      if (updateError) {
-        console.error('❌ Update error:', updateError);
-        toast({
-          title: "Error",
-          description: `Failed to update user type: ${updateError.message}`,
-          variant: "destructive",
-        });
-        return;
-      }
-      
-      console.log('✅ Update successful, updated data:', updatedData);
-      
-      // Verify the update was successful by fetching the user again
-      const { data: verifyData, error: verifyError } = await supabase
-        .from("users")
-        .select("id, email, isAdmin, userType")
-        .eq("id", userId)
-        .single();
-      
-      if (verifyError || !verifyData) {
-        console.error('❌ Verification error:', verifyError);
-        toast({
-          title: "Warning",
-          description: "Update may not have been saved. Please refresh the page.",
-          variant: "destructive",
-        });
-      } else {
-        console.log('✅ Verified update:', verifyData);
-        
-        const typeLabels: Record<string, string> = {
-          'super_admin': t('admin.userType.superAdmin'),
-          'admin': t('admin.userType.admin'),
-          'administratie': t('admin.userType.administratie'),
-          'user': t('admin.userType.user')
-        };
-        
-        toast({
-          title: "User type updated",
-          description: `${userEmail} is now ${typeLabels[newUserType] || newUserType}.`,
-        });
-      }
-      
-      // Force refresh users list
-      console.log('🔵 Refreshing users list...');
-      await fetchUsers();
-      console.log('✅ Users list refreshed');
-      
-    } catch (error: any) {
-      console.error('❌ Unexpected error in handleChangeUserType:', error);
+    // Prevent super admin from changing their own account type
+    if (currentUser?.email === SUPER_ADMIN_EMAIL && String(userId) === String(currentUser.id)) {
       toast({
-        title: "Error",
-        description: `An unexpected error occurred: ${error.message || 'Unknown error'}`,
+        title: "Action not allowed",
+        description: "You cannot change your own account type as super admin.",
         variant: "destructive",
       });
+      return;
+    }
+    // Prevent changing super admin email's user type (for other super admin accounts)
+    if (userEmail === SUPER_ADMIN_EMAIL && newUserType !== 'super_admin') {
+      toast({
+        title: "Action not allowed",
+        description: "You cannot change the super admin's user type.",
+        variant: "destructive",
+      });
+      return;
+    }
+    // Prevent users from removing their own admin rights (unless they are super admin changing themselves, which is already blocked above)
+    if (String(userId) === String(currentUser.id) && newUserType !== 'admin' && newUserType !== 'super_admin') {
+      toast({
+        title: "Action not allowed",
+        description: "You cannot remove your own admin rights.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    const isAdmin = newUserType === 'admin' || newUserType === 'super_admin';
+    const { error } = await supabase.from("users").update({ 
+      isAdmin: isAdmin,
+      userType: newUserType 
+    }).eq("id", userId);
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      const typeLabels: Record<string, string> = {
+        'super_admin': t('admin.userType.superAdmin'),
+        'admin': t('admin.userType.admin'),
+        'user': t('admin.userType.user')
+      };
+      toast({
+        title: "User type updated",
+        description: `${userEmail} is now ${typeLabels[newUserType] || newUserType}.`,
+      });
+      fetchUsers();
     }
   };
 
@@ -1810,92 +1363,25 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
 
   // Delete user
   const handleDeleteUser = async (userId: string, userEmail: string) => {
-    // Prevent deleting super admin
     if (userEmail === SUPER_ADMIN_EMAIL) {
-      toast({ 
-        title: "Action not allowed", 
-        description: "You cannot delete the super admin.", 
-        variant: "destructive" 
-      });
+      toast({ title: "Action not allowed", description: "You cannot delete the super admin.", variant: "destructive" });
       return;
     }
-    
-    // Prevent deleting own account
-    if (String(userId) === String(currentUser.id)) {
-      toast({ 
-        title: "Action not allowed", 
-        description: "You cannot delete your own account.", 
-        variant: "destructive" 
-      });
+    if (userId === currentUser.id) {
+      toast({ title: "Action not allowed", description: "You cannot delete your own account.", variant: "destructive" });
       return;
     }
-    
-    // Confirm deletion
     const confirmText = window.prompt(`Type DELETE to confirm deletion of user ${userEmail}`);
     if (confirmText !== "DELETE") {
       toast({ title: "Cancelled", description: "User was not deleted." });
       return;
     }
-    
-    try {
-      // Try to use Edge Function first (if it exists) to also delete from Auth
-      try {
-        const { data, error: edgeError } = await supabase.functions.invoke('delete-user', {
-          body: { userId, userEmail }
-        });
-
-        if (!edgeError && data?.success) {
-          toast({ 
-            title: "User deleted", 
-            description: `User ${userEmail} has been successfully deleted.`,
-          });
-          fetchUsers();
-          return;
-        } else if (edgeError) {
-          console.warn("Edge function failed, trying direct delete:", edgeError);
-          // Fall through to direct delete
-        }
-      } catch (fetchError) {
-        console.warn("Edge function not available, trying direct delete:", fetchError);
-        // Fall through to direct delete
-      }
-
-      // Fallback: Delete user from database directly
-      const { error: deleteError } = await supabase
-        .from("users")
-        .delete()
-        .eq("id", userId);
-
-      if (deleteError) {
-        console.error("Delete error:", deleteError);
-        
-        // Check if it's an RLS error
-        const isRLSError = deleteError.message?.includes('row-level security') || deleteError.message?.includes('RLS');
-        
-        toast({ 
-          title: "Error deleting user", 
-          description: isRLSError 
-            ? "Row-level security policy prevents deletion. Please check RLS policies or use an Edge Function."
-            : deleteError.message || "Failed to delete user.",
-          variant: "destructive" 
-        });
-        return;
-      }
-
-      toast({ 
-        title: "User deleted", 
-        description: `User ${userEmail} has been successfully deleted from the database.`,
-      });
-      
-      // Refresh users list
+    const { error } = await supabase.from("users").delete().eq("id", userId);
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "User deleted" });
       fetchUsers();
-    } catch (error: any) {
-      console.error("Error deleting user:", error);
-      toast({ 
-        title: "Error", 
-        description: error.message || "An unexpected error occurred while deleting the user.",
-        variant: "destructive" 
-      });
     }
   };
 
@@ -2186,105 +1672,15 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
       return;
     }
 
-    // Send reminder emails via Edge Function
-    try {
-      // Ensure userIds is an array of strings
-      const userIdsArray = reminderUserIds.map(id => id.toString());
-      
-      console.log("Calling Edge Function with:", {
-        userIds: userIdsArray,
-        weekNumber: weekNum,
-        year: year,
-      });
-
-      // Use direct fetch instead of supabase.functions.invoke to avoid CORS header issues
-      // Get Supabase URL and key from environment or client
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://bgddtkiekjcdhcmrnxsi.supabase.co';
-      const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJnZGR0a2lla2pjZGhjbXJueHNpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYxMDUzNDAsImV4cCI6MjA2NjM0NzI4NH0.CRQWYmCm0PnqcKiJC_5215Z5TxQcNJqfBE0URUW_a9o';
-      const { data: { session } } = await supabase.auth.getSession();
-      const accessToken = session?.access_token;
-
-      const response = await fetch(`${supabaseUrl}/functions/v1/send-reminder-email`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken || supabaseKey}`,
-          'apikey': supabaseKey,
-          // Only include essential headers, no cache-control headers to avoid CORS issues
-        },
-        body: JSON.stringify({
-          userIds: userIdsArray,
-          weekNumber: weekNum,
-          year: year,
-          message: `Please fill in your hours for week ${weekNum} of ${year}.`,
-        }),
-      });
-
-      let emailData = null;
-      let emailError = null;
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        try {
-          emailError = JSON.parse(errorText);
-        } catch {
-          emailError = { message: errorText || `HTTP ${response.status}` };
-        }
-      } else {
-        try {
-          emailData = await response.json();
-        } catch (parseError) {
-          emailError = { message: 'Failed to parse response' };
-        }
-      }
-
-      console.log("Edge Function response:", { emailData, emailError });
-
-      if (emailError) {
-        console.error("Error sending reminder emails:", emailError);
-        // Don't fail the whole operation if email fails - reminders are already saved
-        toast({
-          title: "Reminders Saved",
-          description: `Reminders saved to database, but email sending failed: ${emailError.message}`,
-          variant: "default",
-        });
-      } else if (emailData) {
-        const sentCount = emailData.sent || 0;
-        const failedCount = emailData.failed || 0;
-        
-        if (sentCount > 0 && failedCount === 0) {
-          toast({
-            title: "Reminders Sent",
-            description: `Reminders and emails sent successfully to ${sentCount} user(s) for week ${weekNum} of ${year}.`,
-          });
-        } else if (sentCount > 0 && failedCount > 0) {
-          toast({
-            title: "Partial Success",
-            description: `Reminders saved. Emails sent to ${sentCount} user(s), but ${failedCount} failed. Check Edge Function logs for details.`,
-            variant: "default",
-          });
-        } else {
-          toast({
-            title: "Reminders Saved",
-            description: `Reminders saved to database, but no emails were sent. Check Edge Function configuration.`,
-            variant: "default",
-          });
-        }
-      }
-    } catch (emailErr: any) {
-      console.error("Error calling email Edge Function:", emailErr);
-      // Don't fail the whole operation if email fails - reminders are already saved
-      toast({
-        title: "Reminders Saved",
-        description: `Reminders saved to database, but email sending failed. Check if Edge Function is deployed.`,
-        variant: "default",
-      });
-    }
-
     const userNames = reminderUserIds.map(userId => {
       const user = users.find(u => u.id.toString() === userId);
       return user?.name || user?.email || "User";
     }).join(", ");
+
+    toast({
+      title: "Reminders Sent",
+      description: `Reminders sent to ${reminderUserIds.length} user(s): ${userNames} for week ${weekNum} of ${year}.`,
+    });
 
     // Reset form
     setReminderUserIds([]);
@@ -2395,117 +1791,68 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
   };
 
   return (
-    <div className="p-2 sm:p-4 md:p-6 lg:p-8 bg-white dark:bg-gray-800 rounded shadow w-full max-w-full overflow-x-hidden">
-      <h2 className="text-lg sm:text-xl md:text-2xl font-bold mb-3 sm:mb-4 text-gray-900 dark:text-gray-100">{t('admin.title')}</h2>
+    <div className="p-3 sm:p-4 md:p-8 bg-white dark:bg-gray-800 rounded shadow w-full max-w-full">
+      <h2 className="text-xl sm:text-2xl font-bold mb-3 sm:mb-4 text-gray-900 dark:text-gray-100">{t('admin.title')}</h2>
       
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full flex flex-col">
-        <div className="sticky top-0 z-10 bg-white dark:bg-gray-800 -mx-2 sm:mx-0 px-2 sm:px-0 pb-2">
-          {isMobile ? (
-            <div className="overflow-x-auto -mx-2 px-2">
-              <TabsList className="inline-flex w-max min-w-full gap-1 p-1">
-                <TabsTrigger value="users" className="flex items-center justify-center gap-1 text-xs px-3 py-2 whitespace-nowrap shrink-0">
-                  <Users className="h-3 w-3" />
-                  <span>{t('admin.tab.users')}</span>
-                </TabsTrigger>
-                <TabsTrigger value="weeks" className="flex items-center justify-center gap-1 text-xs px-3 py-2 whitespace-nowrap shrink-0">
-                  <Calendar className="h-3 w-3" />
-                  <span>{t('admin.tab.weeks')}</span>
-                </TabsTrigger>
-                <TabsTrigger value="reminders" className="flex items-center justify-center gap-1 text-xs px-3 py-2 whitespace-nowrap shrink-0">
-                  <AlertTriangle className="h-3 w-3" />
-                  <span>{t('admin.tab.reminders')}</span>
-                </TabsTrigger>
-                <TabsTrigger value="export" className="flex items-center justify-center gap-1 text-xs px-3 py-2 whitespace-nowrap shrink-0">
-                  <Download className="h-3 w-3" />
-                  <span>{t('admin.tab.export')}</span>
-                </TabsTrigger>
-                <TabsTrigger value="overtime" className="flex items-center justify-center gap-1 text-xs px-3 py-2 whitespace-nowrap shrink-0">
-                  <BarChart3 className="h-3 w-3" />
-                  <span>{t('admin.tab.overtime')}</span>
-                </TabsTrigger>
-                {currentUser?.email === SUPER_ADMIN_EMAIL && (
-                  <TabsTrigger value="timebuzzer" className="flex items-center justify-center gap-1 text-xs px-3 py-2 whitespace-nowrap shrink-0">
-                    <CalendarIcon className="h-3 w-3" />
-                    <span>{t('admin.tab.timebuzzer')}</span>
-                  </TabsTrigger>
-                )}
-                {(currentUser?.isAdmin || currentUser?.userType === 'administratie' || currentUser?.email === SUPER_ADMIN_EMAIL) && (
-                  <TabsTrigger value="daysOff" className="flex items-center justify-center gap-1 text-xs px-3 py-2 whitespace-nowrap shrink-0">
-                    <Clock className="h-3 w-3" />
-                    <span>{t('admin.daysOff')}</span>
-                  </TabsTrigger>
-                )}
-                {currentUser?.email === SUPER_ADMIN_EMAIL && (
-                  <TabsTrigger value="errors" className="flex items-center justify-center gap-1 text-xs px-3 py-2 whitespace-nowrap shrink-0">
-                    <AlertTriangle className="h-3 w-3" />
-                    <span>{t('admin.errors')}</span>
-                  </TabsTrigger>
-                )}
-              </TabsList>
-            </div>
-          ) : (
-            <TabsList className={`grid w-full grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-1 sm:gap-2`}>
-              <TabsTrigger value="users" className="flex items-center justify-center gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-4 py-2">
-                <Users className="h-3 w-3 sm:h-4 sm:w-4" />
-                <span>{t('admin.tab.users')}</span>
-              </TabsTrigger>
-              <TabsTrigger value="weeks" className="flex items-center justify-center gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-4 py-2">
-                <Calendar className="h-3 w-3 sm:h-4 sm:w-4" />
-                <span>{t('admin.tab.weeks')}</span>
-              </TabsTrigger>
-              <TabsTrigger value="reminders" className="flex items-center justify-center gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-4 py-2">
-                <AlertTriangle className="h-3 w-3 sm:h-4 sm:w-4" />
-                <span>{t('admin.tab.reminders')}</span>
-              </TabsTrigger>
-              <TabsTrigger value="export" className="flex items-center justify-center gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-4 py-2">
-                <Download className="h-3 w-3 sm:h-4 sm:w-4" />
-                <span>{t('admin.tab.export')}</span>
-              </TabsTrigger>
-              <TabsTrigger value="overtime" className="flex items-center justify-center gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-4 py-2">
-                <BarChart3 className="h-3 w-3 sm:h-4 sm:w-4" />
-                <span>{t('admin.tab.overtime')}</span>
-              </TabsTrigger>
-              {currentUser?.email === SUPER_ADMIN_EMAIL && (
-                <TabsTrigger value="timebuzzer" className="flex items-center justify-center gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-4 py-2">
-                  <CalendarIcon className="h-3 w-3 sm:h-4 sm:w-4" />
-                  <span>{t('admin.tab.timebuzzer')}</span>
-                </TabsTrigger>
-              )}
-              {(currentUser?.isAdmin || currentUser?.userType === 'administratie' || currentUser?.email === SUPER_ADMIN_EMAIL) && (
-                <TabsTrigger value="daysOff" className="flex items-center justify-center gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-4 py-2">
-                  <Clock className="h-3 w-3 sm:h-4 sm:w-4" />
-                  <span className="hidden sm:inline">{t('admin.daysOffOverview')}</span>
-                  <span className="sm:hidden">{t('admin.daysOff')}</span>
-                </TabsTrigger>
-              )}
-              {currentUser?.email === SUPER_ADMIN_EMAIL && (
-                <TabsTrigger value="errors" className="flex items-center justify-center gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-4 py-2">
-                  <AlertTriangle className="h-3 w-3 sm:h-4 sm:w-4" />
-                  <span>{t('admin.errors')}</span>
-                </TabsTrigger>
-              )}
-            </TabsList>
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 mb-6">
+          <TabsTrigger value="users" className="flex items-center gap-2">
+            <Users className="h-4 w-4" />
+            <span className="hidden sm:inline">Users</span>
+          </TabsTrigger>
+          <TabsTrigger value="weeks" className="flex items-center gap-2">
+            <Calendar className="h-4 w-4" />
+            <span className="hidden sm:inline">Weeks</span>
+          </TabsTrigger>
+          <TabsTrigger value="reminders" className="flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4" />
+            <span className="hidden sm:inline">Reminders</span>
+          </TabsTrigger>
+          <TabsTrigger value="export" className="flex items-center gap-2">
+            <Download className="h-4 w-4" />
+            <span className="hidden sm:inline">Export</span>
+          </TabsTrigger>
+          <TabsTrigger value="overtime" className="flex items-center gap-2">
+            <BarChart3 className="h-4 w-4" />
+            <span className="hidden sm:inline">Overtime</span>
+          </TabsTrigger>
+          {currentUser?.email === SUPER_ADMIN_EMAIL && (
+            <TabsTrigger value="timebuzzer" className="flex items-center gap-2">
+              <CalendarIcon className="h-4 w-4" />
+              <span className="hidden sm:inline">Timebuzzer</span>
+            </TabsTrigger>
           )}
-        </div>
+          {(currentUser?.isAdmin || currentUser?.userType === 'administratie' || currentUser?.email === SUPER_ADMIN_EMAIL) && (
+            <TabsTrigger value="daysOff" className="flex items-center gap-2">
+              <Clock className="h-4 w-4" />
+              <span className="hidden sm:inline">{t('admin.daysOffOverview')}</span>
+            </TabsTrigger>
+          )}
+          {currentUser?.email === SUPER_ADMIN_EMAIL && (
+            <TabsTrigger value="errors" className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4" />
+              <span className="hidden sm:inline">Errors</span>
+            </TabsTrigger>
+          )}
+        </TabsList>
 
-        <div className="max-h-[calc(100vh-250px)] sm:max-h-[calc(100vh-300px)] md:max-h-[calc(100vh-350px)] overflow-y-auto overflow-x-hidden -mx-2 sm:mx-0 px-2 sm:px-0 mt-4 sm:mt-6">
         {/* Users Tab */}
         <TabsContent value="users" className="space-y-6">
           {/* Add User Section - Only for admins, not for administratie */}
           {currentUser?.isAdmin && !isAdministratie(currentUser) && (
-      <div className="mb-4 sm:mb-6 md:mb-8">
-        <h3 className="text-sm sm:text-base md:text-lg font-semibold mb-3 sm:mb-4 text-gray-900 dark:text-gray-100">{t('admin.addUser')}</h3>
-        <form onSubmit={handleAddUser} className={`flex ${isMobile ? 'flex-col' : 'flex-row flex-wrap'} gap-3 sm:gap-3 md:gap-4 ${isMobile ? '' : 'items-end'} w-full`}>
-          <div className={`${isMobile ? 'w-full' : 'flex-1 min-w-[200px]'} space-y-2`}>
-            <Label className="text-xs sm:text-sm font-medium block">{t('admin.email')}</Label>
-            <Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} required className="h-9 sm:h-9 text-sm w-full" />
+      <div className="mb-6 sm:mb-8">
+        <h3 className="text-base sm:text-lg font-semibold mb-2 text-gray-900 dark:text-gray-100">{t('admin.addUser')}</h3>
+        <form onSubmit={handleAddUser} className={`flex ${isMobile ? 'flex-col' : 'flex-row flex-wrap'} gap-3 sm:gap-4 ${isMobile ? '' : 'items-end'} w-full`}>
+          <div className={isMobile ? 'w-full' : ''}>
+            <Label className="text-sm">{t('admin.email')}</Label>
+            <Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} required className="h-10 sm:h-9" />
           </div>
-          <div className={`${isMobile ? 'w-full' : 'flex-1 min-w-[200px]'} space-y-2`}>
-            <Label className="text-xs sm:text-sm font-medium block">{t('admin.name')}</Label>
-            <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className="h-9 sm:h-9 text-sm w-full" />
+          <div className={isMobile ? 'w-full' : ''}>
+            <Label className="text-sm">{t('admin.name')}</Label>
+            <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className="h-10 sm:h-9" />
           </div>
-          <div className={`${isMobile ? 'w-full' : 'flex-1 min-w-[200px]'} space-y-2`}>
-            <Label className="text-xs sm:text-sm font-medium block">{t('admin.password')}</Label>
+          <div className={isMobile ? 'w-full' : ''}>
+            <Label className="text-sm">{t('admin.password')}</Label>
             <Input 
               type="password" 
               value={form.password} 
@@ -2513,39 +1860,40 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
               required 
               minLength={6}
               placeholder={t('admin.passwordPlaceholder')}
-              className="h-9 sm:h-9 text-sm w-full"
+              className="h-10 sm:h-9"
             />
             {form.password && form.password.length > 0 && form.password.length < 6 && (
               <p className="text-xs text-red-500 mt-1">{t('admin.passwordMinLength')}</p>
             )}
           </div>
-          <div className={`${isMobile ? 'w-full' : 'flex-1 min-w-[150px]'} space-y-2`}>
-            <Label className="text-xs sm:text-sm font-medium block">{t('admin.userType')}</Label>
+          <div className={isMobile ? 'w-full' : ''}>
+            <Label className="text-sm">{t('admin.userType')}</Label>
             <Select value={form.userType} onValueChange={(value) => setForm(f => ({ ...f, userType: value }))}>
-              <SelectTrigger className="h-9 sm:h-9 text-sm w-full">
+              <SelectTrigger className="h-10 sm:h-9">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="user">{t('admin.userType.user')}</SelectItem>
                 <SelectItem value="administratie">{t('admin.userType.administratie')}</SelectItem>
                 <SelectItem value="admin">{t('admin.userType.admin')}</SelectItem>
+                <SelectItem value="weekly_only">{t('admin.userType.weeklyOnly')}</SelectItem>
                 {currentUser?.email === SUPER_ADMIN_EMAIL && (
                   <SelectItem value="super_admin">{t('admin.userType.superAdmin')}</SelectItem>
                 )}
               </SelectContent>
             </Select>
           </div>
-          <div className={`flex items-center gap-2 ${isMobile ? 'w-full' : ''} ${isMobile ? 'mt-2' : 'mt-1'}`}>
-            <input type="checkbox" id="must_change_password" checked={form.must_change_password} onChange={e => setForm(f => ({ ...f, must_change_password: e.target.checked }))} className="h-4 w-4 shrink-0" />
-            <Label htmlFor="must_change_password" className="text-xs sm:text-sm cursor-pointer whitespace-normal break-words">{t('admin.mustChangePassword')}</Label>
+          <div className={`flex items-center gap-2 ${isMobile ? 'w-full' : ''}`}>
+            <input type="checkbox" id="must_change_password" checked={form.must_change_password} onChange={e => setForm(f => ({ ...f, must_change_password: e.target.checked }))} className="h-4 w-4" />
+            <Label htmlFor="must_change_password" className="text-sm">{t('admin.mustChangePassword')}</Label>
           </div>
-          <Button type="submit" className={`${isMobile ? 'w-full' : ''} h-9 sm:h-9 text-sm ${isMobile ? 'mt-2' : ''}`} size={isMobile ? "lg" : "default"}>{t('admin.createUser')}</Button>
+          <Button type="submit" className={`${isMobile ? 'w-full' : ''} h-10 sm:h-9`} size={isMobile ? "lg" : "default"}>{t('admin.createUser')}</Button>
         </form>
       </div>
       )}
 
-          {/* Pending Users Section - For admins and administratie users */}
-          {isAdminOrAdministratie(currentUser) && users.filter(u => u.approved === false).length > 0 && (
+          {/* Pending Users Section - Only for admins, not for administratie */}
+          {currentUser?.isAdmin && !isAdministratie(currentUser) && users.filter(u => u.approved === false).length > 0 && (
         <div className="mb-6 sm:mb-8">
           <h3 className="text-base sm:text-lg font-semibold mb-2 text-orange-600 dark:text-orange-400">{t('admin.pendingApproval')}</h3>
           {isMobile ? (
@@ -2609,8 +1957,8 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
         </div>
       )}
       
-          {/* Existing Users Section - For admins and administratie users */}
-          {isAdminOrAdministratie(currentUser) && (
+          {/* Existing Users Section - Only for admins, not for administratie */}
+          {currentUser?.isAdmin && !isAdministratie(currentUser) && (
           <div>
         <h3 className="text-base sm:text-lg font-semibold mb-2 text-gray-900 dark:text-gray-100">{t('admin.existingUsers')}</h3>
         {loading ? (
@@ -2619,16 +1967,16 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
           /* Mobile: Card Layout */
           <div className="space-y-3">
             {users.filter(u => u.approved !== false).map(user => (
-              <div key={user.id} className="border rounded-lg p-3 sm:p-4 bg-gray-50 dark:bg-gray-700">
-                <div className="mb-3 space-y-2">
-                  <div className="font-semibold text-sm mb-1 text-gray-900 dark:text-gray-100">
+              <div key={user.id} className="border rounded-lg p-3 bg-gray-50 dark:bg-gray-700">
+                <div className="mb-3">
+                  <div className="font-semibold text-sm mb-1 text-gray-900 dark:text-gray-100 flex items-center gap-2">
                     {editingUserId === user.id && editingField === 'email' ? (
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-1">
                         <Input
                           type="email"
                           value={editedEmail}
                           onChange={(e) => setEditedEmail(e.target.value)}
-                          className="h-8 text-sm flex-1 min-w-0"
+                          className="h-8 text-sm flex-1"
                           onKeyDown={(e) => {
                             if (e.key === "Enter") {
                               handleSaveEdit(user.id, 'email');
@@ -2642,7 +1990,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                           variant="outline"
                           size="sm"
                           onClick={() => handleSaveEdit(user.id, 'email')}
-                          className="h-8 w-8 p-0 border-green-200 dark:border-green-700 text-green-700 dark:text-green-300 hover:bg-green-50 dark:hover:bg-green-900/40 shrink-0"
+                          className="h-8 border-green-200 dark:border-green-700 text-green-700 dark:text-green-300 hover:bg-green-50 dark:hover:bg-green-900/40"
                         >
                           <Check className="h-4 w-4" />
                         </Button>
@@ -2650,36 +1998,36 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                           variant="outline"
                           size="sm"
                           onClick={handleCancelEdit}
-                          className="h-8 w-8 p-0 border-red-200 dark:border-red-700 text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/40 shrink-0"
+                          className="h-8 border-red-200 dark:border-red-700 text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/40"
                         >
                           <X className="h-4 w-4" />
                         </Button>
                       </div>
                     ) : (
-                      <div className="flex items-start gap-2 flex-wrap">
-                        <span className="break-words break-all flex-1 min-w-0">{user.email}</span>
-                        {user.email === SUPER_ADMIN_EMAIL && <span className="px-2 py-0.5 text-xs bg-orange-200 dark:bg-orange-800 text-orange-800 dark:text-orange-200 rounded shrink-0">Super Admin</span>}
+                      <>
+                        <span>{user.email}</span>
+                        {user.email === SUPER_ADMIN_EMAIL && <span className="ml-2 px-2 py-0.5 text-xs bg-orange-200 dark:bg-orange-800 text-orange-800 dark:text-orange-200 rounded">Super Admin</span>}
                         {currentUser?.isAdmin && user.email !== SUPER_ADMIN_EMAIL && (
                           <Button
                             variant="ghost"
                             size="sm"
                             onClick={() => handleStartEdit(user.id, 'email', user.email)}
-                            className="h-6 w-6 p-0 text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 shrink-0"
+                            className="h-6 w-6 p-0 text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400"
                             title="Edit email"
                           >
                             <Pencil className="h-3 w-3" />
                           </Button>
                         )}
-                      </div>
+                      </>
                     )}
                   </div>
-                  <div className="text-xs text-gray-600 dark:text-gray-400">
+                  <div className="text-xs text-gray-600 dark:text-gray-400 flex items-center gap-2">
                     {editingUserId === user.id && editingField === 'name' ? (
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-1">
                         <Input
                           value={editedName}
                           onChange={(e) => setEditedName(e.target.value)}
-                          className="h-8 text-sm flex-1 min-w-0"
+                          className="h-8 text-sm flex-1"
                           onKeyDown={(e) => {
                             if (e.key === "Enter") {
                               handleSaveEdit(user.id, 'name');
@@ -2693,7 +2041,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                           variant="outline"
                           size="sm"
                           onClick={() => handleSaveEdit(user.id, 'name')}
-                          className="h-8 w-8 p-0 border-green-200 dark:border-green-700 text-green-700 dark:text-green-300 hover:bg-green-50 dark:hover:bg-green-900/40 shrink-0"
+                          className="h-8 border-green-200 dark:border-green-700 text-green-700 dark:text-green-300 hover:bg-green-50 dark:hover:bg-green-900/40"
                         >
                           <Check className="h-4 w-4" />
                         </Button>
@@ -2701,34 +2049,33 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                           variant="outline"
                           size="sm"
                           onClick={handleCancelEdit}
-                          className="h-8 w-8 p-0 border-red-200 dark:border-red-700 text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/40 shrink-0"
+                          className="h-8 border-red-200 dark:border-red-700 text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/40"
                         >
                           <X className="h-4 w-4" />
                         </Button>
                       </div>
                     ) : (
-                      <div className="flex items-center gap-2">
-                        <span className="break-words flex-1 min-w-0">{user.name || "-"}</span>
+                      <>
+                        <span>{user.name}</span>
                         {currentUser?.isAdmin && (
                           <Button
                             variant="ghost"
                             size="sm"
                             onClick={() => handleStartEdit(user.id, 'name', user.name || "")}
-                            className="h-6 w-6 p-0 text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 shrink-0"
+                            className="h-6 w-6 p-0 text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400"
                             title="Edit name"
                           >
                             <Pencil className="h-3 w-3" />
                           </Button>
                         )}
-                      </div>
+                      </>
                     )}
                   </div>
                 </div>
                 <div className="space-y-2 text-xs">
-                  <div className="flex justify-between items-center gap-2">
-                    <span className="text-gray-600 dark:text-gray-400 whitespace-nowrap shrink-0">{t('admin.userType')}:</span>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600 dark:text-gray-400">{t('admin.userType')}:</span>
                     <Select 
-                      key={`user-type-card-${user.id}-${user.userType || user.isAdmin ? 'admin' : 'user'}`}
                       value={getUserType(user)} 
                       onValueChange={(value) => handleChangeUserType(user.id, user.email, value)}
                       disabled={
@@ -2736,13 +2083,14 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                         (currentUser?.email === SUPER_ADMIN_EMAIL && String(user.id) === String(currentUser.id))
                       }
                     >
-                      <SelectTrigger className="h-8 w-28 text-xs shrink-0">
+                      <SelectTrigger className="h-8 w-28 text-xs">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="user">{t('admin.userType.user')}</SelectItem>
                         <SelectItem value="administratie">{t('admin.userType.administratie')}</SelectItem>
                         <SelectItem value="admin">{t('admin.userType.admin')}</SelectItem>
+                        <SelectItem value="weekly_only">{t('admin.userType.weeklyOnly')}</SelectItem>
                         {currentUser.email === SUPER_ADMIN_EMAIL && (
                           <SelectItem value="super_admin" disabled={user.email !== SUPER_ADMIN_EMAIL}>
                             {t('admin.userType.superAdmin')}
@@ -2751,18 +2099,18 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="flex justify-between items-center gap-2">
-                    <span className="text-gray-600 dark:text-gray-400 whitespace-nowrap shrink-0">{t('admin.approved')}:</span>
-                    <span className="text-gray-900 dark:text-gray-100 text-right">{user.approved !== false ? t('admin.yes') : t('admin.no')}</span>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600 dark:text-gray-400">{t('admin.approved')}:</span>
+                    <span className="text-gray-900 dark:text-gray-100">{user.approved !== false ? t('admin.yes') : t('admin.no')}</span>
                   </div>
-                  <div className="flex justify-between items-center gap-2">
-                    <span className="text-gray-600 dark:text-gray-400 whitespace-nowrap shrink-0">{t('admin.mustChangePassword')}:</span>
-                    <span className="text-gray-900 dark:text-gray-100 text-right">{user.must_change_password ? t('admin.yes') : t('admin.no')}</span>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600 dark:text-gray-400">{t('admin.mustChangePassword')}:</span>
+                    <span className="text-gray-900 dark:text-gray-100">{user.must_change_password ? t('admin.yes') : t('admin.no')}</span>
                   </div>
                   {currentUser.email === SUPER_ADMIN_EMAIL && (
-                    <div className="flex justify-between items-center gap-2">
-                      <span className="text-gray-600 dark:text-gray-400 whitespace-nowrap shrink-0">Timebuzzer:</span>
-                      <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600 dark:text-gray-400">Timebuzzer:</span>
+                      <div className="flex items-center gap-2">
                         <input
                           type="checkbox"
                           checked={!!user.can_use_timebuzzer}
@@ -2773,9 +2121,9 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                       </div>
                     </div>
                   )}
-                  <div className="flex justify-between items-center gap-2">
-                    <span className="text-gray-600 dark:text-gray-400 whitespace-nowrap shrink-0">{t('admin.daysOffLeft')}:</span>
-                    <span className="font-semibold text-gray-900 dark:text-gray-100 text-right break-words">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600 dark:text-gray-400">{t('admin.daysOffLeft')}:</span>
+                    <span className="font-semibold text-gray-900 dark:text-gray-100">
                       {(() => {
                         // Calculate hours left first (more accurate), then convert to days
                         const totalHoursTaken = daysOffMap[String(user.id)] || 0;
@@ -2805,13 +2153,13 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                     </div>
                   ) : (
                     <div className="flex gap-2">
-                      <Button size="sm" variant="outline" onClick={() => setResetUserId(user.id)} className="flex-1 h-9 text-xs whitespace-nowrap">{t('admin.resetPassword')}</Button>
+                      <Button size="sm" variant="outline" onClick={() => setResetUserId(user.id)} className="flex-1 h-9 text-xs">{t('admin.resetPassword')}</Button>
                       <Button
                         size="sm"
                         variant="destructive"
                         onClick={() => handleDeleteUser(user.id, user.email)}
                         disabled={user.id === currentUser.id || user.email === SUPER_ADMIN_EMAIL}
-                        className="flex-1 h-9 text-xs whitespace-nowrap"
+                        className="flex-1 h-9 text-xs"
                       >
                         {t('common.delete')}
                       </Button>
@@ -2825,17 +2173,17 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                       placeholder={t('admin.hours')}
                       value={daysOffInput[user.id] || ""}
                       onChange={e => setDaysOffInput(prev => ({ ...prev, [user.id]: e.target.value }))}
-                      className="h-9 text-sm w-full"
+                      className="h-9 text-sm"
                     />
                     <div className="flex gap-2">
-                      <Button size="sm" onClick={() => handleAddOrDeductDaysOffClick(user.id, Math.abs(parseFloat(daysOffInput[user.id] || "0")))} className="flex-1 h-9 text-xs whitespace-nowrap">
+                      <Button size="sm" onClick={() => handleAddOrDeductDaysOffClick(user.id, Math.abs(parseFloat(daysOffInput[user.id] || "0")))} className="flex-1 h-9 text-xs">
                         {t('admin.add')}
                       </Button>
-                      <Button size="sm" variant="destructive" onClick={() => handleAddOrDeductDaysOffClick(user.id, -Math.abs(parseFloat(daysOffInput[user.id] || "0")))} className="flex-1 h-9 text-xs whitespace-nowrap">
+                      <Button size="sm" variant="destructive" onClick={() => handleAddOrDeductDaysOffClick(user.id, -Math.abs(parseFloat(daysOffInput[user.id] || "0")))} className="flex-1 h-9 text-xs">
                         {t('admin.subtract')}
                       </Button>
                     </div>
-                    <span className="text-xs text-gray-500 dark:text-gray-400 break-words">{t('admin.oneDayEqualsEightHours')}</span>
+                    <span className="text-xs text-gray-500 dark:text-gray-400">{t('admin.oneDayEqualsEightHours')}</span>
                   </div>
                 </div>
               </div>
@@ -2899,14 +2247,14 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                       ) : (
                         <div className="flex items-center gap-2">
                           <span className="text-gray-900 dark:text-gray-100">{user.email}</span>
-                          {user.email === SUPER_ADMIN_EMAIL && <span className="ml-2 px-2 py-1 text-xs bg-orange-200 dark:bg-orange-800 text-orange-800 dark:text-orange-200 rounded">{t('admin.userType.superAdmin')}</span>}
+                          {user.email === SUPER_ADMIN_EMAIL && <span className="ml-2 px-2 py-1 text-xs bg-orange-200 dark:bg-orange-800 text-orange-800 dark:text-orange-200 rounded">Super Admin</span>}
                           {currentUser?.isAdmin && user.email !== SUPER_ADMIN_EMAIL && (
                             <Button
                               variant="ghost"
                               size="sm"
                               onClick={() => handleStartEdit(user.id, 'email', user.email)}
                               className="h-6 w-6 p-0 text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400"
-                              title={t('common.edit') + ' ' + t('admin.email')}
+                              title="Edit email"
                             >
                               <Pencil className="h-3 w-3" />
                             </Button>
@@ -2956,7 +2304,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                               size="sm"
                               onClick={() => handleStartEdit(user.id, 'name', user.name || "")}
                               className="h-6 w-6 p-0 text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400"
-                              title={t('common.edit') + ' ' + t('admin.name')}
+                              title="Edit name"
                             >
                               <Pencil className="h-3 w-3" />
                             </Button>
@@ -2966,7 +2314,6 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                     </td>
                     <td className="p-2 border border-gray-300 dark:border-gray-700">
                       <Select 
-                        key={`user-type-${user.id}-${user.userType || user.isAdmin ? 'admin' : 'user'}`}
                         value={getUserType(user)} 
                         onValueChange={(value) => handleChangeUserType(user.id, user.email, value)}
                         disabled={
@@ -2981,6 +2328,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                           <SelectItem value="user">{t('admin.userType.user')}</SelectItem>
                           <SelectItem value="administratie">{t('admin.userType.administratie')}</SelectItem>
                           <SelectItem value="admin">{t('admin.userType.admin')}</SelectItem>
+                          <SelectItem value="weekly_only">{t('admin.userType.weeklyOnly')}</SelectItem>
                           {currentUser.email === SUPER_ADMIN_EMAIL && (
                             <SelectItem value="super_admin" disabled={user.email !== SUPER_ADMIN_EMAIL}>
                               {t('admin.userType.superAdmin')}
@@ -3076,27 +2424,27 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
         {/* Reminders Tab */}
         <TabsContent value="reminders" className="space-y-6">
           {/* Send Reminder Section - Available for admin and administratie */}
-          <div className="p-5 sm:p-6 bg-blue-50 dark:bg-blue-900/30 border-2 border-blue-300 dark:border-blue-700 rounded-xl shadow-lg">
-            <h3 className="text-lg sm:text-xl font-bold mb-3 text-blue-900 dark:text-blue-100">{t('admin.sendReminder')}</h3>
-            <p className="text-sm text-blue-800 dark:text-blue-200 mb-5 leading-relaxed">{t('admin.sendReminderDescription')}</p>
-            <div className="mb-6">
-              <Label className="text-sm sm:text-base font-bold mb-2 block">{t('admin.selectUsers')}</Label>
-              <div className="max-h-96 sm:max-h-[500px] overflow-y-auto border-2 border-blue-200 dark:border-blue-700 rounded-lg p-4 bg-white dark:bg-gray-700 shadow-inner">
+          <div className="p-4 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg">
+            <h3 className="text-base sm:text-lg font-semibold mb-3 text-blue-800 dark:text-blue-200">{t('admin.sendReminder')}</h3>
+            <p className="text-xs sm:text-sm text-blue-700 dark:text-blue-300 mb-4">{t('admin.sendReminderDescription')}</p>
+            <div className="mb-4">
+              <Label className="text-sm font-semibold mb-2 block">{t('admin.selectUsers')}</Label>
+              <div className="max-h-48 overflow-y-auto border rounded-lg p-3 bg-white dark:bg-gray-700">
                 {users.length === 0 ? (
-                  <p className="text-base text-gray-500 dark:text-gray-400">{t('admin.noUsers')}</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">{t('admin.noUsers')}</p>
                 ) : (
-                  <div className="space-y-3">
+                  <div className="space-y-2">
                     {users.map(user => (
-                      <div key={user.id} className="flex items-center gap-2.5 p-1.5 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors">
+                      <div key={user.id} className="flex items-center gap-2">
                         <input
                           type="checkbox"
                           id={`reminder-user-${user.id}`}
                           checked={reminderUserIds.includes(user.id.toString())}
                           onChange={() => toggleReminderUser(user.id.toString())}
-                          className="h-4 w-4 cursor-pointer"
+                          className="h-4 w-4"
                         />
-                        <Label htmlFor={`reminder-user-${user.id}`} className="text-sm sm:text-base cursor-pointer text-gray-900 dark:text-gray-100 font-medium">
-                          {user.name || user.email} {user.isAdmin && <span className="text-sm text-blue-600 dark:text-blue-400 font-semibold">(Admin)</span>}
+                        <Label htmlFor={`reminder-user-${user.id}`} className="text-sm cursor-pointer text-gray-900 dark:text-gray-100">
+                          {user.name || user.email} {user.isAdmin && <span className="text-xs text-blue-600 dark:text-blue-400">(Admin)</span>}
                         </Label>
                       </div>
                     ))}
@@ -3104,14 +2452,12 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                 )}
               </div>
               {reminderUserIds.length > 0 && (
-                <p className="text-sm sm:text-base font-semibold text-blue-600 dark:text-blue-400 mt-3">
-                  {reminderUserIds.length} {reminderUserIds.length === 1 ? 'gebruiker' : 'gebruikers'} geselecteerd
-                </p>
+                <p className="text-xs text-blue-600 dark:text-blue-400 mt-2">{reminderUserIds.length} user(s) selected</p>
               )}
             </div>
-            <div className={`flex ${isMobile ? 'flex-col' : 'flex-row flex-wrap'} gap-4 sm:gap-5 ${isMobile ? '' : 'items-end'} w-full`}>
-              <div className={`${isMobile ? 'w-full' : 'flex-1 min-w-[150px]'}`}>
-                <Label className="text-sm sm:text-base font-semibold mb-2 block">{t('admin.weekNumber')}</Label>
+            <div className={`flex ${isMobile ? 'flex-col' : 'flex-row flex-wrap'} gap-3 sm:gap-4 ${isMobile ? '' : 'items-end'} w-full`}>
+              <div className={isMobile ? 'w-full' : ''}>
+                <Label className="text-sm">{t('admin.weekNumber')}</Label>
                 <Input 
                   type="number" 
                   value={reminderWeekNumber} 
@@ -3119,11 +2465,11 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                   placeholder={t('admin.weekNumberPlaceholder')}
                   min="1"
                   max="53"
-                  className="h-10 sm:h-10 text-sm sm:text-base"
+                  className="h-10 sm:h-9"
                 />
               </div>
-              <div className={`${isMobile ? 'w-full' : 'flex-1 min-w-[150px]'}`}>
-                <Label className="text-sm sm:text-base font-semibold mb-2 block">{t('admin.year')}</Label>
+              <div className={isMobile ? 'w-full' : ''}>
+                <Label className="text-sm">{t('admin.year')}</Label>
                 <Input 
                   type="number" 
                   value={reminderYear} 
@@ -3131,12 +2477,12 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                   placeholder={t('admin.yearPlaceholder')}
                   min="2020"
                   max="2100"
-                  className="h-10 sm:h-10 text-sm sm:text-base"
+                  className="h-10 sm:h-9"
                 />
               </div>
               <Button 
                 onClick={handleSendReminder}
-                className={`${isMobile ? 'w-full' : ''} h-10 sm:h-10 text-sm sm:text-base font-semibold bg-blue-600 hover:bg-blue-700 shadow-md`}
+                className={`${isMobile ? 'w-full' : ''} h-10 sm:h-9 bg-blue-600 hover:bg-blue-700`}
                 size={isMobile ? "lg" : "default"}
                 disabled={reminderUserIds.length === 0 || !reminderWeekNumber || !reminderYear}
               >
@@ -3563,10 +2909,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                   setExporting(false);
                   return;
                 }
-                // Filter out admin adjustments (entries without startTime/endTime are admin adjustments)
-                // Only export entries that have both startTime and endTime - these are user-created entries
-                const filteredData = (data || []).filter((e: any) => e.startTime && e.endTime);
-                const rows = filteredData.map((row: any) => ({ 
+                const rows = (data || []).map((row: any) => ({ 
                   ...row, 
                   project: row.projects?.name || "",
                   user_name: users.find((u: any) => u.id === row.user_id)?.name || "",
@@ -3617,10 +2960,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                   setExporting(false);
                   return;
                 }
-                // Filter out admin adjustments (entries without startTime/endTime are admin adjustments)
-                // Only export entries that have both startTime and endTime - these are user-created entries
-                const filteredData = (data || []).filter((e: any) => e.startTime && e.endTime);
-                const formattedData = filteredData.map((row: any) => {
+                const formattedData = (data || []).map((row: any) => {
                   const user = users.find((u: any) => u.id === row.user_id);
                   return {
                     Date: formatDateDDMMYY(row.date),
@@ -4492,9 +3832,9 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
         {currentUser?.email === SUPER_ADMIN_EMAIL && (
         <TabsContent value="timebuzzer" className="space-y-6">
           {/* Timebuzzer Sync Section */}
-          <div className="p-3 sm:p-4 bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 rounded-lg">
-        <h3 className="text-base sm:text-lg font-semibold mb-2 sm:mb-3 text-green-800 dark:text-green-200">Timebuzzer Integration</h3>
-        <p className="text-xs sm:text-sm text-green-700 dark:text-green-300 mb-3 sm:mb-4">
+          <div className="p-4 bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 rounded-lg">
+        <h3 className="text-base sm:text-lg font-semibold mb-3 text-green-800">Timebuzzer Integration</h3>
+        <p className="text-xs sm:text-sm text-green-700 mb-4">
           Sync time entries from Timebuzzer to your timesheet. Make sure users and projects are mapped in the database first.
         </p>
         
@@ -4554,14 +3894,15 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
             </div>
           </div>
           {timebuzzerSyncWeekNumber && timebuzzerSyncYear && (
-            <div className="text-xs sm:text-sm text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/50 p-2 sm:p-3 rounded break-words">
-              <span className="font-medium">Week {timebuzzerSyncWeekNumber}, {timebuzzerSyncYear}:</span>{' '}
-              {(() => {
-                const range = getWeekDateRange(timebuzzerSyncWeekNumber, timebuzzerSyncYear);
-                const fromDate = new Date(range.from);
-                const toDate = new Date(range.to);
-                return `${fromDate.toLocaleDateString('nl-NL')} - ${toDate.toLocaleDateString('nl-NL')}`;
-              })()}
+            <div className="text-xs text-green-600 bg-green-100 p-2 rounded">
+              <span className="font-medium">Week {timebuzzerSyncWeekNumber}, {timebuzzerSyncYear}:</span> {
+                (() => {
+                  const range = getWeekDateRange(timebuzzerSyncWeekNumber, timebuzzerSyncYear);
+                  const fromDate = new Date(range.from);
+                  const toDate = new Date(range.to);
+                  return `${fromDate.toLocaleDateString('nl-NL')} - ${toDate.toLocaleDateString('nl-NL')}`;
+                })()
+              }
             </div>
           )}
           {/* User selection for Timebuzzer testing */}
@@ -4606,7 +3947,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
               </p>
             )}
           </div>
-          <div className="flex flex-col sm:flex-row gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button
               onClick={async () => {
                 setLoadingTimebuzzerUsers(true);
@@ -4651,8 +3992,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                 }
               }}
               disabled={loadingTimebuzzerUsers}
-              className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-sm sm:text-base"
-              size={isMobile ? "lg" : "default"}
+              className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700"
             >
               {loadingTimebuzzerUsers ? "Loading..." : "Fetch All Timebuzzer Users"}
             </Button>
@@ -6100,7 +5440,6 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
           </div>
         </DialogContent>
       </Dialog>
-        </div>
       </Tabs>
     </div>
   );
