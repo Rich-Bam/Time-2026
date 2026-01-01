@@ -18,14 +18,11 @@ const ScreenshotButton = ({ currentUser, floating = false }: ScreenshotButtonPro
   const [isCapturing, setIsCapturing] = useState(false);
   const [showDialog, setShowDialog] = useState(false);
   const [description, setDescription] = useState("");
+  const [capturedScreenshot, setCapturedScreenshot] = useState<Blob | null>(null); // Store captured screenshot
 
-  const handleOpenDialog = () => {
-    setShowDialog(true);
-  };
-
-  const captureScreenshot = async () => {
+  const handleOpenDialog = async () => {
+    // Capture screenshot immediately when button is clicked
     setIsCapturing(true);
-    setShowDialog(false);
     try {
       // Capture the entire page
       const canvas = await html2canvas(document.body, {
@@ -36,30 +33,114 @@ const ScreenshotButton = ({ currentUser, floating = false }: ScreenshotButtonPro
         windowHeight: window.innerHeight,
       });
 
-      // Convert canvas to blob
-      canvas.toBlob(async (blob) => {
-        if (!blob) {
-          toast({
-            title: "Error",
-            description: "Could not create screenshot.",
-            variant: "destructive",
-          });
-          setIsCapturing(false);
-          return;
-        }
+      // Convert canvas directly to blob using toBlob
+      const blob = await new Promise<Blob | null>((resolve) => {
+        canvas.toBlob((blob) => {
+          resolve(blob);
+        }, "image/png", 1.0); // PNG format, quality 1.0 (max)
+      });
 
-        try {
-          // Generate unique filename
-          const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-          const filename = `screenshot-${currentUser.id}-${timestamp}.png`;
+      if (!blob || blob.size === 0) {
+        toast({
+          title: "Error",
+          description: "Could not create screenshot.",
+          variant: "destructive",
+        });
+        setIsCapturing(false);
+        return;
+      }
 
-          // Upload to Supabase Storage
-          const { data: uploadData, error: uploadError } = await supabase.storage
-            .from("screenshots")
-            .upload(filename, blob, {
-              contentType: "image/png",
-              upsert: false,
-            });
+      // Verify blob contains PNG data by checking first bytes
+      const blobSlice = blob.slice(0, 8);
+      const signatureArrayBuffer = await blobSlice.arrayBuffer();
+      const uint8Array = new Uint8Array(signatureArrayBuffer);
+      const pngSignature = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]; // PNG file signature
+      const isPNG = uint8Array.length >= 8 && uint8Array.every((byte, i) => byte === pngSignature[i]);
+
+      if (!isPNG) {
+        console.error("Blob does not contain valid PNG data!", { firstBytes: Array.from(uint8Array) });
+        toast({
+          title: "Error",
+          description: "Screenshot data is invalid. Please try again.",
+          variant: "destructive",
+        });
+        setIsCapturing(false);
+        return;
+      }
+
+      // Ensure blob has correct type
+      const typedBlob = blob.type === "image/png" 
+        ? blob 
+        : new Blob([blob], { type: "image/png" });
+
+      // Store the captured screenshot
+      setCapturedScreenshot(typedBlob);
+      setIsCapturing(false);
+      // Now show the dialog for description
+      setShowDialog(true);
+    } catch (error: any) {
+      console.error("Screenshot capture error:", error);
+      toast({
+        title: "Error",
+        description: error.message || "Could not create screenshot.",
+        variant: "destructive",
+      });
+      setIsCapturing(false);
+    }
+  };
+
+  const uploadScreenshot = async () => {
+    if (!capturedScreenshot) {
+      toast({
+        title: "Error",
+        description: "No screenshot available. Please try again.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsCapturing(true);
+    setShowDialog(false);
+    try {
+      // Generate unique filename
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const filename = `screenshot-${currentUser.id}-${timestamp}.png`;
+
+      // Verify the blob is valid PNG before upload
+      const verifySlice = capturedScreenshot.slice(0, 8);
+      const verifyArrayBuffer = await verifySlice.arrayBuffer();
+      const verifyUint8 = new Uint8Array(verifyArrayBuffer);
+      const pngSig = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+      const isValidPNG = verifyUint8.length >= 8 && verifyUint8.every((byte, i) => byte === pngSig[i]);
+      
+      if (!isValidPNG) {
+        console.error("ScreenshotButton: Blob is not valid PNG before upload!", { firstBytes: Array.from(verifyUint8) });
+        toast({
+          title: "Error",
+          description: "Screenshot data is invalid. Please try again.",
+          variant: "destructive",
+        });
+        setIsCapturing(false);
+        setCapturedScreenshot(null);
+        return;
+      }
+
+      // Convert Blob to ArrayBuffer to avoid multipart form-data wrapping
+      // Supabase Storage may wrap File/Blob in FormData, causing it to be stored as multipart
+      // ArrayBuffer ensures binary upload without FormData wrapping
+      const arrayBuffer = await capturedScreenshot.arrayBuffer();
+
+      // Use Supabase JS client with ArrayBuffer (avoids FormData wrapping)
+      const uploadOptions = {
+        contentType: "image/png", // Explicitly set
+        cacheControl: "3600",
+        upsert: false,
+      };
+
+      // Upload using ArrayBuffer (avoids FormData wrapping that causes multipart storage)
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from("screenshots")
+        .upload(filename, arrayBuffer, uploadOptions);
 
           if (uploadError) {
             // If bucket doesn't exist, create it first (this will fail but we'll handle it)
@@ -111,30 +192,21 @@ const ScreenshotButton = ({ currentUser, floating = false }: ScreenshotButtonPro
             return;
           }
 
-          console.log("ScreenshotButton: Successfully saved screenshot:", insertedData);
-          toast({
-            title: "Screenshot Saved",
-            description: "The screenshot has been successfully saved and is visible to the super admin.",
-          });
-          setDescription(""); // Reset description
-        } catch (error: any) {
-          console.error("Screenshot upload error:", error);
-          toast({
-            title: "Error Saving",
-            description: error.message || "Could not save screenshot.",
-            variant: "destructive",
-          });
-        } finally {
-          setIsCapturing(false);
-        }
-      }, "image/png");
+      console.log("ScreenshotButton: Successfully saved screenshot:", insertedData);
+      toast({
+        title: "Screenshot Saved",
+        description: "The screenshot has been successfully saved and is visible to the super admin.",
+      });
+      setDescription(""); // Reset description
+      setCapturedScreenshot(null); // Clear captured screenshot
     } catch (error: any) {
-      console.error("Screenshot capture error:", error);
+      console.error("Screenshot capture/upload error:", error);
       toast({
         title: "Error",
-        description: error.message || "Could not create screenshot.",
+        description: error.message || "Could not create or save screenshot.",
         variant: "destructive",
       });
+    } finally {
       setIsCapturing(false);
     }
   };
@@ -165,7 +237,7 @@ const ScreenshotButton = ({ currentUser, floating = false }: ScreenshotButtonPro
           <DialogHeader>
             <DialogTitle>Create Bug Report</DialogTitle>
             <DialogDescription>
-              Add a description of the problem (optional). The screenshot will be taken automatically.
+              The screenshot has already been captured. Add a description of the problem (optional).
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -182,11 +254,15 @@ const ScreenshotButton = ({ currentUser, floating = false }: ScreenshotButtonPro
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setShowDialog(false); setDescription(""); }}>
+            <Button variant="outline" onClick={() => { 
+              setShowDialog(false); 
+              setDescription(""); 
+              setCapturedScreenshot(null); // Clear captured screenshot on cancel
+            }}>
               Cancel
             </Button>
-            <Button onClick={captureScreenshot} disabled={isCapturing}>
-              {isCapturing ? "Processing..." : "Take Screenshot"}
+            <Button onClick={uploadScreenshot} disabled={isCapturing}>
+              {isCapturing ? "Uploading..." : "Save Bug Report"}
             </Button>
           </DialogFooter>
         </DialogContent>
