@@ -1600,7 +1600,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
         <div className="flex-1">
           <h2 className="text-xl sm:text-2xl font-bold pt-1 sm:pt-0">{t('weekly.title')}</h2>
-          <div className="mt-1 text-sm sm:text-base text-gray-700 font-medium">
+          <div className="mt-1 text-sm sm:text-base text-gray-700 dark:text-gray-300 font-medium">
             {t('weekly.week')} {weekNumber} ({weekDates[0].toLocaleDateString()} - {weekDates[6].toLocaleDateString()})
           </div>
           <div className="flex items-center gap-2 sm:gap-4 mt-2 flex-wrap">
@@ -1754,8 +1754,8 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
                   {/* Day Header */}
                   <div className={`px-3 sm:px-4 py-2 sm:py-3 border-b-2 ${dayColor.replace('50', '200')} flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2`}>
                     <div className="flex items-center gap-2 sm:gap-3">
-                      <h3 className="font-bold text-base sm:text-lg text-gray-800">{isMobile ? dayShort : dayName}</h3>
-                      {!isMobile && <span className="text-sm text-gray-600">({dayShort})</span>}
+                      <h3 className="font-bold text-base sm:text-lg text-gray-800 dark:text-gray-100">{isMobile ? dayShort : dayName}</h3>
+                      {!isMobile && <span className="text-sm text-gray-600 dark:text-gray-400">({dayShort})</span>}
                     </div>
                     {!isLocked && (
                       <div className={`flex gap-2 ${isMobile ? 'w-full' : ''}`}>
@@ -1802,13 +1802,13 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
                         const isNewEntry = !entry.id;
                         const isEditing = entry.id && editingEntry?.id === entry.id;
                         return (
-                        <div key={`edit-${dayIdx}-${entryIdx}`} className={`rounded-lg border p-3 space-y-3 ${isEditing ? 'bg-yellow-50 border-yellow-200' : 'bg-white'}`}>
+                        <div key={`edit-${dayIdx}-${entryIdx}`} className={`rounded-lg border border-gray-300 dark:border-gray-700 p-3 space-y-3 ${isEditing ? 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-700' : 'bg-white dark:bg-gray-800'}`}>
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
                               {isEditing && (
                                 <span className="text-xs bg-yellow-500 text-white px-2 py-0.5 rounded font-semibold">{t('weekly.editing')}</span>
                               )}
-                              <Label className="text-xs font-semibold">{t('weekly.workType')}</Label>
+                              <Label className="text-xs font-semibold text-gray-900 dark:text-gray-100">{t('weekly.workType')}</Label>
                             </div>
                             <div className="flex items-center gap-2">
                               <Button 
@@ -1921,7 +1921,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
                                   <Button
                                     variant="outline"
                                     role="combobox"
-                                    className="w-full justify-between h-10 text-sm bg-white"
+                                    className="w-full justify-between h-10 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
                                     disabled={!workTypeRequiresProject(entry.workType) || isLocked}
                                   >
                                     {entry.project || t('weekly.selectProject')}
@@ -2223,7 +2223,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
                                       <Button
                                         variant="outline"
                                         role="combobox"
-                                        className="w-full justify-between h-9 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                                        className="w-full justify-between h-9 text-sm bg-white dark:bg-gray-800 text-gray-900 dak:text-gray-100"
                                         disabled={isLocked}
                                       >
                                         {entry.workType 
@@ -2554,12 +2554,12 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
                           ))}
                           
                           {/* Total row */}
-                          <tr className="border-t-2 border-gray-400 bg-gray-100 font-bold">
-                            <td className="border p-2 text-right" colSpan={4}>
-                              <span className="text-sm sm:text-base">{t('weekly total') || 'Totaal per dag'}:</span>
+                          <tr className="border-t-2 border-gray-400 dark:border-gray-600 bg-gray-100 dark:border-gray-800 font-bold">
+                            <td className="border border-gray-300 dark:border-gray-700 p-2 text-right" colSpan={4}>
+                              <span className="text-sm sm:text-base text-gray-900 dark:text-gray-100">{t('weekly total') || 'Totaal per dag'}:</span>
                             </td>
-                            <td className="border p-2">
-                              <span className="text-sm sm:text-base">
+                            <td className="border border-gray-300 dark:border-gray-700 p-2">
+                              <span className="text-sm sm:text-base text-gray-900 dark:text-gray-100">
                                 {calculateDayTotal(dayIdx, dateStr).toFixed(2)}h
                               </span>
                             </td>

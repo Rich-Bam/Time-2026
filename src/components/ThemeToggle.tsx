@@ -7,16 +7,22 @@ interface ThemeToggleProps {
   currentUser?: any;
 }
 
+// Set to false to enable dark mode for all users
+// Set to true to restrict dark mode to super admin only
+const RESTRICT_TO_SUPER_ADMIN = false;
+
 const SUPER_ADMIN_EMAIL = "r.blance@bampro.nl";
 
 const ThemeToggle = ({ currentUser }: ThemeToggleProps) => {
   const { theme, toggleTheme } = useTheme();
   
-  // Only show theme toggle for super admin
-  const isSuperAdmin = currentUser?.email === SUPER_ADMIN_EMAIL;
-  
-  if (!isSuperAdmin) {
-    return null; // Don't render for non-super admin users
+  // Check if dark mode should be restricted to super admin
+  if (RESTRICT_TO_SUPER_ADMIN) {
+    const isSuperAdmin = currentUser?.email === SUPER_ADMIN_EMAIL;
+    
+    if (!isSuperAdmin) {
+      return null; // Don't render for non-super admin users
+    }
   }
 
   return (
@@ -37,4 +43,3 @@ const ThemeToggle = ({ currentUser }: ThemeToggleProps) => {
 };
 
 export default ThemeToggle;
-
