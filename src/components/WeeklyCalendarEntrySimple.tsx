@@ -2223,7 +2223,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
                                       <Button
                                         variant="outline"
                                         role="combobox"
-                                        className="w-full justify-between h-9 text-sm bg-white dark:bg-gray-800 text-gray-900 datk:text-gray-100"
+                                        className="w-full justify-between h-9 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
                                         disabled={isLocked}
                                       >
                                         {entry.workType 
