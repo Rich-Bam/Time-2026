@@ -1849,7 +1849,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
                                 <Button
                                   variant="outline"
                                   role="combobox"
-                                  className="w-full justify-between h-10 text-sm bg-white mt-1"
+                                  className="w-full justify-between h-10 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 mt-1"
                                   disabled={isLocked}
                                 >
                                   {entry.workType 
@@ -2223,7 +2223,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
                                       <Button
                                         variant="outline"
                                         role="combobox"
-                                        className="w-full justify-between h-9 text-sm bg-white"
+                                        className="w-full justify-between h-9 text-sm bg-white dark:bg-gray-800 text-gray-900 datk:text-gray-100"
                                         disabled={isLocked}
                                       >
                                         {entry.workType 
@@ -2578,11 +2578,11 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
       
       {/* Confirm Week Button */}
       {!isLocked && (
-        <Card className="mt-4 bg-orange-50 border-orange-200">
+        <Card className="mt-4 bg-orange-50 border-orange-200 dark: bg-gray-900 border-orange-600">
           <CardContent className="p-4">
             <div className="flex flex-col gap-3">
               <div className="text-sm text-orange-800">
-                <strong>Note:</strong> Once you confirm this week, you will no longer be able to make changes. Please make sure all entries are correct before confirming.
+              <strong>Note:</strong> Once you confirm this week, you will no longer be able to make changes. Please make sure all entries are correct before confirming.
               </div>
               <Button 
                 className="w-full bg-orange-600 hover:bg-orange-700 text-white" 

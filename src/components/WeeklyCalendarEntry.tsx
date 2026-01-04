@@ -360,8 +360,8 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
       });
       
       toast({
-        title: "Week Confirmed",
-        description: "This week has been confirmed and locked. You can no longer make changes.",
+        title: t('weekly.weekConfirmed'),
+        description: t('admin.weekConfirmedAndLocked')
       });
     }
   };
@@ -2095,7 +2095,7 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
                         const key = `${dayIdx}-${entryIdx}`;
                         setOpenWorkTypePopovers(prev => ({ ...prev, [key]: open }));
                         if (!open) {
-                          setWorkTypeSearchValues(prev => ({ ...prev, [key]: "" }));
+                          setWorkTypeSearchValues(prev => ({ ...prev, [key]: " " }));
                         }
                       }}
                     >
@@ -2103,8 +2103,7 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
                         <Button
                           variant="outline"
                           role="combobox"
-                          className="w-full justify-between"
-                          disabled={!!confirmedWeeks[weekDates[0].toISOString().split('T')[0]]}
+                          className="w-full justify-between !bg-white dark:!bg-gray-800 text-gray-900 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-gray-100"
                         >
                           {entry.workType 
                             ? `${entry.workType} - ${workTypes.find(t => String(t.value) === entry.workType)?.label || ""}`
@@ -2307,27 +2306,27 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
               </div>
               {submittedEntries[day.date.toISOString().split('T')[0]] && submittedEntries[day.date.toISOString().split('T')[0]].length > 0 && (
                 <div className="mt-4">
-                  <div className="font-semibold text-sm mb-1 text-gray-700">{t('weekly.submittedEntries')}</div>
+                  <div className="font-semibold text-sm mb-1 text-gray-700 dark:text-gray-200">{t('weekly.submittedEntries')}</div>
                   <div className="overflow-x-auto">
-                    <table className="min-w-full text-xs border rounded">
-                      <thead className="bg-gray-100">
+                    <table className="min-w-full text-xs border border-gray-300 dark:border-gray-700 rounded">
+                      <thead className="bg-gray-100 dark:bg-gray-800">
                         <tr>
-                          <th className="p-1 border">{t('weekly.project')}</th>
-                          <th className="p-1 border">{t('weekly.workType')}</th>
-                          <th className="p-1 border">{t('weekly.hours')}</th>
+                          <th className="p-1 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">{t('weekly.project')}</th>
+                          <th className="p-1 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">{t('weekly.workType')}</th>
+                          <th className="p-1 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">{t('weekly.hours')}</th>
                           {!confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && (
-                            <th className="p-1 border">{t('weekly.actions')}</th>
+                            <th className="p-1 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">{t('weekly.actions')}</th>
                           )}
                         </tr>
                       </thead>
                       <tbody>
                         {submittedEntries[day.date.toISOString().split('T')[0]].map((entry, idx) => (
-                          <tr key={idx} className="border-t">
-                            <td className="p-1 border">{entry.project}</td>
-                            <td className="p-1 border">{entry.description}</td>
-                            <td className="p-1 border">{entry.startTime && entry.endTime ? `${entry.startTime} - ${entry.endTime}` : '-'}</td>
+                          <tr key={idx} className="border-t border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900">
+                            <td className="p-1 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-200">{entry.project}</td>
+                            <td className="p-1 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-200">{entry.description}</td>
+                            <td className="p-1 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-200">{entry.startTime && entry.endTime ? `${entry.startTime} - ${entry.endTime}` : '-'}</td>
                             {!confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && (
-                              <td className="p-1 border">
+                              <td className="p-1 border border-gray-300 dark:border-gray-700">
                                 <div className="flex gap-1">
                                   <Button 
                                     size="icon" 
@@ -2359,11 +2358,11 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
         </CardContent>
       </Card>
       {!confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && (
-        <Card className="mt-4 bg-orange-50 border-orange-200">
+        <Card className="mt-4 bg-orange-50 border-orange-200 dark:bg-gray-900 border-gray-600">
           <CardContent className="p-4">
             <div className="flex flex-col gap-3">
               <div className="text-sm text-orange-800">
-                <strong>{t('common.note')}:</strong> {t('weekly.confirmWeekText')}
+                <strong>{t('note')}:</strong> {t('weekly.confirmWeekText')}
               </div>
               <Button 
                 className="w-full bg-orange-600 hover:bg-orange-700 text-white" 

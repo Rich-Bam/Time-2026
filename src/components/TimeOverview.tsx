@@ -152,24 +152,24 @@ const TimeOverview = ({ currentUser }: TimeOverviewProps) => {
             <div className="overflow-x-auto">
               <table className="min-w-full border text-sm">
                 <thead>
-                  <tr className="bg-gray-100">
-                    <th className="p-3 text-left border">{t('overview.project')}</th>
-                    <th className="p-3 text-right border">{t('overview.totalHours')}</th>
-                    <th className="p-3 text-right border">{t('overview.entries')}</th>
-                    <th className="p-3 text-left border">{t('overview.percentage')}</th>
-                    <th className="p-3 text-left border">{t('overview.visualization')}</th>
+                  <tr className="bg-gray-100 dark:bg-gray-800">
+                    <th className="p-3 text-left border text-gray-900 dark:text-gray-100">{t('overview.project')}</th>
+                    <th className="p-3 text-right border text-gray-900 dark:text-gray-100">{t('overview.totalHours')}</th>
+                    <th className="p-3 text-right border text-gray-900 dark:text-gray-100">{t('overview.entries')}</th>
+                    <th className="p-3 text-left border text-gray-900 dark:text-gray-100">{t('overview.percentage')}</th>
+                    <th className="p-3 text-left border text-gray-900 dark:text-gray-100">{t('overview.visualization')}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {projectHours.map((project, idx) => {
                     const percentage = totalHours > 0 ? Math.round((project.hours / totalHours) * 100) : 0;
                     return (
-                      <tr key={idx} className="border-t hover:bg-gray-50">
-                        <td className="p-3 border font-medium">{project.name}</td>
-                        <td className="p-3 border text-right font-semibold">{project.hours.toFixed(2)}h</td>
-                        <td className="p-3 border text-right">{project.entries}</td>
-                        <td className="p-3 border">{percentage}%</td>
-                        <td className="p-3 border">
+                      <tr key={idx} className="border-t hover:bg-gray-50 dark:hover:bg-gray-700 bg:white dark:bg-gray-900">
+                        <td className="p-3 border font-medium text-gray-900 dark:text-gray-100">{project.name}</td>
+                        <td className="p-3 border text-right font-semibold text-gray-900 dark:text-gray-100">{project.hours.toFixed(2)}h</td>
+                        <td className="p-3 border text-right text-gray-900 dark:text-gray-100">{project.entries}</td>
+                        <td className="p-3 border text-right text-gray-900 dark:text-gray-100">{percentage}%</td>
+                        <td className="p-3 border dark:gb-gray-800">
                           <div className="flex items-center gap-2">
                             <Progress value={percentage} className="h-2 flex-1" />
                           </div>
@@ -177,12 +177,12 @@ const TimeOverview = ({ currentUser }: TimeOverviewProps) => {
                       </tr>
                     );
                   })}
-                  <tr className="border-t-2 border-gray-400 bg-gray-50 font-bold">
-                    <td className="p-3 border">{t('overview.total')}</td>
-                    <td className="p-3 border text-right">{totalHours.toFixed(2)}h</td>
-                    <td className="p-3 border text-right">{filteredEntries.length}</td>
-                    <td className="p-3 border">100%</td>
-                    <td className="p-3 border"></td>
+                  <tr className="border-t-2 border-gray-400 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 font-bold">
+                    <td className="p-3 border text-gray-900 dark:text-gray-100">{t('overview.total')}</td>
+                    <td className="p-3 border text-right text-gray-900 dark:text-gray-100">{totalHours.toFixed(2)}h</td>
+                    <td className="p-3 border text-right text-gray-900 dark:text-gray-100">{filteredEntries.length}</td>
+                    <td className="p-3 border text-gray-900 dark:text-gray-100">100%</td>
+                    <td className="p-3 border text-gray-900 dark:text-gray-100"></td>
                   </tr>
                 </tbody>
               </table>
