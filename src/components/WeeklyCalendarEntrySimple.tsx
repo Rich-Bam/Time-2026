@@ -1455,7 +1455,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
       worksheet.getCell('B4').value = weekNumber.toString();
       
       worksheet.getCell('A5').value = 'Year:';
-      worksheet.getCell('B5').value = new Date().getFullYear().toString();
+      worksheet.getCell('B5').value = new Date(fromDate).getFullYear().toString();
 
       // Add table headers (row 7)
       const headerRow = worksheet.getRow(7);
@@ -2585,7 +2585,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
       
       {/* Confirm Week Button */}
       {!isLocked && (
-        <Card className="mt-4 bg-orange-50 border-orange-200 dark: bg-gray-900 border-orange-600">
+        <Card className="mt-4 bg-orange-50 border-orange-200 dark:bg-gray-900 border-orange-600">
           <CardContent className="p-4">
             <div className="flex flex-col gap-3">
               <div className="text-sm text-orange-800">

@@ -13,6 +13,7 @@ import { User, Calendar, Pencil, Check, X, Download, FileText, FileDown, Calenda
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import { createPDF } from "@/utils/pdfExport";
 import { hashPassword } from "@/utils/password";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -59,6 +60,38 @@ const getWeekDateRange = (weekNumber: number, year: number) => {
       to: sunday.toISOString().split('T')[0]
     };
   }
+};
+
+// Helper functions for Excel export (matching WeeklyCalendarEntrySimple)
+function getWeekDates(date: Date) {
+  const start = new Date(date);
+  start.setDate(date.getDate() - ((date.getDay() + 6) % 7)); // Monday as first day
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(start);
+    d.setDate(start.getDate() + i);
+    return d;
+  });
+}
+
+function getISOWeekNumber(date: Date) {
+  const tempDate = new Date(date.getTime());
+  tempDate.setHours(0, 0, 0, 0);
+  tempDate.setDate(tempDate.getDate() + 3 - ((tempDate.getDay() + 6) % 7));
+  const week1 = new Date(tempDate.getFullYear(), 0, 4);
+  return (
+    1 +
+    Math.round(
+      ((tempDate.getTime() - week1.getTime()) / 86400000 - 3 + ((week1.getDay() + 6) % 7)) / 7
+    )
+  );
+}
+
+// Helper to format date to YYYY-MM-DD (takes Date object, not string)
+const formatDateToYYYYMMDD = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 };
 
 const AdminPanel = ({ currentUser }: AdminPanelProps) => {
@@ -3039,53 +3072,206 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                   }
                   setExporting(true);
                   const { from, to } = getWeekDateRange(weekNum, year);
+                  
+                  // Get the user to export (must select a user, not "all")
+                  if (!selectedExportUserId || selectedExportUserId === "all") {
+                    toast({
+                      title: "User Selection Required",
+                      description: "Please select a specific user to export. The weekly export format requires a single user.",
+                      variant: "destructive",
+                    });
+                    setExporting(false);
+                    return;
+                  }
+                  
+                  const selectedUser = users.find((u: any) => u.id === selectedExportUserId);
+                  if (!selectedUser) {
+                    toast({
+                      title: "User Not Found",
+                      description: "Selected user could not be found.",
+                      variant: "destructive",
+                    });
+                    setExporting(false);
+                    return;
+                  }
+                  
+                  // Get week dates array (same as weekly entry)
+                  const weekStartDate = new Date(from);
+                  const weekDates = getWeekDates(weekStartDate);
+                  const calculatedWeekNumber = getISOWeekNumber(weekDates[0]);
+                  
+                  const fromDate = formatDateToYYYYMMDD(weekDates[0]);
+                  const toDate = formatDateToYYYYMMDD(weekDates[6]);
+                  
                   let queryBuilder = supabase
                     .from("timesheet")
                     .select("*, projects(name)")
-                    .gte("date", from)
-                    .lte("date", to);
-                  if (selectedExportUserId && selectedExportUserId !== "all") {
-                    queryBuilder = queryBuilder.eq("user_id", selectedExportUserId);
-                  }
+                    .eq("user_id", selectedExportUserId)
+                    .gte("date", fromDate)
+                    .lte("date", toDate)
+                    .order("date", { ascending: true })
+                    .order("startTime", { ascending: true });
+                  
                   const { data, error } = await queryBuilder;
                   if (error) {
                     toast({
-                      title: "Export Failed",
+                      title: t('weekly.exportFailed') || "Export Failed",
                       description: error.message,
                       variant: "destructive",
                     });
                     setExporting(false);
                     return;
                   }
-                  const rows = (data || []).map((row: any) => ({ 
-                    ...row, 
-                    project: row.projects?.name || "",
-                    user_name: users.find((u: any) => u.id === row.user_id)?.name || "",
-                    user_email: users.find((u: any) => u.id === row.user_id)?.email || ""
-                  }));
-                  const selectedUser = users.find((u: any) => u.id === selectedExportUserId);
-                  const userName = selectedUser ? (selectedUser.name || selectedUser.email || "User").replace(/[^a-zA-Z0-9]/g, '_') : "All_Users";
-                  const filename = `${userName}_Week${weekNum}_${year}.xlsx`;
-                  const wb = XLSX.utils.book_new();
-                  const ws = XLSX.utils.json_to_sheet(rows.map((row: any) => ({
-                    Date: formatDateDDMMYY(row.date),
-                    Day: getDayNameNL(row.date),
-                    'Work Type': getWorkTypeLabel(row.description || ""),
-                    Project: row.projects?.name || row.project || "",
-                    'Start Time': row.startTime || "",
-                    'End Time': row.endTime || "",
-                    Hours: parseFloat(row.hours || 0),
-                    'Hours (HH:MM)': formatHoursHHMM(row.hours || 0),
-                    Notes: row.notes || "",
-                    'User Name': row.user_name || "",
-                    'User Email': row.user_email || ""
-                  })));
-                  XLSX.utils.book_append_sheet(wb, ws, "Timesheet");
-                  XLSX.writeFile(wb, filename);
+
+                  if (!data || data.length === 0) {
+                    toast({
+                      title: t('weekly.noData') || "No Data",
+                      description: t('weekly.noEntriesForWeek') || "No entries found for this week.",
+                      variant: "destructive",
+                    });
+                    setExporting(false);
+                    return;
+                  }
+
+                  // Filter out admin adjustments (entries without startTime/endTime are admin adjustments)
+                  // Only export entries that have both startTime and endTime - these are user-created entries
+                  const filteredData = data.filter((e: any) => e.startTime && e.endTime);
+
+                  if (filteredData.length === 0) {
+                    toast({
+                      title: t('weekly.noData') || "No Data",
+                      description: t('weekly.noEntriesForWeek') || "No entries found for this week.",
+                      variant: "destructive",
+                    });
+                    setExporting(false);
+                    return;
+                  }
+
+                  // Group entries by day
+                  const entriesByDay: Record<string, any[]> = {};
+                  weekDates.forEach(date => {
+                    const dateStr = formatDateToYYYYMMDD(date);
+                    entriesByDay[dateStr] = filteredData.filter((entry: any) => entry.date === dateStr);
+                  });
+
+                  // Load logo image
+                  let logoBuffer: ArrayBuffer | null = null;
+                  try {
+                    const response = await fetch('/bampro-marine-logo.jpg');
+                    if (response.ok) {
+                      logoBuffer = await response.arrayBuffer();
+                    }
+                  } catch (err) {
+                    console.warn('Could not load logo:', err);
+                  }
+
+                  // Create ExcelJS workbook
+                  const workbook = new ExcelJS.Workbook();
+                  
+                  const dayNamesEN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+                  
+                  // Create sheets for each day
+                  weekDates.forEach((date, dayIdx) => {
+                    const dateStr = formatDateToYYYYMMDD(date);
+                    const dayEntries = entriesByDay[dateStr] || [];
+                    const dayName = dayNamesEN[dayIdx];
+                    const formattedDate = formatDateDDMMYY(dateStr);
+                    
+                    // Calculate total hours for the day
+                    const totalHours = dayEntries.reduce((sum: number, entry: any) => sum + (parseFloat(entry.hours) || 0), 0);
+                    const totalHoursHHMM = formatHoursHHMM(totalHours);
+                    
+                    // Create worksheet
+                    const worksheet = workbook.addWorksheet(dayName);
+
+                    // Add logo to cell G1 (column 7, row 1) if logo is available
+                    if (logoBuffer) {
+                      const logoId = workbook.addImage({
+                        buffer: logoBuffer,
+                        extension: 'jpeg',
+                      });
+                      worksheet.addImage(logoId, {
+                        tl: { col: 6, row: 0 }, // Column G (0-indexed = 6), Row 1 (0-indexed = 0)
+                        ext: { width: 200, height: 60 }, // Adjust size as needed
+                      });
+                    }
+                    
+                    // Set column widths
+                    worksheet.getColumn(1).width = 12; // Day
+                    worksheet.getColumn(2).width = 20; // Work Type
+                    worksheet.getColumn(3).width = 25; // Project Work Order
+                    worksheet.getColumn(4).width = 8;  // From
+                    worksheet.getColumn(5).width = 8;  // To
+                    worksheet.getColumn(6).width = 15; // Hours Worked
+                    worksheet.getColumn(7).width = 30; // Space for logo
+
+                    // Add header rows
+                    worksheet.getCell('A1').value = 'Employee Name:';
+                    worksheet.getCell('B1').value = selectedUser.name || selectedUser.email || '';
+                    
+                    worksheet.getCell('A2').value = 'Date:';
+                    worksheet.getCell('B2').value = `From: ${formatDateDDMMYY(fromDate)}`;
+                    worksheet.getCell('D2').value = `To: ${formatDateDDMMYY(toDate)}`;
+                    
+                    worksheet.getCell('A3').value = 'Day:';
+                    worksheet.getCell('B3').value = `${formattedDate} ${dayName}`;
+                    
+                    worksheet.getCell('A4').value = 'Week Number:';
+                    worksheet.getCell('B4').value = calculatedWeekNumber.toString();
+                    
+                    worksheet.getCell('A5').value = 'Year:';
+                    worksheet.getCell('B5').value = new Date(fromDate).getFullYear().toString();
+
+                    // Add table headers (row 7)
+                    const headerRow = worksheet.getRow(7);
+                    headerRow.values = ['Day', 'Work Type', 'Project Work Order', 'From', 'To', 'Hours Worked'];
+                    headerRow.font = { bold: true };
+                    headerRow.fill = {
+                      type: 'pattern',
+                      pattern: 'solid',
+                      fgColor: { argb: 'FFE5E5E5' }
+                    };
+
+                    // Add data rows
+                    dayEntries.forEach((entry: any, idx: number) => {
+                      const row = worksheet.getRow(8 + idx);
+                      row.values = [
+                        dayName,
+                        getWorkTypeLabel(entry.description || ''),
+                        entry.projects?.name || entry.project || '',
+                        entry.startTime || '',
+                        entry.endTime || '',
+                        formatHoursHHMM(parseFloat(entry.hours) || 0),
+                      ];
+                    });
+
+                    // Add total row
+                    const totalRowIndex = 8 + dayEntries.length;
+                    const totalRow = worksheet.getRow(totalRowIndex);
+                    totalRow.getCell(2).value = t('weekly.total');
+                    totalRow.getCell(2).font = { bold: true };
+                    totalRow.getCell(6).value = totalHoursHHMM;
+                    totalRow.getCell(6).font = { bold: true };
+                  });
+
+                  // Generate filename with user name and week number (same as weekly entry)
+                  const userName = (selectedUser.name || selectedUser.email || t('common.user') || 'User').replace(/[^a-zA-Z0-9]/g, '_');
+                  const filename = `${userName}_Week${calculatedWeekNumber}_${new Date(fromDate).getFullYear()}.xlsx`;
+                  
+                  // Write to buffer and download
+                  const buffer = await workbook.xlsx.writeBuffer();
+                  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+                  const url = window.URL.createObjectURL(blob);
+                  const link = document.createElement('a');
+                  link.href = url;
+                  link.download = filename;
+                  link.click();
+                  window.URL.revokeObjectURL(url);
+                  
                   setExporting(false);
                   toast({
-                    title: "Export Successful",
-                    description: `Week ${weekNum} (${year}) exported${selectedUser ? ` for ${selectedUser.name || selectedUser.email}` : ""}.`,
+                    title: t('weekly.exportSuccessful') || "Export Successful",
+                    description: t('weekly.exportSuccessfulDescription', { weekNumber: calculatedWeekNumber, filename, dayCount: weekDates.length }) || `Week ${calculatedWeekNumber} exported successfully.`,
                   });
                 }}
                 disabled={exporting || !selectedWeekNumber || !selectedYear}
