@@ -273,7 +273,14 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
     // Admin adjustments don't have startTime/endTime and should not be shown in weekly entry
     const filteredData = (data || []).filter(e => e.startTime && e.endTime);
     
-    setSubmittedEntries(prev => ({ ...prev, [dateStr]: filteredData }));
+    // Sort by startTime (earliest to latest)
+    const sortedData = filteredData.sort((a, b) => {
+      const timeA = a.startTime || "";
+      const timeB = b.startTime || "";
+      return timeA.localeCompare(timeB);
+    });
+    
+    setSubmittedEntries(prev => ({ ...prev, [dateStr]: sortedData }));
   };
 
   // On mount and when week changes, fetch submitted entries for all days in the week
@@ -1783,7 +1790,11 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
                 <tbody>
                   {days.map((day, dayIdx) => {
                     const dateStr = day.date.toISOString().split('T')[0];
-                    const submitted = submittedEntries[dateStr] || [];
+                    const submitted = (submittedEntries[dateStr] || []).sort((a, b) => {
+                      const timeA = a.startTime || "";
+                      const timeB = b.startTime || "";
+                      return timeA.localeCompare(timeB);
+                    });
                     // Week is locked if confirmed = true (regardless of admin status)
                     // Once confirmed, no one can edit (admins can unlock via admin panel if needed)
                     const isLocked = !!confirmedWeeks[weekDates[0].toISOString().split('T')[0]];
@@ -2320,7 +2331,11 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
                         </tr>
                       </thead>
                       <tbody>
-                        {submittedEntries[day.date.toISOString().split('T')[0]].map((entry, idx) => (
+                        {(submittedEntries[day.date.toISOString().split('T')[0]] || []).sort((a, b) => {
+                          const timeA = a.startTime || "";
+                          const timeB = b.startTime || "";
+                          return timeA.localeCompare(timeB);
+                        }).map((entry, idx) => (
                           <tr key={idx} className="border-t border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900">
                             <td className="p-1 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-200">{entry.project}</td>
                             <td className="p-1 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-200">{entry.description}</td>
