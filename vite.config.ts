@@ -4,6 +4,18 @@ import path from "path";
 import { componentTagger } from "lovable-tagger";
 import { VitePWA } from 'vite-plugin-pwa';
 
+// Simple plugin to inject version into HTML
+const injectVersionPlugin = () => {
+  // Generate version based on timestamp (always unique per build)
+  const version = `2.0.${Date.now()}`;
+  return {
+    name: 'inject-version',
+    transformIndexHtml(html: string) {
+      return html.replace('__APP_VERSION__', version);
+    }
+  };
+};
+
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
   server: {
@@ -14,6 +26,7 @@ export default defineConfig(({ mode }) => ({
     react(),
     mode === 'development' &&
     componentTagger(),
+    injectVersionPlugin(), // Add this BEFORE VitePWA
     VitePWA({
       registerType: 'autoUpdate',
       devOptions: {

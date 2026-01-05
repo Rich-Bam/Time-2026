@@ -35,7 +35,8 @@
           return; // Skip in development
         }
 
-        const CURRENT_VERSION = '2.0.3';
+        // Version is injected at build time by Vite plugin
+        const CURRENT_VERSION = '__APP_VERSION__';
         const VERSION_KEY = 'app-version';
         const storedVersion = localStorage.getItem(VERSION_KEY);
         const urlParams = new URLSearchParams(window.location.search);
@@ -49,6 +50,8 @@
         }
 
         console.log('🧹 Cleaning up old service workers and cache...');
+        console.log('📦 Current version:', CURRENT_VERSION);
+        console.log('💾 Stored version:', storedVersion);
 
         // Wait for all cleanup operations to complete before reloading
         Promise.all([
@@ -83,6 +86,7 @@
           localStorage.setItem(VERSION_KEY, CURRENT_VERSION);
 
           console.log('✅ Cleanup completed, reloading...');
+          console.log('🆕 New version:', CURRENT_VERSION);
 
           // Remove clearCache parameter if present and reload
           if (urlParams.has('clearCache')) {
