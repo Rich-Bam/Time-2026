@@ -1300,12 +1300,19 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
   };
 
   // Helper functions for Excel export
-  const formatDateDDMMYY = (dateStr: string) => {
-    const date = new Date(dateStr);
-    const day = String(date.getDate()).padStart(2, '0');
+  // Format date to YYYY-MM-DD in local time (not UTC)
+  const formatDateToYYYYMMDD = (date: Date) => {
+    const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
-    const year = String(date.getFullYear()).slice(-2);
-    return `${day}/${month}/${year}`;
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const formatDateDDMMYY = (dateStr: string) => {
+    // Parse date string directly to avoid timezone conversion issues
+    // dateStr is in format "YYYY-MM-DD"
+    const [year, month, day] = dateStr.split('-');
+    return `${day}/${month}/${year.slice(-2)}`;
   };
 
   const getDayNameNL = (dateStr: string) => {
@@ -1331,8 +1338,8 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
       return;
     }
 
-    const fromDate = weekDates[0].toISOString().split('T')[0];
-    const toDate = weekDates[6].toISOString().split('T')[0];
+    const fromDate = formatDateToYYYYMMDD(weekDates[0]);
+    const toDate = formatDateToYYYYMMDD(weekDates[6]);
 
     const { data, error } = await supabase
       .from("timesheet")
@@ -1378,7 +1385,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
     // Group entries by day
     const entriesByDay: Record<string, any[]> = {};
     weekDates.forEach(date => {
-      const dateStr = date.toISOString().split('T')[0];
+      const dateStr = formatDateToYYYYMMDD(date);
       entriesByDay[dateStr] = filteredData.filter(entry => entry.date === dateStr);
     });
 
@@ -1400,7 +1407,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
     
     // Create sheets for each day
     weekDates.forEach((date, dayIdx) => {
-      const dateStr = date.toISOString().split('T')[0];
+      const dateStr = formatDateToYYYYMMDD(date);
       const dayEntries = entriesByDay[dateStr] || [];
       const dayName = dayNamesEN[dayIdx];
       const formattedDate = formatDateDDMMYY(dateStr);
