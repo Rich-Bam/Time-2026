@@ -80,11 +80,87 @@ const Index = () => {
   const [selectedWeekNumber, setSelectedWeekNumber] = useState<string>("");
   const [selectedYear, setSelectedYear] = useState<string>(new Date().getFullYear().toString());
   const [useSimpleWeeklyView, setUseSimpleWeeklyView] = useState(() => {
-    // Check localStorage for saved preference
+    // Check localStorage for saved preference (will be overridden by useEffect when user loads)
     const saved = localStorage.getItem('bampro_use_simple_weekly_view');
     return saved === 'true';
   });
   const { toast } = useToast();
+
+  // Update view based on user's weekly_view_option when user changes
+  useEffect(() => {
+    if (!currentUser) return;
+    
+    // Handle case where weekly_view_option might not exist yet (column not added)
+    const weeklyViewOption = currentUser.weekly_view_option;
+    
+    if (weeklyViewOption === 'simple') {
+      setUseSimpleWeeklyView(true);
+      // Clear localStorage to prevent override
+      localStorage.removeItem('bampro_use_simple_weekly_view');
+    } else if (weeklyViewOption === 'original') {
+      setUseSimpleWeeklyView(false);
+      // Clear localStorage to prevent override
+      localStorage.removeItem('bampro_use_simple_weekly_view');
+    } else {
+      // 'both', null, or undefined - use localStorage preference
+      const saved = localStorage.getItem('bampro_use_simple_weekly_view');
+      setUseSimpleWeeklyView(saved === 'true');
+    }
+  }, [currentUser?.weekly_view_option, currentUser?.id]);
+  
+  // Periodically refetch user data to get updated weekly_view_option (when admin changes it)
+  useEffect(() => {
+    if (!isLoggedIn || !currentUser) return;
+    
+    const refetchUserData = async () => {
+      if (!currentUser?.id) return;
+      
+      try {
+        const { data: userData, error } = await supabase
+          .from("users")
+          .select("id, email, name, isAdmin, must_change_password, approved, created_at, photo_url, phone_number, userType, weekly_view_option")
+          .eq("id", currentUser.id)
+          .single();
+        
+        if (!error && userData) {
+          // Update currentUser with all fields from database (in case any changed)
+          // This ensures weekly_view_option and other fields stay in sync
+          setCurrentUser((prevUser: any) => {
+            if (!prevUser) return userData;
+            // Only update if something actually changed to avoid unnecessary re-renders
+            const hasChanged = Object.keys(userData).some(key => prevUser[key] !== userData[key]);
+            if (!hasChanged) {
+              return prevUser;
+            }
+            return { ...prevUser, ...userData };
+          });
+        }
+      } catch (err) {
+        console.error("Error refetching user data:", err);
+      }
+    };
+    
+    // Refetch every 60 seconds when page is visible
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        refetchUserData();
+      }
+    }, 60000); // Check every 60 seconds
+    
+    // Also refetch when page becomes visible
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        refetchUserData();
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [isLoggedIn, currentUser?.id]); // Use id instead of email to avoid unnecessary re-runs
 
   // Check for unread reminders when user logs in (including admins)
   useEffect(() => {
@@ -246,7 +322,7 @@ const Index = () => {
           const verifyUser = async () => {
             const { data: user, error } = await supabase
               .from("users")
-              .select("id, email, name, isAdmin, must_change_password, approved, created_at, photo_url, phone_number, userType")
+              .select("id, email, name, isAdmin, must_change_password, approved, created_at, photo_url, phone_number, userType, weekly_view_option")
               .eq("email", sessionData.user.email)
               .single();
             
@@ -1922,14 +1998,44 @@ const Index = () => {
                 currentUser={currentUser} 
                 hasUnreadDaysOffNotification={hasUnreadDaysOffNotification}
                 useSimpleView={useSimpleWeeklyView}
-                setUseSimpleView={setUseSimpleWeeklyView}
+                setUseSimpleView={(() => {
+                  const weeklyViewOption = currentUser?.weekly_view_option;
+                  // Only allow toggle if user has 'both' option or no option set
+                  if (weeklyViewOption === 'simple' || weeklyViewOption === 'original') {
+                    return undefined; // Locked - no toggle allowed
+                  }
+                  // Return controlled setter that checks before allowing change
+                  return (value: boolean) => {
+                    // Double-check the setting hasn't changed (defense in depth)
+                    if (currentUser?.weekly_view_option === 'simple' || currentUser?.weekly_view_option === 'original') {
+                      return; // Don't allow change if locked
+                    }
+                    setUseSimpleWeeklyView(value);
+                    localStorage.setItem('bampro_use_simple_weekly_view', String(value));
+                  };
+                })()}
               />
             ) : (
               <WeeklyCalendarEntry 
                 currentUser={currentUser} 
                 hasUnreadDaysOffNotification={hasUnreadDaysOffNotification}
                 useSimpleView={useSimpleWeeklyView}
-                setUseSimpleView={setUseSimpleWeeklyView}
+                setUseSimpleView={(() => {
+                  const weeklyViewOption = currentUser?.weekly_view_option;
+                  // Only allow toggle if user has 'both' option or no option set
+                  if (weeklyViewOption === 'simple' || weeklyViewOption === 'original') {
+                    return undefined; // Locked - no toggle allowed
+                  }
+                  // Return controlled setter that checks before allowing change
+                  return (value: boolean) => {
+                    // Double-check the setting hasn't changed (defense in depth)
+                    if (currentUser?.weekly_view_option === 'simple' || currentUser?.weekly_view_option === 'original') {
+                      return; // Don't allow change if locked
+                    }
+                    setUseSimpleWeeklyView(value);
+                    localStorage.setItem('bampro_use_simple_weekly_view', String(value));
+                  };
+                })()}
               />
             )}
           </div>

@@ -296,10 +296,27 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
   // Fetch users
   const fetchUsers = async () => {
     setLoading(true);
-    const { data, error } = await supabase.from("users").select("id, email, name, isAdmin, must_change_password, approved, can_use_timebuzzer, timebuzzer_user_id, userType");
-    if (error) {
+    // Try to fetch with weekly_view_option, fallback if column doesn't exist
+    let { data, error } = await supabase.from("users").select("id, email, name, isAdmin, must_change_password, approved, can_use_timebuzzer, timebuzzer_user_id, userType, weekly_view_option");
+    
+    // If error is about missing column, retry without it
+    if (error && error.message?.includes('weekly_view_option')) {
+      const fallbackResult = await supabase.from("users").select("id, email, name, isAdmin, must_change_password, approved, can_use_timebuzzer, timebuzzer_user_id, userType");
+      if (fallbackResult.error) {
+        toast({ title: "Error", description: fallbackResult.error.message, variant: "destructive" });
+      } else {
+        // Add default weekly_view_option to all users
+        data = (fallbackResult.data || []).map((user: any) => ({
+          ...user,
+          weekly_view_option: 'both' // Default value
+        }));
+        error = null;
+      }
+    } else if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
-    } else {
+    }
+    
+    if (!error) {
       setUsers(data || []);
     }
     setLoading(false);
@@ -1380,6 +1397,50 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
     }
   };
 
+  // Change weekly view option for a user (only super admin can do this)
+  const handleChangeWeeklyViewOption = async (userId: string, userEmail: string, newOption: string) => {
+    if (currentUser?.email !== SUPER_ADMIN_EMAIL) {
+      toast({
+        title: "Access Denied",
+        description: "Only super admin can change weekly view options.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const { error } = await supabase.from("users").update({ 
+      weekly_view_option: newOption 
+    }).eq("id", userId);
+
+    if (error) {
+      if (error.message?.includes('weekly_view_option') || error.message?.includes('column') || error.message?.includes('does not exist')) {
+        toast({
+          title: "Column Not Found",
+          description: "The weekly_view_option column doesn't exist yet. Please run the SQL migration file 'add_weekly_view_option_column.sql' in Supabase SQL Editor first.",
+          variant: "destructive",
+          duration: 10000,
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: error.message,
+          variant: "destructive",
+        });
+      }
+    } else {
+      const optionLabels: Record<string, string> = {
+        'simple': 'Simple Only',
+        'original': 'Original Only',
+        'both': 'Both Views (User Choice)'
+      };
+      toast({
+        title: "Updated",
+        description: `Weekly view option for ${userEmail} set to ${optionLabels[newOption] || newOption}.`,
+      });
+      fetchUsers();
+    }
+  };
+
   // Approve pending user
   const handleApproveUser = async (userId: string, userEmail: string) => {
     const { error } = await supabase.from("users").update({ approved: true }).eq("id", userId);
@@ -2154,6 +2215,24 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                       </div>
                     </div>
                   )}
+                  {currentUser.email === SUPER_ADMIN_EMAIL && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600 dark:text-gray-400">Weekly View:</span>
+                      <Select 
+                        value={user.weekly_view_option || 'both'} 
+                        onValueChange={(value) => handleChangeWeeklyViewOption(user.id, user.email, value)}
+                      >
+                        <SelectTrigger className="h-8 w-32 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="simple">Simple Only</SelectItem>
+                          <SelectItem value="original">Original Only</SelectItem>
+                          <SelectItem value="both">Both (User Choice)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
                   <div className="flex justify-between">
                     <span className="text-gray-600 dark:text-gray-400">{t('admin.daysOffLeft')}:</span>
                     <span className="font-semibold text-gray-900 dark:text-gray-100">
@@ -2235,6 +2314,9 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                     <th className="p-2 text-left text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700">{t('admin.mustChangePassword')}</th>
                     {currentUser.email === SUPER_ADMIN_EMAIL && (
                       <th className="p-2 text-left text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700">Timebuzzer</th>
+                    )}
+                    {currentUser.email === SUPER_ADMIN_EMAIL && (
+                      <th className="p-2 text-left text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700">Weekly View</th>
                     )}
                     <th className="p-2 text-left text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700">{t('admin.daysOffLeft')}</th>
                     <th className="p-2 text-left text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700">{t('admin.actions')}</th>
@@ -2383,6 +2465,23 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                           />
                           <span className="text-gray-900 dark:text-gray-100">{user.can_use_timebuzzer ? t('admin.yes') : t('admin.no')}</span>
                         </div>
+                      </td>
+                    )}
+                    {currentUser.email === SUPER_ADMIN_EMAIL && (
+                      <td className="p-2 border border-gray-300 dark:border-gray-700">
+                        <Select 
+                          value={user.weekly_view_option || 'both'} 
+                          onValueChange={(value) => handleChangeWeeklyViewOption(user.id, user.email, value)}
+                        >
+                          <SelectTrigger className="h-9 w-32 text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="simple">Simple Only</SelectItem>
+                            <SelectItem value="original">Original Only</SelectItem>
+                            <SelectItem value="both">Both (User Choice)</SelectItem>
+                          </SelectContent>
+                        </Select>
                       </td>
                     )}
                     <td className="p-2 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700">

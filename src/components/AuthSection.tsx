@@ -57,7 +57,7 @@ const AuthSection = ({ onLogin, setCurrentUser }: AuthSectionProps) => {
     for (let attempt = 1; attempt <= 3; attempt++) {
       const { data, error: queryError } = await supabase
         .from("users")
-        .select("id, email, name, password, isAdmin, must_change_password, approved, created_at, photo_url, phone_number, userType")
+        .select("id, email, name, password, isAdmin, must_change_password, approved, created_at, photo_url, phone_number, userType, weekly_view_option")
         .eq("email", loginData.email)
         .single();
       
