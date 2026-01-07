@@ -46,8 +46,10 @@ const workTypes = [
 const workTypeRequiresProject = (workType: string): boolean => {
   if (!workType) return true; // Empty work type requires project
   const workTypeNum = parseInt(workType, 10);
-  // Work types 30-40 don't require a project
-  return workTypeNum < 30 || workTypeNum > 40;
+  // Work types 17 and 30-40 don't require a project
+  if (workTypeNum === 17) return false;
+  if (workTypeNum >= 30 && workTypeNum <= 40) return false;
+  return true;
 };
 
 function getWeekDates(date: Date) {
@@ -681,11 +683,11 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
         const entry = day.entries[entryIdx];
         const isDayOff = entry.workType === "31";
         const requiresProject = workTypeRequiresProject(entry.workType);
-        // Only validate required fields for Mon-Fri
-        if (!isWeekend && ((!entry.project && requiresProject) || !entry.workType || !entry.hours)) {
+        // For non-weekend days, require: workType, and either (project or work type doesn't require project), and (startTime/endTime or hours)
+        if (!isWeekend && ((!entry.project && requiresProject) || !entry.workType || (!entry.startTime && !entry.endTime && !entry.hours))) {
           toast({
             title: "Missing Information",
-            description: `Please fill in all required fields for ${day.date.toLocaleDateString()}`,
+            description: `Please fill in all required fields for ${day.date.toLocaleDateString()}. You need to enter start and end times.`,
             variant: "destructive",
           });
           return;
@@ -729,38 +731,65 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
           }
         }
         // For weekends, skip empty entries
-        if (isWeekend && (!entry.project && !isDayOff) && !entry.workType && !entry.hours) {
+        if (isWeekend && (!entry.project && !isDayOff) && !entry.workType && !entry.startTime && !entry.endTime && !entry.hours) {
           continue;
         }
         
-        // Validate hours match start/end time if both are provided
-        if (entry.startTime && entry.endTime && entry.hours) {
+        // Calculate hours from start/end time if available, otherwise use entered hours
+        let hoursToSave = 0;
+        // If full day off is checked, use 8 hours
+        if (isDayOff && entry.fullDayOff) {
+          hoursToSave = 8;
+        } else if (entry.startTime && entry.endTime) {
           const start = new Date(`2000-01-01T${entry.startTime}`);
           const end = new Date(`2000-01-01T${entry.endTime}`);
           const calculatedHours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
-          const enteredHours = Number(entry.hours);
-          const expectedHours = calculatedHours;
-          
-          // Allow small difference (0.25 hours = 15 minutes tolerance)
-          if (Math.abs(enteredHours - expectedHours) > 0.25) {
-            toast({
-              title: "Hours Mismatch",
-              description: `For ${day.date.toLocaleDateString()}: The entered hours (${enteredHours}h) don't match the time range (${entry.startTime} - ${entry.endTime}). Expected approximately ${expectedHours.toFixed(2)}h.`,
-              variant: "destructive",
-            });
-            return;
-          }
+          hoursToSave = calculatedHours;
+        } else if (entry.hours) {
+          hoursToSave = Number(entry.hours);
         }
         
-        let hoursToSave = Number(entry.hours);
+        if (hoursToSave <= 0 && !isDayOff) {
+          toast({
+            title: "Invalid Hours",
+            description: `Please enter valid start and end times for ${day.date.toLocaleDateString()}.`,
+            variant: "destructive",
+          });
+          return;
+        }
         
-        entriesToSave.push({
+        // For day off, ensure we have at least some hours
+        if (isDayOff && hoursToSave <= 0) {
+          toast({
+            title: "Error",
+            description: "Please enter valid hours or check 'Hele dag vrij'",
+            variant: "destructive",
+          });
+          return;
+        }
+        
+        const insertData: any = {
           project: isDayOff ? null : entry.project,
           user_id: currentUser?.id || null,
           date: day.date.toISOString().split('T')[0],
           hours: hoursToSave,
           description: entry.workType,
-        });
+        };
+        
+        // Only include startTime/endTime if they are provided
+        if (entry.startTime) {
+          insertData.startTime = entry.startTime;
+        } else {
+          insertData.startTime = null;
+        }
+        
+        if (entry.endTime) {
+          insertData.endTime = entry.endTime;
+        } else {
+          insertData.endTime = null;
+        }
+        
+        entriesToSave.push(insertData);
       }
     }
     if (entriesToSave.length === 0) {
@@ -772,6 +801,18 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
       toast({ title: "Entries Saved", description: `${entriesToSave.length} entries logged.` });
+      // Refresh submitted entries for all days in the week
+      weekDates.forEach(d => fetchSubmittedEntries(d.toISOString().split('T')[0]));
+      // Check if any saved entries were day off entries and refresh days off
+      const hasDayOffEntry = entriesToSave.some(e => e.description === "31");
+      if (hasDayOffEntry) {
+        await fetchDaysOff();
+      }
+      // Reset entries to empty
+      setDays(getWeekDates(weekStart).map(date => ({ 
+        date, 
+        entries: [{ workType: "", project: "", hours: "", startTime: "", endTime: "", fullDayOff: false }] 
+      })));
     }
   };
 
@@ -1036,7 +1077,7 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
       // Reset that day's entries to a single empty entry
       setDays(prevDays => prevDays.map((d, i) =>
         i === dayIdx
-          ? { ...d, entries: [{ workType: "", project: "", hours: "", lunch: true, startTime: "", endTime: "" }] }
+          ? { ...d, entries: [{ workType: "", project: "", hours: "", startTime: "", endTime: "", fullDayOff: false }] }
           : d
       ));
       await fetchSubmittedEntries(day.date.toISOString().split('T')[0]);
@@ -1445,13 +1486,21 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
     return hasSubmitted || hasNew;
   });
 
+  // Helper functions for Excel export
+  // Format date to YYYY-MM-DD in local time (not UTC)
+  const formatDateToYYYYMMDD = (date: Date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   // Helper to format date as DD/MM/YY
   const formatDateDDMMYY = (dateStr: string) => {
-    const date = new Date(dateStr);
-    const day = String(date.getDate()).padStart(2, '0');
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const year = String(date.getFullYear()).slice(-2);
-    return `${day}/${month}/${year}`;
+    // Parse date string directly to avoid timezone conversion issues
+    // dateStr is in format "YYYY-MM-DD"
+    const [year, month, day] = dateStr.split('-');
+    return `${day}/${month}/${year.slice(-2)}`;
   };
 
   // Helper to format hours as HH:MM
@@ -1481,8 +1530,8 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
       return;
     }
 
-    const fromDate = weekDates[0].toISOString().split('T')[0];
-    const toDate = weekDates[6].toISOString().split('T')[0];
+    const fromDate = formatDateToYYYYMMDD(weekDates[0]);
+    const toDate = formatDateToYYYYMMDD(weekDates[6]);
 
     const { data, error } = await supabase
       .from("timesheet")

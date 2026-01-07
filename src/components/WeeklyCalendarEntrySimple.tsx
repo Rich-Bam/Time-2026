@@ -47,8 +47,10 @@ const workTypes = [
 const workTypeRequiresProject = (workType: string): boolean => {
   if (!workType) return true; // Empty work type requires project
   const workTypeNum = parseInt(workType, 10);
-  // Work types 30-40 don't require a project
-  return workTypeNum < 30 || workTypeNum > 40;
+  // Work types 17 and 30-40 don't require a project
+  if (workTypeNum === 17) return false;
+  if (workTypeNum >= 30 && workTypeNum <= 40) return false;
+  return true;
 };
 
 function getWeekDates(date: Date) {
