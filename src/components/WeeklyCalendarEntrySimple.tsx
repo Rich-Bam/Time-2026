@@ -15,6 +15,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import * as XLSX from "xlsx";
 import ExcelJS from "exceljs";
 import { cn } from "@/lib/utils";
+import { formatDateToYYYYMMDD } from "@/utils/dateUtils";
 
 const workTypes = [
   { value: 10, label: "Work" },
@@ -342,7 +343,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
       data.forEach(entry => {
         const date = new Date(entry.date);
         const weekStart = getWeekDates(date)[0];
-        weekStarts.add(weekStart.toISOString().split('T')[0]);
+        weekStarts.add(formatDateToYYYYMMDD(weekStart));
       });
 
       // Convert to array and format for dropdown
@@ -398,13 +399,13 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
 
   useEffect(() => {
     if (!currentUser) return;
-    weekDates.forEach(d => fetchSubmittedEntries(d.toISOString().split('T')[0]));
+    weekDates.forEach(d => fetchSubmittedEntries(formatDateToYYYYMMDD(d)));
   }, [currentUser, weekStart]);
 
   // Fetch confirmed status
   const fetchConfirmedStatus = async () => {
     if (!currentUser) return;
-    const weekKey = weekDates[0].toISOString().split('T')[0];
+    const weekKey = formatDateToYYYYMMDD(weekDates[0]);
     const { data, error } = await supabase
       .from('confirmed_weeks')
       .select('confirmed, admin_approved')
@@ -443,7 +444,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
   useEffect(() => {
     if (!currentUser) return;
     
-    const weekKey = weekDates[0].toISOString().split('T')[0];
+    const weekKey = formatDateToYYYYMMDD(weekDates[0]);
     
     const channel = supabase
       .channel(`confirmed_weeks_simple_${currentUser.id}_${weekKey}`)
@@ -484,14 +485,14 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
   };
 
   const handleAddEntry = (dayIdx: number) => {
-    const weekKeyCheck = weekDates[0].toISOString().split('T')[0];
+    const weekKeyCheck = formatDateToYYYYMMDD(weekDates[0]);
     if (confirmedWeeks[weekKeyCheck]) {
       return;
     }
     
     // Find the last entry's endTime and project (from either editable entries or submitted entries)
     const day = days[dayIdx];
-    const dateStr = day.date.toISOString().split('T')[0];
+    const dateStr = formatDateToYYYYMMDD(day.date);
     
     // Get all entries for this day (editable + submitted)
     const allEntries = [
@@ -532,7 +533,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
   };
 
   const handleRemoveEntry = (dayIdx: number, entryIdx: number) => {
-    const weekKeyCheck = weekDates[0].toISOString().split('T')[0];
+    const weekKeyCheck = formatDateToYYYYMMDD(weekDates[0]);
     if (confirmedWeeks[weekKeyCheck]) {
       return;
     }
@@ -546,7 +547,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
 
   const handleEntryChange = (dayIdx: number, entryIdx: number, field: string, value: any) => {
     // Prevent changes if week is locked
-    const weekKeyCheck = weekDates[0].toISOString().split('T')[0];
+    const weekKeyCheck = formatDateToYYYYMMDD(weekDates[0]);
     const isWeekLocked = !!confirmedWeeks[weekKeyCheck];
     if (isWeekLocked) {
       console.log('handleEntryChange blocked - week is locked:', weekKeyCheck);
@@ -586,7 +587,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
   const handleSaveEntry = async (dayIdx: number, entryIdx: number) => {
     if (!currentUser) return;
     
-    const weekKeyCheck = weekDates[0].toISOString().split('T')[0];
+    const weekKeyCheck = formatDateToYYYYMMDD(weekDates[0]);
     if (confirmedWeeks[weekKeyCheck]) {
       return;
     }
@@ -596,7 +597,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
     
     const entry = day.entries[entryIdx];
     if (!entry) return;
-    const dateStr = day.date.toISOString().split('T')[0];
+    const dateStr = formatDateToYYYYMMDD(day.date);
     
     // Validate required fields
     const isDayOff = entry.workType === "31";
@@ -832,12 +833,12 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
   
   // Edit an existing entry
   const handleEditEntry = (entry: Entry, dateStr: string) => {
-    const weekKeyCheck = weekDates[0].toISOString().split('T')[0];
+    const weekKeyCheck = formatDateToYYYYMMDD(weekDates[0]);
     if (confirmedWeeks[weekKeyCheck]) {
       return;
     }
     
-    const dayIdx = days.findIndex(d => d.date.toISOString().split('T')[0] === dateStr);
+    const dayIdx = days.findIndex(d => formatDateToYYYYMMDD(d.date) === dateStr);
     if (dayIdx === -1) return;
     
     const day = days[dayIdx];
@@ -955,7 +956,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
     
     if (!currentUser) return;
     
-    const weekKey = weekDates[0].toISOString().split('T')[0];
+    const weekKey = formatDateToYYYYMMDD(weekDates[0]);
     const isWeekLocked = confirmedWeeks[weekKey];
     
     if (isWeekLocked && !currentUser?.isAdmin) {
@@ -968,10 +969,10 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
     }
     
     const previousDay = days[dayIdx - 1];
-    const previousDateStr = previousDay.date.toISOString().split('T')[0];
+    const previousDateStr = formatDateToYYYYMMDD(previousDay.date);
     const previousSubmitted = submittedEntries[previousDateStr] || [];
     const currentDay = days[dayIdx];
-    const currentDateStr = currentDay.date.toISOString().split('T')[0];
+    const currentDateStr = formatDateToYYYYMMDD(currentDay.date);
     
     // Combine previous day's editable entries and submitted entries
     // Include entries that have workType and either:
@@ -1131,7 +1132,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
   const handleSubmitAll = async () => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const weekKey = weekDates[0].toISOString().split('T')[0];
+    const weekKey = formatDateToYYYYMMDD(weekDates[0]);
     const isWeekLocked = confirmedWeeks[weekKey];
     
     if (isWeekLocked && !currentUser?.isAdmin) {
@@ -1243,7 +1244,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
         entriesToSave.push({
           project: isDayOff ? null : entry.project,
           user_id: currentUser?.id || null,
-          date: day.date.toISOString().split('T')[0],
+          date: formatDateToYYYYMMDD(day.date),
           hours: hoursToSave,
           description: entry.workType,
           startTime: entry.startTime || null,
@@ -1263,7 +1264,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
     } else {
       toast({ title: "Saved", description: `${entriesToSave.length} entries saved.` });
       // Refresh submitted entries
-      weekDates.forEach(d => fetchSubmittedEntries(d.toISOString().split('T')[0]));
+      weekDates.forEach(d => fetchSubmittedEntries(formatDateToYYYYMMDD(d)));
       // Check if any saved entries were day off entries and refresh days off
       const hasDayOffEntry = entriesToSave.some(e => e.description === "31");
       if (hasDayOffEntry) {
@@ -1278,7 +1279,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
   };
 
   const handleDeleteEntry = async (entryId: number, dateStr: string) => {
-    const weekKeyCheck = weekDates[0].toISOString().split('T')[0];
+    const weekKeyCheck = formatDateToYYYYMMDD(weekDates[0]);
     if (confirmedWeeks[weekKeyCheck]) {
       return;
     }
@@ -1302,13 +1303,6 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
   };
 
   // Helper functions for Excel export
-  // Format date to YYYY-MM-DD in local time (not UTC)
-  const formatDateToYYYYMMDD = (date: Date) => {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  };
 
   const formatDateDDMMYY = (dateStr: string) => {
     // Parse date string directly to avoid timezone conversion issues
@@ -1485,7 +1479,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
       // Add total row
       const totalRowIndex = 8 + dayEntries.length;
       const totalRow = worksheet.getRow(totalRowIndex);
-      totalRow.getCell(2).value = t('weekly.total');
+      totalRow.getCell(2).value = t('daily.total');
       totalRow.getCell(2).font = { bold: true };
       totalRow.getCell(6).value = totalHoursHHMM;
       totalRow.getCell(6).font = { bold: true };
@@ -1515,7 +1509,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
   const handleConfirmWeek = async () => {
     if (!currentUser) return;
     
-    const weekKey = weekDates[0].toISOString().split('T')[0];
+    const weekKey = formatDateToYYYYMMDD(weekDates[0]);
     
     // Check if week already has confirmed status
     const { data: existing } = await supabase
@@ -1555,7 +1549,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
       });
     } else {
       // Immediately update state to lock the week - this will trigger a re-render and hide all editable elements
-      const weekKeyDate = weekDates[0].toISOString().split('T')[0];
+      const weekKeyDate = formatDateToYYYYMMDD(weekDates[0]);
       console.log('CONFIRMING WEEK - Setting state to locked:', weekKeyDate, 'isAdmin:', currentUser.isAdmin);
       
       // Lock the week immediately - both for admins and non-admins
@@ -1592,7 +1586,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
   // Week is locked if confirmed AND (user is not admin OR admin hasn't approved yet)
   // For simplicity: if confirmedWeeks[weekKey] is true, the week is locked (regardless of admin status)
   // Admins will need to use the admin panel to approve/unlock weeks
-  const weekKey = weekDates[0].toISOString().split('T')[0];
+  const weekKey = formatDateToYYYYMMDD(weekDates[0]);
   const isLocked = !!confirmedWeeks[weekKey];
   
   // Debug logging
@@ -1622,7 +1616,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
             {/* Week selector - Only for normal users (not admins or administratie) */}
             {currentUser && !currentUser?.isAdmin && currentUser?.userType !== 'administratie' && availableWeeks.length > 0 && (
               <Select
-                value={weekDates[0].toISOString().split('T')[0]}
+                value={formatDateToYYYYMMDD(weekDates[0])}
                 onValueChange={(value) => {
                   const selectedWeek = availableWeeks.find(w => w.weekStart === value);
                   if (selectedWeek) {
@@ -1702,7 +1696,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
         <CardContent className="p-2 sm:p-4">
           <div className="space-y-3 sm:space-y-4">
             {days.map((day, dayIdx) => {
-              const dateStr = day.date.toISOString().split('T')[0];
+              const dateStr = formatDateToYYYYMMDD(day.date);
               
               // Check if there's a fullDayOff entry for this day (in editable or submitted entries)
               // A fullDayOff entry is either:
@@ -1748,7 +1742,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
               const dayName = day.date.toLocaleDateString(locale, { weekday: 'long', day: 'numeric', month: 'long' });
               const dayShort = day.date.toLocaleDateString(locale, { weekday: 'short', day: 'numeric', month: 'short' });
               const dayColors = [
-                'bg-blue-50 border-blue-200', // Monday
+                'bg-blue-50 border-blue-200 dark:', // Monday
                 'bg-green-50 border-green-200', // Tuesday
                 'bg-yellow-50 border-yellow-200', // Wednesday
                 'bg-purple-50 border-purple-200', // Thursday
@@ -1763,8 +1757,8 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
                   {/* Day Header */}
                   <div className={`px-3 sm:px-4 py-2 sm:py-3 border-b-2 ${dayColor.replace('50', '200')} flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2`}>
                     <div className="flex items-center gap-2 sm:gap-3">
-                      <h3 className="font-bold text-base sm:text-lg text-gray-800 dark:text-gray-100">{isMobile ? dayShort : dayName}</h3>
-                      {!isMobile && <span className="text-sm text-gray-600 dark:text-gray-400">({dayShort})</span>}
+                      <h3 className="font-bold text-base sm:text-lg text-gray-800 dark:text-gray-900">{isMobile ? dayShort : dayName}</h3>
+                      {!isMobile && <span className="text-sm text-gray-600 dark:text-gray-900">({dayShort})</span>}
                     </div>
                     {!isLocked && (
                       <div className={`flex gap-2 ${isMobile ? 'w-full' : ''}`}>
@@ -2174,7 +2168,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
                       {/* Total for mobile */}
                       <div className="bg-gray-200 dark:bg-gray-700 rounded-lg border-2 border-gray-400 dark:border-gray-600 p-3 font-bold">
                         <div className="flex items-center justify-between">
-                          <span className="text-sm sm:text-base text-gray-900 dark:text-gray-100">{t('weekly.total') || 'Totaal per dag'}:</span>
+                          <span className="text-sm sm:text-base text-gray-900 dark:text-gray-900">{t('daily.total') || 'Totaal per dag'}:</span>
                           <span className="text-sm sm:text-base text-gray-900 dark:text-gray-100">
                             {calculateDayTotal(dayIdx, dateStr).toFixed(2)}h
                           </span>
@@ -2565,10 +2559,10 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
                           {/* Total row */}
                           <tr className="border-t-2 border-gray-400 dark:border-gray-600 bg-gray-100 dark:border-gray-800 font-bold">
                             <td className="border border-gray-300 dark:border-gray-700 p-2 text-right" colSpan={4}>
-                              <span className="text-sm sm:text-base text-gray-900 dark:text-gray-100">{t('weekly total') || 'Totaal per dag'}:</span>
+                              <span className="text-sm sm:text-base text-gray-900 dark:text-gray-900">{t('daily total') || 'Totaal per dag'}:</span>
                             </td>
                             <td className="border border-gray-300 dark:border-gray-700 p-2">
-                              <span className="text-sm sm:text-base text-gray-900 dark:text-gray-100">
+                              <span className="text-sm sm:text-base text-gray-900 dark:text-gray-900">
                                 {calculateDayTotal(dayIdx, dateStr).toFixed(2)}h
                               </span>
                             </td>

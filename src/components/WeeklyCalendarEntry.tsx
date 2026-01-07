@@ -14,6 +14,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import * as XLSX from "xlsx";
 import ExcelJS from "exceljs";
 import { cn } from "@/lib/utils";
+import { formatDateToYYYYMMDD } from "@/utils/dateUtils";
 
 const workTypes = [
   { value: 10, label: "Work" },
@@ -236,7 +237,7 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
       data.forEach(entry => {
         const date = new Date(entry.date);
         const weekStart = getWeekDates(date)[0];
-        weekStarts.add(weekStart.toISOString().split('T')[0]);
+        weekStarts.add(formatDateToYYYYMMDD(weekStart));
       });
 
       // Convert to array and format for dropdown
@@ -288,14 +289,14 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
   // On mount and when week changes, fetch submitted entries for all days in the week
   useEffect(() => {
     if (!currentUser) return;
-    weekDates.forEach(d => fetchSubmittedEntries(d.toISOString().split('T')[0]));
+    weekDates.forEach(d => fetchSubmittedEntries(formatDateToYYYYMMDD(d)));
     // eslint-disable-next-line
   }, [currentUser, weekStart]);
 
   // Fetch confirmed status for the week
   const fetchConfirmedStatus = async () => {
     if (!currentUser) return;
-    const weekKey = weekDates[0].toISOString().split('T')[0];
+    const weekKey = formatDateToYYYYMMDD(weekDates[0]);
     const { data } = await supabase
       .from('confirmed_weeks')
       .select('confirmed, admin_approved')
@@ -318,7 +319,7 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
   const handleConfirmWeek = async () => {
     if (!currentUser) return;
     
-    const weekKey = weekDates[0].toISOString().split('T')[0];
+    const weekKey = formatDateToYYYYMMDD(weekDates[0]);
     
     // Check if week already has confirmed status
     const { data: existing } = await supabase
@@ -358,7 +359,7 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
       });
     } else {
       // Immediately update state to lock the week
-      const weekKeyDate = weekDates[0].toISOString().split('T')[0];
+      const weekKeyDate = formatDateToYYYYMMDD(weekDates[0]);
       console.log('CONFIRMING WEEK (Original view) - Setting state to locked:', weekKeyDate);
       
       // Lock the week immediately
@@ -379,7 +380,7 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
   useEffect(() => {
     if (!currentUser) return;
     
-    const weekKey = weekDates[0].toISOString().split('T')[0];
+    const weekKey = formatDateToYYYYMMDD(weekDates[0]);
     
     const channel = supabase
       .channel(`confirmed_weeks_${currentUser.id}_${weekKey}`)
@@ -444,7 +445,7 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
   };
 
   const handleAddEntry = (dayIdx: number) => {
-    const weekKey = weekDates[0].toISOString().split('T')[0];
+    const weekKey = formatDateToYYYYMMDD(weekDates[0]);
     const isWeekLocked = confirmedWeeks[weekKey];
     
     // Non-admins cannot add entries if week is confirmed
@@ -463,7 +464,7 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
   };
 
   const handleRemoveEntry = (dayIdx: number, entryIdx: number) => {
-    const weekKey = weekDates[0].toISOString().split('T')[0];
+    const weekKey = formatDateToYYYYMMDD(weekDates[0]);
     const isWeekLocked = confirmedWeeks[weekKey];
     
     // Non-admins cannot remove entries if week is confirmed
@@ -485,7 +486,7 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
     // Prevent updates for submitted entries (entryIdx === -1)
     if (entryIdx < 0) return;
     
-    const weekKey = weekDates[0].toISOString().split('T')[0];
+    const weekKey = formatDateToYYYYMMDD(weekDates[0]);
     const isWeekLocked = confirmedWeeks[weekKey];
     
     // Non-admins cannot change entries if week is confirmed
@@ -554,7 +555,7 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
   const handleSubmitAll = async () => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const weekKey = weekDates[0].toISOString().split('T')[0];
+    const weekKey = formatDateToYYYYMMDD(weekDates[0]);
     const isWeekLocked = confirmedWeeks[weekKey];
     
     // Non-admins cannot submit if week is confirmed
@@ -771,7 +772,7 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
         const insertData: any = {
           project: isDayOff ? null : entry.project,
           user_id: currentUser?.id || null,
-          date: day.date.toISOString().split('T')[0],
+          date: formatDateToYYYYMMDD(day.date),
           hours: hoursToSave,
           description: entry.workType,
         };
@@ -802,7 +803,7 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
     } else {
       toast({ title: "Entries Saved", description: `${entriesToSave.length} entries logged.` });
       // Refresh submitted entries for all days in the week
-      weekDates.forEach(d => fetchSubmittedEntries(d.toISOString().split('T')[0]));
+      weekDates.forEach(d => fetchSubmittedEntries(formatDateToYYYYMMDD(d)));
       // Check if any saved entries were day off entries and refresh days off
       const hasDayOffEntry = entriesToSave.some(e => e.description === "31");
       if (hasDayOffEntry) {
@@ -828,7 +829,7 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
   const handleSubmitDay = async (dayIdx: number) => {
     const day = days[dayIdx];
     const isWeekend = day.date.getDay() === 0 || day.date.getDay() === 6;
-    const weekKey = weekDates[0].toISOString().split('T')[0];
+    const weekKey = formatDateToYYYYMMDD(weekDates[0]);
     const isWeekLocked = confirmedWeeks[weekKey];
     
     // Non-admins cannot submit if week is confirmed
@@ -903,7 +904,7 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
     }
     
     const entriesToSave = [];
-    const dateStr = day.date.toISOString().split('T')[0];
+    const dateStr = formatDateToYYYYMMDD(day.date);
     const allEntries = [
       ...day.entries,
       ...(submittedEntries[dateStr] || []).map(e => ({ startTime: e.startTime, endTime: e.endTime }))
@@ -1045,7 +1046,7 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
       const insertData: any = {
         project: projectToSave,
         user_id: currentUser?.id || null,
-        date: day.date.toISOString().split('T')[0],
+        date: formatDateToYYYYMMDD(day.date),
         hours: hoursToSave,
         description: entry.workType,
       };
@@ -1080,7 +1081,7 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
           ? { ...d, entries: [{ workType: "", project: "", hours: "", startTime: "", endTime: "", fullDayOff: false }] }
           : d
       ));
-      await fetchSubmittedEntries(day.date.toISOString().split('T')[0]);
+      await fetchSubmittedEntries(formatDateToYYYYMMDD(day.date));
       // Check if any saved entries were day off entries and refresh days off
       const hasDayOffEntry = entriesToSave.some(e => e.description === "31");
       if (hasDayOffEntry) {
@@ -1124,7 +1125,7 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
 
 
   const handleEditEntry = (entry: any, dateStr: string) => {
-    const weekKey = weekDates[0].toISOString().split('T')[0];
+    const weekKey = formatDateToYYYYMMDD(weekDates[0]);
     const isWeekLocked = confirmedWeeks[weekKey];
     
     // Non-admins cannot edit if week is confirmed
@@ -1137,7 +1138,7 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
       return;
     }
     
-    const dayIdx = days.findIndex(d => d.date.toISOString().split('T')[0] === dateStr);
+    const dayIdx = days.findIndex(d => formatDateToYYYYMMDD(d.date) === dateStr);
     if (dayIdx === -1) return;
     
     const day = days[dayIdx];
@@ -1178,7 +1179,7 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
   };
 
   const handleDeleteEntry = async (entryId: number, dateStr: string) => {
-    const weekKey = weekDates[0].toISOString().split('T')[0];
+    const weekKey = formatDateToYYYYMMDD(weekDates[0]);
     const isWeekLocked = confirmedWeeks[weekKey];
     
     // Non-admins cannot delete if week is confirmed
@@ -1233,7 +1234,7 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
     
     if (!currentUser) return;
     
-    const weekKey = weekDates[0].toISOString().split('T')[0];
+    const weekKey = formatDateToYYYYMMDD(weekDates[0]);
     const isWeekLocked = confirmedWeeks[weekKey];
     
     if (isWeekLocked && !currentUser?.isAdmin) {
@@ -1246,10 +1247,10 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
     }
     
     const previousDay = days[dayIdx - 1];
-    const previousDateStr = previousDay.date.toISOString().split('T')[0];
+    const previousDateStr = formatDateToYYYYMMDD(previousDay.date);
     const previousSubmitted = submittedEntries[previousDateStr] || [];
     const currentDay = days[dayIdx];
-    const currentDateStr = currentDay.date.toISOString().split('T')[0];
+    const currentDateStr = formatDateToYYYYMMDD(currentDay.date);
     const isWeekend = currentDay.date.getDay() === 0 || currentDay.date.getDay() === 6;
     
     // Prevent future dates
@@ -1480,20 +1481,13 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
 
   // Helper to check if all weekdays are filled
   const allWeekdaysFilled = weekDates.slice(0, 5).every((date, idx) => {
-    const dateStr = date.toISOString().split('T')[0];
+    const dateStr = formatDateToYYYYMMDD(date);
     const hasSubmitted = (submittedEntries[dateStr] || []).length > 0;
     const hasNew = days[idx].entries.some(e => e.project || e.workType || e.hours);
     return hasSubmitted || hasNew;
   });
 
   // Helper functions for Excel export
-  // Format date to YYYY-MM-DD in local time (not UTC)
-  const formatDateToYYYYMMDD = (date: Date) => {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  };
 
   // Helper to format date as DD/MM/YY
   const formatDateDDMMYY = (dateStr: string) => {
@@ -1715,7 +1709,7 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
             {/* Week selector - Only for normal users (not admins or administratie) */}
             {currentUser && !currentUser?.isAdmin && currentUser?.userType !== 'administratie' && availableWeeks.length > 0 && (
               <Select
-                value={weekDates[0].toISOString().split('T')[0]}
+                value={formatDateToYYYYMMDD(weekDates[0])}
                 onValueChange={(value) => {
                   const selectedWeek = availableWeeks.find(w => w.weekStart === value);
                   if (selectedWeek) {
@@ -1787,7 +1781,7 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 sm:gap-4 mb-4">
             <div className="grid grid-cols-7 gap-1 sm:gap-2 flex-1">
               {days.map((day, dayIdx) => {
-                const dateStr = day.date.toISOString().split('T')[0];
+                const dateStr = formatDateToYYYYMMDD(day.date);
                 const submittedCount = (submittedEntries[dateStr] || []).length;
                 const totalEntries = day.entries.filter(e => e.project || e.workType || e.hours).length + submittedCount;
                 return (
@@ -1815,7 +1809,7 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
             </div>
           </div>
           
-          {confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && (
+          {confirmedWeeks[formatDateToYYYYMMDD(weekDates[0])] && (
             <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded text-yellow-800 text-sm">
               ⚠️ {t('weekly.weekConfirmedWarning')}
             </div>
@@ -1838,7 +1832,7 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
                 </thead>
                 <tbody>
                   {days.map((day, dayIdx) => {
-                    const dateStr = day.date.toISOString().split('T')[0];
+                    const dateStr = formatDateToYYYYMMDD(day.date);
                     const submitted = (submittedEntries[dateStr] || []).sort((a, b) => {
                       const timeA = a.startTime || "";
                       const timeB = b.startTime || "";
@@ -1846,7 +1840,7 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
                     });
                     // Week is locked if confirmed = true (regardless of admin status)
                     // Once confirmed, no one can edit (admins can unlock via admin panel if needed)
-                    const isLocked = !!confirmedWeeks[weekDates[0].toISOString().split('T')[0]];
+                    const isLocked = !!confirmedWeeks[formatDateToYYYYMMDD(weekDates[0])];
                     const dayName = day.date.toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short' });
                     
                     // Ensure at least one empty entry for editing
@@ -2122,7 +2116,7 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
                   })}
                 </tbody>
               </table>
-              {!confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && (
+              {!confirmedWeeks[formatDateToYYYYMMDD(weekDates[0])] && (
                 <div className="mt-4 flex justify-end">
                   <Button 
                     variant="default" 
@@ -2140,7 +2134,7 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
           {days.map((day, dayIdx) => day.open && (
             <div key={dayIdx} className="mb-3 sm:mb-4 border rounded-lg p-3 sm:p-4 bg-white dark:bg-gray-800 shadow">
               <div className="font-semibold mb-2 text-sm sm:text-base">{day.date.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'short', day: 'numeric' })}</div>
-              {confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && (
+              {confirmedWeeks[formatDateToYYYYMMDD(weekDates[0])] && (
                 <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded text-yellow-800 text-sm">
                   ⚠️ {t('weekly.confirmed')}
                 </div>
@@ -2225,7 +2219,7 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
                         onCheckedChange={(checked) => {
                           handleEntryChange(dayIdx, entryIdx, "fullDayOff", checked === true);
                         }}
-                        disabled={confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin}
+                        disabled={confirmedWeeks[formatDateToYYYYMMDD(weekDates[0])] && !currentUser?.isAdmin}
                       />
                       <Label 
                         htmlFor={`fullDayOff-cards-${dayIdx}-${entryIdx}`}
@@ -2243,13 +2237,13 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
                           value={entry.project}
                           onChange={e => handleEntryChange(dayIdx, entryIdx, "project", e.target.value)}
                           placeholder={t('weekly.projectPlaceholder')}
-                          disabled={!workTypeRequiresProject(entry.workType) || (confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin)}
+                          disabled={!workTypeRequiresProject(entry.workType) || (confirmedWeeks[formatDateToYYYYMMDD(weekDates[0])] && !currentUser?.isAdmin)}
                         />
                         <Button 
                           size="sm" 
                           variant="outline" 
                           onClick={() => handleEntryChange(dayIdx, entryIdx, "project", "")}
-                          disabled={!!confirmedWeeks[weekDates[0].toISOString().split('T')[0]]}
+                          disabled={!!confirmedWeeks[formatDateToYYYYMMDD(weekDates[0])]}
                         >
                           {t('weekly.clear')}
                         </Button>
@@ -2259,7 +2253,7 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
                         <Select
                           value={entry.project}
                           onValueChange={val => handleEntryChange(dayIdx, entryIdx, "project", val)}
-                          disabled={!workTypeRequiresProject(entry.workType) || (confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin)}
+                          disabled={!workTypeRequiresProject(entry.workType) || (confirmedWeeks[formatDateToYYYYMMDD(weekDates[0])] && !currentUser?.isAdmin)}
                         >
                           <SelectTrigger><SelectValue placeholder={t('weekly.projectPlaceholder')} /></SelectTrigger>
                           <SelectContent>
@@ -2273,14 +2267,14 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
                             value={customProjects[`${dayIdx}-${entryIdx}`] || ""}
                             onChange={e => setCustomProjects(prev => ({ ...prev, [`${dayIdx}-${entryIdx}`]: e.target.value }))}
                             placeholder={t('weekly.addCustomProject')}
-                            disabled={entry.workType === "31" || (confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin)}
+                            disabled={entry.workType === "31" || (confirmedWeeks[formatDateToYYYYMMDD(weekDates[0])] && !currentUser?.isAdmin)}
                           />
                           <Button
                             type="button"
                             size="sm"
                             className="ml-2"
                             onClick={() => handleAddCustomProject(dayIdx, entryIdx)}
-                            disabled={!!confirmedWeeks[weekDates[0].toISOString().split('T')[0]]}
+                            disabled={!!confirmedWeeks[formatDateToYYYYMMDD(weekDates[0])]}
                           >
                             {t('weekly.add')}
                           </Button>
@@ -2296,7 +2290,7 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
                       onChange={e => handleEntryChange(dayIdx, entryIdx, "startTime", roundToQuarterHour(e.target.value))}
                       placeholder={t('weekly.startPlaceholder')}
                       className="w-20"
-                      disabled={confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin}
+                      disabled={confirmedWeeks[formatDateToYYYYMMDD(weekDates[0])] && !currentUser?.isAdmin}
                     />
                   </div>
                   <div>
@@ -2307,7 +2301,7 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
                       onChange={e => handleEntryChange(dayIdx, entryIdx, "endTime", roundToQuarterHour(e.target.value))}
                       placeholder={t('weekly.endPlaceholder')}
                       className="w-20"
-                      disabled={confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin}
+                      disabled={confirmedWeeks[formatDateToYYYYMMDD(weekDates[0])] && !currentUser?.isAdmin}
                     />
                   </div>
                   <div>
@@ -2340,7 +2334,7 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
                     variant="destructive" 
                     size="sm" 
                     onClick={() => handleRemoveEntry(dayIdx, entryIdx)}
-                    disabled={confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin}
+                    disabled={confirmedWeeks[formatDateToYYYYMMDD(weekDates[0])] && !currentUser?.isAdmin}
                   >
                     -
                   </Button>
@@ -2351,7 +2345,7 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
                   <Button 
                     variant="outline" 
                     onClick={() => handleCopyFromPreviousDay(dayIdx)}
-                    disabled={confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin}
+                    disabled={confirmedWeeks[formatDateToYYYYMMDD(weekDates[0])] && !currentUser?.isAdmin}
                   >
                     {t('weekly.copyPrevious')}
                   </Button>
@@ -2359,12 +2353,12 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
                 <Button 
                   variant="default" 
                   onClick={() => handleSubmitDay(dayIdx)}
-                  disabled={confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin}
+                  disabled={confirmedWeeks[formatDateToYYYYMMDD(weekDates[0])] && !currentUser?.isAdmin}
                 >
                   {t('weekly.submitDay')}
                 </Button>
               </div>
-              {submittedEntries[day.date.toISOString().split('T')[0]] && submittedEntries[day.date.toISOString().split('T')[0]].length > 0 && (
+              {submittedEntries[formatDateToYYYYMMDD(day.date)] && submittedEntries[formatDateToYYYYMMDD(day.date)].length > 0 && (
                 <div className="mt-4">
                   <div className="font-semibold text-sm mb-1 text-gray-700 dark:text-gray-200">{t('weekly.submittedEntries')}</div>
                   <div className="overflow-x-auto">
@@ -2374,13 +2368,13 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
                           <th className="p-1 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">{t('weekly.project')}</th>
                           <th className="p-1 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">{t('weekly.workType')}</th>
                           <th className="p-1 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">{t('weekly.hours')}</th>
-                          {!confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && (
+                          {!confirmedWeeks[formatDateToYYYYMMDD(weekDates[0])] && (
                             <th className="p-1 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">{t('weekly.actions')}</th>
                           )}
                         </tr>
                       </thead>
                       <tbody>
-                        {(submittedEntries[day.date.toISOString().split('T')[0]] || []).sort((a, b) => {
+                        {(submittedEntries[formatDateToYYYYMMDD(day.date)] || []).sort((a, b) => {
                           const timeA = a.startTime || "";
                           const timeB = b.startTime || "";
                           return timeA.localeCompare(timeB);
@@ -2389,20 +2383,20 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
                             <td className="p-1 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-200">{entry.project}</td>
                             <td className="p-1 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-200">{entry.description}</td>
                             <td className="p-1 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-200">{entry.startTime && entry.endTime ? `${entry.startTime} - ${entry.endTime}` : '-'}</td>
-                            {!confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && (
+                            {!confirmedWeeks[formatDateToYYYYMMDD(weekDates[0])] && (
                               <td className="p-1 border border-gray-300 dark:border-gray-700">
                                 <div className="flex gap-1">
                                   <Button 
                                     size="icon" 
                                     variant="ghost" 
-                                    onClick={() => handleEditEntry(entry, day.date.toISOString().split('T')[0])}
+                                    onClick={() => handleEditEntry(entry, formatDateToYYYYMMDD(day.date))}
                                     title={t('common.edit')}
                                   >
                                     <svg className="h-4 w-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                                     </svg>
                                   </Button>
-                                  <Button size="icon" variant="ghost" onClick={() => handleDeleteEntry(entry.id, day.date.toISOString().split('T')[0])}>
+                                  <Button size="icon" variant="ghost" onClick={() => handleDeleteEntry(entry.id, formatDateToYYYYMMDD(day.date))}>
                                     <Trash2 className="h-4 w-4 text-red-500" />
                                   </Button>
                                 </div>
@@ -2421,7 +2415,7 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
           )}
         </CardContent>
       </Card>
-      {!confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && (
+      {!confirmedWeeks[formatDateToYYYYMMDD(weekDates[0])] && (
         <Card className="mt-4 bg-orange-50 border-orange-200 dark:bg-gray-900 border-gray-600">
           <CardContent className="p-4">
             <div className="flex flex-col gap-3">
@@ -2439,7 +2433,7 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
           </CardContent>
         </Card>
       )}
-      {confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && (
+      {confirmedWeeks[formatDateToYYYYMMDD(weekDates[0])] && (
         <Card className="mt-4 bg-blue-50 border-blue-200">
           <CardContent className="p-4">
             <div className="text-blue-800 font-semibold">

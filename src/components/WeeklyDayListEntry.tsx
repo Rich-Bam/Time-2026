@@ -59,7 +59,7 @@ const WeeklyDayListEntry = ({ currentUser }: { currentUser: any }) => {
   // Fetch confirmed status for the week
   const fetchConfirmedStatus = async () => {
     if (!currentUser) return;
-    const weekKey = weekDates[0].toISOString().split('T')[0];
+    const weekKey = formatDateToYYYYMMDD(weekDates[0]);
     const { data } = await supabase
       .from('confirmed_weeks')
       .select('confirmed, admin_approved')
@@ -84,7 +84,7 @@ const WeeklyDayListEntry = ({ currentUser }: { currentUser: any }) => {
   };
 
   const handleAddEntry = (dayIdx: number) => {
-    const weekKey = weekDates[0].toISOString().split('T')[0];
+    const weekKey = formatDateToYYYYMMDD(weekDates[0]);
     const isWeekLocked = confirmedWeeks[weekKey];
     
     // Non-admins cannot add entries if week is confirmed
@@ -103,7 +103,7 @@ const WeeklyDayListEntry = ({ currentUser }: { currentUser: any }) => {
   };
 
   const handleRemoveEntry = (dayIdx: number, entryIdx: number) => {
-    const weekKey = weekDates[0].toISOString().split('T')[0];
+    const weekKey = formatDateToYYYYMMDD(weekDates[0]);
     const isWeekLocked = confirmedWeeks[weekKey];
     
     // Non-admins cannot remove entries if week is confirmed
@@ -122,7 +122,7 @@ const WeeklyDayListEntry = ({ currentUser }: { currentUser: any }) => {
   };
 
   const handleEntryChange = (dayIdx: number, entryIdx: number, field: string, value: any) => {
-    const weekKey = weekDates[0].toISOString().split('T')[0];
+    const weekKey = formatDateToYYYYMMDD(weekDates[0]);
     const isWeekLocked = confirmedWeeks[weekKey];
     
     // Non-admins cannot change entries if week is confirmed
@@ -144,7 +144,7 @@ const WeeklyDayListEntry = ({ currentUser }: { currentUser: any }) => {
   const handleConfirmWeek = async () => {
     if (!currentUser) return;
     
-    const weekKey = weekDates[0].toISOString().split('T')[0];
+    const weekKey = formatDateToYYYYMMDD(weekDates[0]);
     
     // Check if week already has confirmed status
     const { data: existing } = await supabase
@@ -184,7 +184,7 @@ const WeeklyDayListEntry = ({ currentUser }: { currentUser: any }) => {
       });
     } else {
       // Immediately update state to lock the week
-      const weekKeyDate = weekDates[0].toISOString().split('T')[0];
+      const weekKeyDate = formatDateToYYYYMMDD(weekDates[0]);
       setConfirmedWeeks(prev => ({ ...prev, [weekKeyDate]: true }));
       
       toast({
@@ -206,14 +206,14 @@ const WeeklyDayListEntry = ({ currentUser }: { currentUser: any }) => {
         </div>
       </CardHeader>
       <CardContent>
-        {confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin && (
+        {confirmedWeeks[formatDateToYYYYMMDD(weekDates[0])] && !currentUser?.isAdmin && (
           <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded text-yellow-800 text-sm">
             ⚠️ This week is confirmed. You cannot make any changes until an admin has approved or reset it.
           </div>
         )}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {days.map((day, dayIdx) => {
-            const weekKey = weekDates[0].toISOString().split('T')[0];
+            const weekKey = formatDateToYYYYMMDD(weekDates[0]);
             const isLocked = confirmedWeeks[weekKey] && !currentUser?.isAdmin;
             return (
               <div key={dayIdx} className="border rounded-lg p-4 bg-gray-50">
@@ -248,11 +248,11 @@ const WeeklyDayListEntry = ({ currentUser }: { currentUser: any }) => {
           })}
         </div>
         <div className="flex gap-4 mt-4">
-          <Button variant="default" disabled={confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin}>Submit All</Button>
+          <Button variant="default" disabled={confirmedWeeks[formatDateToYYYYMMDD(weekDates[0])] && !currentUser?.isAdmin}>Submit All</Button>
         </div>
       </CardContent>
     </Card>
-    {!confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && (
+    {!confirmedWeeks[formatDateToYYYYMMDD(weekDates[0])] && (
       <Card className="mt-4 bg-orange-50 border-orange-200">
         <CardContent className="p-4">
           <div className="flex flex-col gap-3">
@@ -270,7 +270,7 @@ const WeeklyDayListEntry = ({ currentUser }: { currentUser: any }) => {
         </CardContent>
       </Card>
     )}
-    {confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && (
+    {confirmedWeeks[formatDateToYYYYMMDD(weekDates[0])] && (
       <Card className="mt-4 bg-blue-50 border-blue-200">
         <CardContent className="p-4">
           <div className="text-blue-800 font-semibold">

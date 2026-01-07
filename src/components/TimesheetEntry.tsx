@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Clock, Calendar, Plus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { formatDateToYYYYMMDD } from "@/utils/dateUtils";
 
 interface TimesheetEntryProps {
   currentUser: any;
@@ -16,13 +17,20 @@ interface TimesheetEntryProps {
 }
 
 const TimesheetEntry = ({ currentUser, hasUnreadDaysOffNotification = false }: TimesheetEntryProps) => {
-  const [entry, setEntry] = useState({
-    date: new Date().toISOString().split('T')[0],
-    project: "",
-    hours: "",
-    description: "",
-    startTime: "",
-    endTime: ""
+  // Initialize entry with today's date in local timezone (avoiding import initialization issues)
+  const [entry, setEntry] = useState(() => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return {
+      date: `${year}-${month}-${day}`,
+      project: "",
+      hours: "",
+      description: "",
+      startTime: "",
+      endTime: ""
+    };
   });
 
   const { toast } = useToast();
@@ -211,7 +219,7 @@ const TimesheetEntry = ({ currentUser, hasUnreadDaysOffNotification = false }: T
     });
 
     setEntry({
-      date: new Date().toISOString().split('T')[0],
+      date: formatDateToYYYYMMDD(new Date()),
       project: "",
       hours: "",
       description: "",

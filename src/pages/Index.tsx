@@ -27,6 +27,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { createPDF } from "@/utils/pdfExport";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { formatDateToYYYYMMDD } from "@/utils/dateUtils";
 
 const Index = () => {
   const [searchParams] = useSearchParams();
@@ -74,7 +75,14 @@ const Index = () => {
   const [activeTab, setActiveTab] = useState("weekly");
   const [weeklySubTab, setWeeklySubTab] = useState('daylist');
   const [exportPeriod, setExportPeriod] = useState<"day" | "week" | "month" | "year">("week");
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  // Initialize selectedDate with today's date in local timezone (avoiding import initialization issues)
+  const [selectedDate, setSelectedDate] = useState(() => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  });
   const [users, setUsers] = useState<any[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<string>("");
   const [selectedWeekNumber, setSelectedWeekNumber] = useState<string>("");
@@ -427,8 +435,8 @@ const Index = () => {
       weekSunday.setDate(weekMonday.getDate() + 6);
       
       return {
-        from: weekMonday.toISOString().split('T')[0],
-        to: weekSunday.toISOString().split('T')[0]
+        from: formatDateToYYYYMMDD(weekMonday),
+        to: formatDateToYYYYMMDD(weekSunday)
       };
     } catch (error) {
       console.error("Error calculating week date range:", error);
@@ -440,8 +448,8 @@ const Index = () => {
       const sunday = new Date(monday);
       sunday.setDate(monday.getDate() + 6);
       return {
-        from: monday.toISOString().split('T')[0],
-        to: sunday.toISOString().split('T')[0]
+        from: formatDateToYYYYMMDD(monday),
+        to: formatDateToYYYYMMDD(sunday)
       };
     }
   }
@@ -520,7 +528,7 @@ const Index = () => {
       // Group entries by day
       const entriesByDay: Record<string, any[]> = {};
       for (let d = new Date(fromDate); d <= toDate; d.setDate(d.getDate() + 1)) {
-        const dateStr = d.toISOString().split('T')[0];
+        const dateStr = formatDateToYYYYMMDD(d);
         entriesByDay[dateStr] = sortedData.filter(entry => entry.date === dateStr);
       }
       
@@ -528,7 +536,7 @@ const Index = () => {
       const sheets: Array<{ dayIndex: number; dayName: string; ws: any }> = [];
       
       for (let d = new Date(fromDate); d <= toDate; d.setDate(d.getDate() + 1)) {
-        const dateStr = d.toISOString().split('T')[0];
+        const dateStr = formatDateToYYYYMMDD(d);
         const dayEntries = entriesByDay[dateStr] || [];
         // Convert day index: Sunday (0) -> 6, Monday (1) -> 0, etc.
         const dayIndex = d.getDay() === 0 ? 6 : d.getDay() - 1;
@@ -1445,7 +1453,7 @@ const Index = () => {
 
     switch (exportPeriod) {
       case "day":
-        fromDate = selected.toISOString().split('T')[0];
+        fromDate = formatDateToYYYYMMDD(selected);
         toDate = fromDate;
         filename = `Uren_${formatDateDDMMYY(fromDate)}.xlsx`;
         break;
@@ -1455,20 +1463,20 @@ const Index = () => {
         const diff = selected.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
         const monday = new Date(selected.setDate(diff));
         monday.setHours(0, 0, 0, 0);
-        fromDate = monday.toISOString().split('T')[0];
+        fromDate = formatDateToYYYYMMDD(monday);
         const sunday = new Date(monday);
         sunday.setDate(monday.getDate() + 6);
-        toDate = sunday.toISOString().split('T')[0];
+        toDate = formatDateToYYYYMMDD(sunday);
         filename = `Uren_Week_${formatDateDDMMYY(fromDate)}_tot_${formatDateDDMMYY(toDate)}.xlsx`;
         break;
       case "month":
-        fromDate = new Date(selected.getFullYear(), selected.getMonth(), 1).toISOString().split('T')[0];
-        toDate = new Date(selected.getFullYear(), selected.getMonth() + 1, 0).toISOString().split('T')[0];
+        fromDate = formatDateToYYYYMMDD(new Date(selected.getFullYear(), selected.getMonth(), 1));
+        toDate = formatDateToYYYYMMDD(new Date(selected.getFullYear(), selected.getMonth() + 1, 0));
         filename = `Uren_${selected.getFullYear()}_${String(selected.getMonth() + 1).padStart(2, '0')}.xlsx`;
         break;
       case "year":
-        fromDate = new Date(selected.getFullYear(), 0, 1).toISOString().split('T')[0];
-        toDate = new Date(selected.getFullYear(), 11, 31).toISOString().split('T')[0];
+        fromDate = formatDateToYYYYMMDD(new Date(selected.getFullYear(), 0, 1));
+        toDate = formatDateToYYYYMMDD(new Date(selected.getFullYear(), 11, 31));
         filename = `Uren_${selected.getFullYear()}.xlsx`;
         break;
     }
@@ -1581,7 +1589,7 @@ const Index = () => {
 
     switch (exportPeriod) {
       case "day":
-        fromDate = selected.toISOString().split('T')[0];
+        fromDate = formatDateToYYYYMMDD(selected);
         toDate = fromDate;
         filename = `Uren_${formatDateDDMMYY(fromDate)}.pdf`;
         break;
@@ -1590,20 +1598,20 @@ const Index = () => {
         const diff = selected.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
         const monday = new Date(selected.setDate(diff));
         monday.setHours(0, 0, 0, 0);
-        fromDate = monday.toISOString().split('T')[0];
+        fromDate = formatDateToYYYYMMDD(monday);
         const sunday = new Date(monday);
         sunday.setDate(monday.getDate() + 6);
-        toDate = sunday.toISOString().split('T')[0];
+        toDate = formatDateToYYYYMMDD(sunday);
         filename = `Uren_Week_${formatDateDDMMYY(fromDate)}_tot_${formatDateDDMMYY(toDate)}.pdf`;
         break;
       case "month":
-        fromDate = new Date(selected.getFullYear(), selected.getMonth(), 1).toISOString().split('T')[0];
-        toDate = new Date(selected.getFullYear(), selected.getMonth() + 1, 0).toISOString().split('T')[0];
+        fromDate = formatDateToYYYYMMDD(new Date(selected.getFullYear(), selected.getMonth(), 1));
+        toDate = formatDateToYYYYMMDD(new Date(selected.getFullYear(), selected.getMonth() + 1, 0));
         filename = `Uren_${selected.getFullYear()}_${String(selected.getMonth() + 1).padStart(2, '0')}.pdf`;
         break;
       case "year":
-        fromDate = new Date(selected.getFullYear(), 0, 1).toISOString().split('T')[0];
-        toDate = new Date(selected.getFullYear(), 11, 31).toISOString().split('T')[0];
+        fromDate = formatDateToYYYYMMDD(new Date(selected.getFullYear(), 0, 1));
+        toDate = formatDateToYYYYMMDD(new Date(selected.getFullYear(), 11, 31));
         filename = `Uren_${selected.getFullYear()}.pdf`;
         break;
     }

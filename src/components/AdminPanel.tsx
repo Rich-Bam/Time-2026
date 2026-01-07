@@ -18,49 +18,15 @@ import { createPDF } from "@/utils/pdfExport";
 import { hashPassword } from "@/utils/password";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { formatDateToYYYYMMDD } from "@/utils/dateUtils";
 
 interface AdminPanelProps {
   currentUser: any;
 }
 
-// Helper to get date range from week number and year (ISO week) - defined outside component to avoid duplicate definition
-const getWeekDateRange = (weekNumber: number, year: number) => {
-  try {
-    // Calculate the date of the first Thursday of the year (ISO week standard)
-    const jan4 = new Date(year, 0, 4);
-    const jan4Day = jan4.getDay() || 7; // Convert Sunday (0) to 7
-    const daysToMonday = jan4Day === 1 ? 0 : 1 - jan4Day;
-    
-    // Get the Monday of week 1
-    const week1Monday = new Date(year, 0, 4 + daysToMonday);
-    
-    // Calculate the Monday of the requested week
-    const weekMonday = new Date(week1Monday);
-    weekMonday.setDate(week1Monday.getDate() + (weekNumber - 1) * 7);
-    
-    // Calculate the Sunday of that week
-    const weekSunday = new Date(weekMonday);
-    weekSunday.setDate(weekMonday.getDate() + 6);
-    
-    return {
-      from: weekMonday.toISOString().split('T')[0],
-      to: weekSunday.toISOString().split('T')[0]
-    };
-  } catch (error) {
-    console.error("Error calculating week date range:", error);
-    // Fallback: return current week
-    const today = new Date();
-    const dayOfWeek = today.getDay();
-    const diff = today.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
-    const monday = new Date(today.setDate(diff));
-    const sunday = new Date(monday);
-    sunday.setDate(monday.getDate() + 6);
-    return {
-      from: monday.toISOString().split('T')[0],
-      to: sunday.toISOString().split('T')[0]
-    };
-  }
-};
+// Helper to get date range from week number and year (ISO week)
+// Note: This function is now defined inside the component to avoid initialization order issues
+// The duplicate definition inside the component will be used instead
 
 // Helper functions for Excel export (matching WeeklyCalendarEntrySimple)
 function getWeekDates(date: Date) {
@@ -86,13 +52,6 @@ function getISOWeekNumber(date: Date) {
   );
 }
 
-// Helper to format date to YYYY-MM-DD (takes Date object, not string)
-const formatDateToYYYYMMDD = (date: Date) => {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-};
 
 const AdminPanel = ({ currentUser }: AdminPanelProps) => {
   const { t, language } = useLanguage();
@@ -1530,7 +1489,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
     const invertedHours = -hours;
     
     console.log('🔵 Hours inverted:', { original: hours, inverted: invertedHours });
-    const today = new Date().toISOString().split('T')[0];
+    const today = formatDateToYYYYMMDD(new Date());
     
     console.log('🔵 Inserting timesheet entry:', {
       user_id: userId,
@@ -1672,8 +1631,8 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
       const weekSunday = new Date(weekMonday);
       weekSunday.setDate(weekMonday.getDate() + 6);
       return {
-        from: weekMonday.toISOString().split('T')[0],
-        to: weekSunday.toISOString().split('T')[0]
+        from: formatDateToYYYYMMDD(weekMonday),
+        to: formatDateToYYYYMMDD(weekSunday)
       };
     } catch (error) {
       console.error("Error calculating week date range:", error);
@@ -1684,8 +1643,8 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
       const sunday = new Date(monday);
       sunday.setDate(monday.getDate() + 6);
       return {
-        from: monday.toISOString().split('T')[0],
-        to: sunday.toISOString().split('T')[0]
+        from: formatDateToYYYYMMDD(monday),
+        to: formatDateToYYYYMMDD(sunday)
       };
     }
   }
@@ -2656,8 +2615,8 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                     weekEnd.setDate(weekEnd.getDate() + 6);
                     const weekNum = getISOWeekNumber(weekStart);
                     // Use the ISO week date range for filtering entries, not the stored week_start_date
-                    const weekStartStr = weekStart.toISOString().split('T')[0];
-                    const weekEndStr = weekEnd.toISOString().split('T')[0];
+                    const weekStartStr = formatDateToYYYYMMDD(weekStart);
+                    const weekEndStr = formatDateToYYYYMMDD(weekEnd);
                     const weekEntries = allEntries.filter(
                       e => e.user_id === cw.user_id && 
                       e.date >= weekStartStr && 
@@ -2746,8 +2705,8 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
         const weekNum = getISOWeekNumber(weekStart);
         const user = usersMap[cw.user_id];
         // Use the ISO week date range for filtering entries, not the stored week_start_date
-        const weekStartStr = weekStart.toISOString().split('T')[0];
-        const weekEndStr = weekEnd.toISOString().split('T')[0];
+        const weekStartStr = formatDateToYYYYMMDD(weekStart);
+        const weekEndStr = formatDateToYYYYMMDD(weekEnd);
         let weekEntries = allEntries.filter(
           e => e.user_id === cw.user_id && 
           e.date >= weekStartStr && 
@@ -2783,7 +2742,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
         for (let i = 0; i < 7; i++) {
           const day = new Date(weekStart);
           day.setDate(day.getDate() + i);
-          weekDays.push(day.toISOString().split('T')[0]);
+          weekDays.push(formatDateToYYYYMMDD(day));
         }
         
         const totalHours = weekEntries.reduce((sum, e) => sum + Number(e.hours || 0), 0);
@@ -4998,8 +4957,8 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                             const { data, error } = await supabase.functions.invoke('timebuzzer-sync', {
                               body: {
                                 action: 'fetch-activities',
-                                startDate: threeMonthsAgo.toISOString().split('T')[0],
-                                endDate: today.toISOString().split('T')[0],
+                                startDate: formatDateToYYYYMMDD(threeMonthsAgo),
+                                endDate: formatDateToYYYYMMDD(today),
                                 userId: String(user.id),
                               },
                             });
@@ -5143,8 +5102,8 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                                   const { data, error } = await supabase.functions.invoke('timebuzzer-sync', {
                                     body: {
                                       action: 'fetch-activities',
-                                      startDate: threeMonthsAgo.toISOString().split('T')[0],
-                                      endDate: today.toISOString().split('T')[0],
+                                      startDate: formatDateToYYYYMMDD(threeMonthsAgo),
+                                      endDate: formatDateToYYYYMMDD(today),
                                       userId: String(user.id),
                                     },
                                   });

@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
+import { formatDateToYYYYMMDD } from "@/utils/dateUtils";
 import { useToast } from "@/hooks/use-toast";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { Calendar, Download, ChevronLeft, ChevronRight } from "lucide-react";
@@ -73,7 +74,7 @@ const ViewHours = ({ currentUser }: { currentUser: any }) => {
       data.forEach(entry => {
         const date = new Date(entry.date);
         const weekStart = getWeekDates(date)[0];
-        weekStarts.add(weekStart.toISOString().split('T')[0]);
+        weekStarts.add(formatDateToYYYYMMDD(weekStart));
       });
 
       // Convert to array and format for dropdown
@@ -100,8 +101,8 @@ const ViewHours = ({ currentUser }: { currentUser: any }) => {
 
     setLoading(true);
     try {
-      const fromDate = weekDates[0].toISOString().split('T')[0];
-      const toDate = weekDates[6].toISOString().split('T')[0];
+      const fromDate = formatDateToYYYYMMDD(weekDates[0]);
+      const toDate = formatDateToYYYYMMDD(weekDates[6]);
 
       const { data, error } = await supabase
         .from("timesheet")
@@ -187,7 +188,7 @@ const ViewHours = ({ currentUser }: { currentUser: any }) => {
   // Group entries by day
   const entriesByDay: Record<string, any[]> = {};
   weekDates.forEach(date => {
-    const dateStr = date.toISOString().split('T')[0];
+    const dateStr = formatDateToYYYYMMDD(date);
     entriesByDay[dateStr] = entries.filter(e => e.date === dateStr);
   });
 
@@ -217,7 +218,7 @@ const ViewHours = ({ currentUser }: { currentUser: any }) => {
             </Button>
             {availableWeeks.length > 0 && (
               <Select
-                value={weekDates[0].toISOString().split('T')[0]}
+                value={formatDateToYYYYMMDD(weekDates[0])}
                 onValueChange={(value) => {
                   const selectedWeek = availableWeeks.find(w => w.weekStart === value);
                   if (selectedWeek) {
@@ -253,7 +254,7 @@ const ViewHours = ({ currentUser }: { currentUser: any }) => {
           ) : (
             <div className="space-y-4">
               {weekDates.map((date, idx) => {
-                const dateStr = date.toISOString().split('T')[0];
+                const dateStr = formatDateToYYYYMMDD(date);
                 const dayEntries = entriesByDay[dateStr] || [];
                 const dayTotal = dayEntries.reduce((sum, e) => sum + (parseFloat(String(e.hours)) || 0), 0);
 

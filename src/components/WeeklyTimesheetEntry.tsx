@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { formatDateToYYYYMMDD } from "@/utils/dateUtils";
 
 const workTypes = [
   { value: 10, label: "Work" },
@@ -63,7 +64,7 @@ const WeeklyTimesheetEntry = ({ currentUser }: { currentUser: any }) => {
   // Fetch confirmed status for the week
   const fetchConfirmedStatus = async () => {
     if (!currentUser) return;
-    const weekKey = weekDates[0].toISOString().split('T')[0];
+    const weekKey = formatDateToYYYYMMDD(weekDates[0]);
     const { data } = await supabase
       .from('confirmed_weeks')
       .select('confirmed, admin_approved')
@@ -81,7 +82,7 @@ const WeeklyTimesheetEntry = ({ currentUser }: { currentUser: any }) => {
   }, [currentUser, weekStart]);
 
   const handleAddRow = () => {
-    const weekKey = weekDates[0].toISOString().split('T')[0];
+    const weekKey = formatDateToYYYYMMDD(weekDates[0]);
     const isWeekLocked = confirmedWeeks[weekKey];
     
     // Non-admins cannot add rows if week is confirmed
@@ -98,7 +99,7 @@ const WeeklyTimesheetEntry = ({ currentUser }: { currentUser: any }) => {
   };
 
   const handleRemoveRow = (idx: number) => {
-    const weekKey = weekDates[0].toISOString().split('T')[0];
+    const weekKey = formatDateToYYYYMMDD(weekDates[0]);
     const isWeekLocked = confirmedWeeks[weekKey];
     
     // Non-admins cannot remove rows if week is confirmed
@@ -115,7 +116,7 @@ const WeeklyTimesheetEntry = ({ currentUser }: { currentUser: any }) => {
   };
 
   const handleChange = (rowIdx: number, field: string, value: any) => {
-    const weekKey = weekDates[0].toISOString().split('T')[0];
+    const weekKey = formatDateToYYYYMMDD(weekDates[0]);
     const isWeekLocked = confirmedWeeks[weekKey];
     
     // Non-admins cannot change entries if week is confirmed
@@ -129,7 +130,7 @@ const WeeklyTimesheetEntry = ({ currentUser }: { currentUser: any }) => {
   };
 
   const handleHourChange = (rowIdx: number, dayIdx: number, value: string) => {
-    const weekKey = weekDates[0].toISOString().split('T')[0];
+    const weekKey = formatDateToYYYYMMDD(weekDates[0]);
     const isWeekLocked = confirmedWeeks[weekKey];
     
     // Non-admins cannot change hours if week is confirmed
@@ -152,7 +153,7 @@ const WeeklyTimesheetEntry = ({ currentUser }: { currentUser: any }) => {
   const handleConfirmWeek = async () => {
     if (!currentUser) return;
     
-    const weekKey = weekDates[0].toISOString().split('T')[0];
+    const weekKey = formatDateToYYYYMMDD(weekDates[0]);
     
     // Check if week already has confirmed status
     const { data: existing } = await supabase
@@ -192,7 +193,7 @@ const WeeklyTimesheetEntry = ({ currentUser }: { currentUser: any }) => {
       });
     } else {
       // Immediately update state to lock the week
-      const weekKeyDate = weekDates[0].toISOString().split('T')[0];
+      const weekKeyDate = formatDateToYYYYMMDD(weekDates[0]);
       setConfirmedWeeks(prev => ({ ...prev, [weekKeyDate]: true }));
       
       toast({
@@ -214,7 +215,7 @@ const WeeklyTimesheetEntry = ({ currentUser }: { currentUser: any }) => {
         </div>
       </CardHeader>
       <CardContent>
-        {confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin && (
+        {confirmedWeeks[formatDateToYYYYMMDD(weekDates[0])] && !currentUser?.isAdmin && (
           <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded text-yellow-800 text-sm">
             ⚠️ This week is confirmed. You cannot make any changes until an admin has approved or reset it.
           </div>
@@ -233,7 +234,7 @@ const WeeklyTimesheetEntry = ({ currentUser }: { currentUser: any }) => {
             </thead>
             <tbody>
               {rows.map((row, rowIdx) => {
-                const weekKey = weekDates[0].toISOString().split('T')[0];
+                const weekKey = formatDateToYYYYMMDD(weekDates[0]);
                 const isLocked = confirmedWeeks[weekKey] && !currentUser?.isAdmin;
                 return (
                   <tr key={rowIdx}>
@@ -282,12 +283,12 @@ const WeeklyTimesheetEntry = ({ currentUser }: { currentUser: any }) => {
           </table>
         </div>
         <div className="flex gap-4 mt-4">
-          <Button onClick={handleAddRow} disabled={confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin}>Add Entry</Button>
-          <Button variant="default" disabled={confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && !currentUser?.isAdmin}>Submit All</Button>
+          <Button onClick={handleAddRow} disabled={confirmedWeeks[formatDateToYYYYMMDD(weekDates[0])] && !currentUser?.isAdmin}>Add Entry</Button>
+          <Button variant="default" disabled={confirmedWeeks[formatDateToYYYYMMDD(weekDates[0])] && !currentUser?.isAdmin}>Submit All</Button>
         </div>
       </CardContent>
     </Card>
-    {!confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && (
+    {!confirmedWeeks[formatDateToYYYYMMDD(weekDates[0])] && (
       <Card className="mt-4 bg-orange-50 border-orange-200">
         <CardContent className="p-4">
           <div className="flex flex-col gap-3">
@@ -305,7 +306,7 @@ const WeeklyTimesheetEntry = ({ currentUser }: { currentUser: any }) => {
         </CardContent>
       </Card>
     )}
-    {confirmedWeeks[weekDates[0].toISOString().split('T')[0]] && (
+    {confirmedWeeks[formatDateToYYYYMMDD(weekDates[0])] && (
       <Card className="mt-4 bg-blue-50 border-blue-200">
         <CardContent className="p-4">
           <div className="text-blue-800 font-semibold">
