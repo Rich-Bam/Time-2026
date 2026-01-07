@@ -77,11 +77,34 @@ export async function logError(errorData: ErrorLogData): Promise<void> {
       notes: errorData.notes || null,
     };
 
-    // Insert error log (silently fail if it doesn't work)
-    await supabase.from('error_logs').insert([logEntry]);
+    // Insert error log and check for errors
+    const { error, data } = await supabase.from('error_logs').insert([logEntry]);
+    
+    if (error) {
+      // Log to console with more details for debugging
+      console.error('Failed to log error to database:', {
+        error: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint,
+        errorData: {
+          message: errorData.error_message,
+          component: errorData.error_component,
+        },
+      });
+      
+      // Also try to log to console as fallback
+      console.error('Error that could not be logged:', logEntry);
+      return;
+    }
+    
+    // Success - optionally log in development
+    if (import.meta.env.DEV) {
+      console.log('Error logged successfully:', data);
+    }
   } catch (error) {
     // Silently fail - we don't want error logging to cause more errors
-    console.error('Failed to log error:', error);
+    console.error('Exception in logError function:', error);
   }
 }
 
@@ -132,5 +155,33 @@ export async function logInfo(
     severity: 'info',
     notes: additionalInfo ? JSON.stringify(additionalInfo) : undefined,
   });
+}
+
+/**
+ * Test function to verify error logging is working
+ * Call this from browser console: window.testErrorLogging()
+ */
+export async function testErrorLogging(): Promise<void> {
+  console.log('🧪 Testing error logging...');
+  
+  const testError = new Error('Test error - This is a test to verify error logging works');
+  
+  try {
+    await logJSError(testError, 'TestComponent', {
+      test: true,
+      timestamp: new Date().toISOString(),
+    });
+    
+    console.log('✅ Test error logged successfully!');
+    console.log('📋 Check the Admin Panel → Errors section to see if it appears.');
+    console.log('💡 If it doesn\'t appear, check the browser console for error messages.');
+  } catch (error) {
+    console.error('❌ Failed to log test error:', error);
+  }
+}
+
+// Make test function available globally for easy testing
+if (typeof window !== 'undefined') {
+  (window as any).testErrorLogging = testErrorLogging;
 }
 

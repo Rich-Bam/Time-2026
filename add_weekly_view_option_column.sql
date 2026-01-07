@@ -14,3 +14,4 @@ WHERE weekly_view_option IS NULL;
 COMMENT ON COLUMN public.users.weekly_view_option IS 'Controls weekly entry view access: simple (Simple only), original (Original only), both (User can choose)';
 
 
+

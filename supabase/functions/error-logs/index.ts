@@ -2,10 +2,13 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+// CORS headers - allow all headers that Supabase client and browser might send
+// Supabase client automatically adds many headers, so we need to allow them all
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, cache-control, pragma, expires, x-supabase-api-version, accept, accept-language, if-modified-since, if-none-match, x-requested-with",
+  "Access-Control-Allow-Methods": "POST, OPTIONS, GET, DELETE",
+  "Access-Control-Max-Age": "86400", // Cache preflight for 24 hours
 };
 
 serve(async (req) => {
