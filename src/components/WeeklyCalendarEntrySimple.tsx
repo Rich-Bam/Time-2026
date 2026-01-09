@@ -2559,7 +2559,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
                           {/* Total row */}
                           <tr className="border-t-2 border-gray-400 dark:border-gray-600 bg-gray-100 dark:border-gray-800 font-bold">
                             <td className="border border-gray-300 dark:border-gray-700 p-2 text-right" colSpan={4}>
-                              <span className="text-sm sm:text-base text-gray-900 dark:text-gray-900">{t('daily total') || 'Totaal per dag'}:</span>
+                              <span className="text-sm sm:text-base text-gray-900 dark:text-gray-900">{t('daily.total') || 'Totaal per dag'}:</span>
                             </td>
                             <td className="border border-gray-300 dark:border-gray-700 p-2">
                               <span className="text-sm sm:text-base text-gray-900 dark:text-gray-900">
@@ -2584,7 +2584,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
         <Card className="mt-4 bg-orange-50 border-orange-200 dark:bg-gray-900 border-orange-600">
           <CardContent className="p-4">
             <div className="flex flex-col gap-3">
-              <div className="text-sm text-orange-800">
+              <div className="text-sm text-white-800">
               <strong>Note:</strong> Once you confirm this week, you will no longer be able to make changes. Please make sure all entries are correct before confirming.
               </div>
               <Button 
@@ -2592,7 +2592,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
                 variant="default" 
                 onClick={handleConfirmWeek}
               >
-                Confirm Week
+                <strong>{t(!'weekly.confirm') || 'Confirm Week'}</strong>
               </Button>
             </div>
           </CardContent>

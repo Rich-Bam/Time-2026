@@ -178,6 +178,8 @@ const translations: Record<Language, Record<string, string>> = {
     'weekly.friday': 'Vrijdag',
     'weekly.saturday': 'Zaterdag',
     'weekly.total': 'Totaal per dag',
+    'daily.total': 'Dag Totaal',
+    
     
     // View Hours
     'viewHours.title': 'Ingevulde Uren',
@@ -316,6 +318,7 @@ const translations: Record<Language, Record<string, string>> = {
     'admin.weekLockedText': 'Deze week is bevestigd en kan niet worden gewijzigd.',
     'admin.missingInformation': 'Ontbrekende Informatie',
     'admin.selectWeekAndYear': 'Selecteer een week en jaar.',
+    'admin.existingUsers': 'Bestaande Gebruikers',
     
     // Auth/Login
     'auth.loginSuccessful': 'Login Succesvol',
@@ -402,6 +405,13 @@ const translations: Record<Language, Record<string, string>> = {
     'common.edit': 'Bewerken',
     'common.confirm': 'Bevestigen',
     'common.user': 'Gebruiker',
+
+    // Bug Report
+    'View.manage': 'Bekijk en beheer bug rapporten ingediend door gebruikers',
+
+
+
+
   },
   en: {
     // Navigation
@@ -568,6 +578,8 @@ const translations: Record<Language, Record<string, string>> = {
     'weekly.thursday': 'Thursday',
     'weekly.friday': 'Friday',
     'weekly.saturday': 'Saturday',
+    'daily.total': 'Day Total',
+    
     
     // View Hours
     'viewHours.title': 'View Hours',
@@ -750,6 +762,7 @@ const translations: Record<Language, Record<string, string>> = {
     'auth.checkConsole': 'Check the browser console (F12) for more details.',
     'auth.loggedOut': 'Logged Out',
     'auth.loggedOutText': 'You have been successfully logged out.',
+    'admin.existingUsers': 'Existing Users',
     
     // Weekly Entry Export
     'weekly.exportFailed': 'Export Failed',
@@ -792,6 +805,9 @@ const translations: Record<Language, Record<string, string>> = {
     'common.edit': 'Edit',
     'common.confirm': 'Confirm',
     'common.user': 'User',
+
+    // Bug Report
+    'View.manage': 'View and manage bug reports submitted by users',
   },
 };
 
