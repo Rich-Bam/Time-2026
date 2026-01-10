@@ -179,6 +179,9 @@ const translations: Record<Language, Record<string, string>> = {
     'weekly.saturday': 'Zaterdag',
     'weekly.total': 'Totaal per dag',
     'daily.total': 'Dag Totaal',
+    'Confirm.Week': 'Bevestig Week',
+    'weekly.confirm': 'Bevestigen',
+    'weekly.confirmNote': 'Zodra je deze week bevestigt, kun je geen wijzigingen meer aanbrengen. Zorg ervoor dat alle invoeren correct zijn voordat je bevestigt.',
     
     
     // View Hours
@@ -579,6 +582,11 @@ const translations: Record<Language, Record<string, string>> = {
     'weekly.friday': 'Friday',
     'weekly.saturday': 'Saturday',
     'daily.total': 'Day Total',
+    'Confirm.Week': 'Confirm Week',
+    'weekly.confirm': 'Confirm',
+    'weekly.confirmNote': 'Once you confirm this week, you will not be able to make any changes. Please ensure all entries are correct before confirming.',
+    
+
     
     
     // View Hours

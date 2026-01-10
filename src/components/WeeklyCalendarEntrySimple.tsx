@@ -2585,14 +2585,15 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
           <CardContent className="p-4">
             <div className="flex flex-col gap-3">
               <div className="text-sm text-white-800">
-              <strong>Note:</strong> Once you confirm this week, you will no longer be able to make changes. Please make sure all entries are correct before confirming.
+              <strong>Note:</strong> {t('weekly.confirmNote') || 'Once you confirm this week, you will no longer be able to make changes. Please make sure all entries are correct before confirming.'}
+              
               </div>
               <Button 
                 className="w-full bg-orange-600 hover:bg-orange-700 text-white" 
                 variant="default" 
                 onClick={handleConfirmWeek}
               >
-                <strong>{t(!'weekly.confirm') || 'Confirm Week'}</strong>
+                <strong>{t('weekly.confirm') || 'Confirm Week'}</strong>
               </Button>
             </div>
           </CardContent>
