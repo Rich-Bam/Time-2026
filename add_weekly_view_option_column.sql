@@ -17,3 +17,4 @@ COMMENT ON COLUMN public.users.weekly_view_option IS 'Controls weekly entry view
 
 
 
+

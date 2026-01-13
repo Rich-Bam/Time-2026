@@ -1730,10 +1730,73 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
       return user?.name || user?.email || "User";
     }).join(", ");
 
-    toast({
-      title: "Reminders Sent",
-      description: `Reminders sent to ${reminderUserIds.length} user(s): ${userNames} for week ${weekNum} of ${year}.`,
-    });
+    // Call edge function to send reminder emails
+    try {
+      console.log("Calling send-reminder-email edge function...");
+      const { data: emailData, error: emailError } = await supabase.functions.invoke('send-reminder-email', {
+        body: {
+          userIds: reminderUserIds,
+          weekNumber: weekNum,
+          year: year,
+          message: `Please fill in your hours for week ${weekNum} of ${year}.`,
+        },
+      });
+
+      console.log("Email sending result:", { emailData, emailError });
+
+      if (emailError) {
+        console.error("Error sending reminder emails:", emailError);
+        // Still show success for reminders, but warn about emails
+        const errorMsg = emailError.message || JSON.stringify(emailError);
+        const errorStatus = emailError.status || emailError.statusCode;
+        
+        if (errorStatus === 404) {
+          toast({
+            title: "Reminders Sent",
+            description: `Reminders saved, but emails were not sent. The 'send-reminder-email' edge function is not deployed. Check Supabase Dashboard → Edge Functions.`,
+            variant: "default",
+          });
+        } else {
+          toast({
+            title: "Reminders Sent",
+            description: `Reminders saved to ${reminderUserIds.length} user(s), but email sending failed: ${errorMsg.substring(0, 100)}`,
+            variant: "default",
+          });
+        }
+      } else if (emailData?.error) {
+        console.error("Edge function returned error:", emailData.error);
+        toast({
+          title: "Reminders Sent",
+          description: `Reminders saved, but email sending failed: ${emailData.error}`,
+          variant: "default",
+        });
+      } else {
+        // Success - show results
+        const sentCount = emailData?.sent || 0;
+        const failedCount = emailData?.failed || 0;
+        
+        if (failedCount > 0) {
+          toast({
+            title: "Reminders Sent",
+            description: `Reminders and ${sentCount} email(s) sent to ${reminderUserIds.length} user(s) for week ${weekNum} of ${year}. ${failedCount} email(s) failed to send.`,
+            variant: "default",
+          });
+        } else {
+          toast({
+            title: "Reminders and Emails Sent",
+            description: `Reminders and emails sent successfully to ${reminderUserIds.length} user(s): ${userNames} for week ${weekNum} of ${year}.`,
+          });
+        }
+      }
+    } catch (emailErr: any) {
+      console.error("Exception sending reminder emails:", emailErr);
+      // Still show success for reminders since they're already saved
+      toast({
+        title: "Reminders Sent",
+        description: `Reminders saved to ${reminderUserIds.length} user(s), but email sending encountered an error. Check console for details.`,
+        variant: "default",
+      });
+    }
 
     // Reset form
     setReminderUserIds([]);
