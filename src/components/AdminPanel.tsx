@@ -127,6 +127,10 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
   // Active tab state
   const [activeTab, setActiveTab] = useState<string>("users");
   
+  // UI-only hours taken overrides (doesn't affect database)
+  const [hoursTakenOverrides, setHoursTakenOverrides] = useState<Record<string, number>>({});
+  const [editingHoursTaken, setEditingHoursTaken] = useState<Record<string, string>>({});
+  
   // Helper function to get ISO week number
   const getISOWeekNumber = (date: Date) => {
     const tempDate = new Date(date.getTime());
@@ -5469,7 +5473,72 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                               </span>
                             </td>
                             <td className="p-3 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700">
-                              {totalHoursTaken.toFixed(1)} {t('admin.hours')}
+                              <div className="flex items-center gap-2">
+                                {editingHoursTaken[user.id] !== undefined ? (
+                                  <>
+                                    <Input
+                                      type="number"
+                                      step="0.1"
+                                      value={editingHoursTaken[user.id]}
+                                      onChange={(e) => setEditingHoursTaken({ ...editingHoursTaken, [user.id]: e.target.value })}
+                                      className="w-24 h-8"
+                                    />
+                                    <Button
+                                      size="sm"
+                                      onClick={() => {
+                                        const newValue = parseFloat(editingHoursTaken[user.id] || "0");
+                                        setHoursTakenOverrides({ ...hoursTakenOverrides, [user.id]: newValue });
+                                        const updated = { ...editingHoursTaken };
+                                        delete updated[user.id];
+                                        setEditingHoursTaken(updated);
+                                      }}
+                                      className="h-8"
+                                    >
+                                      <Check className="h-3 w-3" />
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => {
+                                        const updated = { ...editingHoursTaken };
+                                        delete updated[user.id];
+                                        setEditingHoursTaken(updated);
+                                      }}
+                                      className="h-8"
+                                    >
+                                      <X className="h-3 w-3" />
+                                    </Button>
+                                  </>
+                                ) : (
+                                  <>
+                                    <span>{(hoursTakenOverrides[user.id] !== undefined ? hoursTakenOverrides[user.id] : totalHoursTaken).toFixed(1)} {t('admin.hours')}</span>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={() => setEditingHoursTaken({ ...editingHoursTaken, [user.id]: (hoursTakenOverrides[user.id] !== undefined ? hoursTakenOverrides[user.id] : totalHoursTaken).toFixed(1) })}
+                                      className="h-6 w-6 p-0"
+                                      title="Edit hours taken (UI only)"
+                                    >
+                                      <Pencil className="h-3 w-3" />
+                                    </Button>
+                                    {hoursTakenOverrides[user.id] !== undefined && (
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        onClick={() => {
+                                          const updated = { ...hoursTakenOverrides };
+                                          delete updated[user.id];
+                                          setHoursTakenOverrides(updated);
+                                        }}
+                                        className="h-6 w-6 p-0 text-red-600 hover:text-red-700"
+                                        title="Reset to actual value"
+                                      >
+                                        <X className="h-3 w-3" />
+                                      </Button>
+                                    )}
+                                  </>
+                                )}
+                              </div>
                             </td>
                           </tr>
                         );

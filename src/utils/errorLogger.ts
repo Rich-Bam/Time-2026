@@ -178,9 +178,7 @@ export async function testErrorLogging(): Promise<void> {
   } catch (error) {
     console.error('❌ Failed to log test error:', error);
   }
-}
-
-// Make test function available globally for easy testing
+}// Make test function available globally for easy testing
 if (typeof window !== 'undefined') {
   (window as any).testErrorLogging = testErrorLogging;
 }
