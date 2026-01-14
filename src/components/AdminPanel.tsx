@@ -127,7 +127,9 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
   // Active tab state
   const [activeTab, setActiveTab] = useState<string>("users");
   
-  // UI-only hours taken overrides (doesn't affect database)
+  // UI-only hours taken overrides - ONLY affects the display in the "Hours Taken" column
+  // Does NOT affect: database, weekly entries, days off calculations, or any other views
+  // This is purely a visual override for the admin panel display only
   const [hoursTakenOverrides, setHoursTakenOverrides] = useState<Record<string, number>>({});
   const [editingHoursTaken, setEditingHoursTaken] = useState<Record<string, string>>({});
   
@@ -5453,11 +5455,19 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                     {users
                       .filter(user => user.approved !== false)
                       .map((user) => {
+                        // IMPORTANT: Always use actual database value for calculations
+                        // The override is ONLY for display in the "Hours Taken" column
                         const totalHoursTaken = daysOffMap[String(user.id)] || 0;
                         const totalHoursAvailable = totalDaysOff * 8;
+                        // Days Off Left calculation uses actual database value, NOT override
                         const hoursLeft = totalHoursAvailable - totalHoursTaken;
                         const daysLeft = (hoursLeft / 8).toFixed(1);
                         const hoursLeftRounded = hoursLeft.toFixed(1);
+                        
+                        // UI-only override for display - does NOT affect calculations above
+                        const displayHoursTaken = hoursTakenOverrides[user.id] !== undefined 
+                          ? hoursTakenOverrides[user.id] 
+                          : totalHoursTaken;
                         
                         return (
                           <tr key={user.id} className="hover:bg-gray-50 dark:hover:bg-gray-800">
@@ -5482,10 +5492,12 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                                       value={editingHoursTaken[user.id]}
                                       onChange={(e) => setEditingHoursTaken({ ...editingHoursTaken, [user.id]: e.target.value })}
                                       className="w-24 h-8"
+                                      title="UI-only edit - does not affect database or other views"
                                     />
                                     <Button
                                       size="sm"
                                       onClick={() => {
+                                        // Only update UI state - no database operations
                                         const newValue = parseFloat(editingHoursTaken[user.id] || "0");
                                         setHoursTakenOverrides({ ...hoursTakenOverrides, [user.id]: newValue });
                                         const updated = { ...editingHoursTaken };
@@ -5493,6 +5505,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                                         setEditingHoursTaken(updated);
                                       }}
                                       className="h-8"
+                                      title="Save (UI only - no database changes)"
                                     >
                                       <Check className="h-3 w-3" />
                                     </Button>
@@ -5511,13 +5524,13 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                                   </>
                                 ) : (
                                   <>
-                                    <span>{(hoursTakenOverrides[user.id] !== undefined ? hoursTakenOverrides[user.id] : totalHoursTaken).toFixed(1)} {t('admin.hours')}</span>
+                                    <span>{displayHoursTaken.toFixed(1)} {t('admin.hours')}</span>
                                     <Button
                                       size="sm"
                                       variant="ghost"
-                                      onClick={() => setEditingHoursTaken({ ...editingHoursTaken, [user.id]: (hoursTakenOverrides[user.id] !== undefined ? hoursTakenOverrides[user.id] : totalHoursTaken).toFixed(1) })}
+                                      onClick={() => setEditingHoursTaken({ ...editingHoursTaken, [user.id]: displayHoursTaken.toFixed(1) })}
                                       className="h-6 w-6 p-0"
-                                      title="Edit hours taken (UI only)"
+                                      title="Edit hours taken (UI only - does not affect database, weekly entries, or calculations)"
                                     >
                                       <Pencil className="h-3 w-3" />
                                     </Button>
@@ -5531,7 +5544,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                                           setHoursTakenOverrides(updated);
                                         }}
                                         className="h-6 w-6 p-0 text-red-600 hover:text-red-700"
-                                        title="Reset to actual value"
+                                        title="Reset to actual database value"
                                       >
                                         <X className="h-3 w-3" />
                                       </Button>
