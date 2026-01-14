@@ -165,10 +165,13 @@ const OvertimeSummaryPanel = ({ currentUser, weekStart }: OvertimeSummaryPanelPr
     }
   };
 
-  // Don't show if no overtime data
-  if (!overtimeData || parseFloat(overtimeData.totalOvertime) === 0) {
-    return null;
-  }
+  // Show panel even if loading or no overtime (display 0h)
+  const displayData = overtimeData || {
+    totalOvertime: "0.00",
+    totalHours125: "0.00",
+    totalHours150: "0.00",
+    totalHours200: "0.00",
+  };
 
   return (
     <div className="mb-4 p-3 sm:p-4 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg">
@@ -183,30 +186,32 @@ const OvertimeSummaryPanel = ({ currentUser, weekStart }: OvertimeSummaryPanelPr
         <div className="flex items-center gap-2">
           <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">{t('overtime.totalOvertime')}:</span>
           <span className="text-lg sm:text-xl font-bold text-blue-600 dark:text-blue-400">
-            {overtimeData.totalOvertime}h
+            {loading ? "..." : `${displayData.totalOvertime}h`}
           </span>
         </div>
         
-        <div className="flex flex-wrap gap-2 sm:gap-3">
-          {parseFloat(overtimeData.totalHours125 || "0") > 0 && (
-            <div className="flex items-center gap-1 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded px-2 py-1">
-              <span className="text-xs font-semibold text-orange-600 dark:text-orange-400">125%:</span>
-              <span className="text-xs sm:text-sm font-bold text-orange-700 dark:text-orange-300">{overtimeData.totalHours125}h</span>
-            </div>
-          )}
-          {parseFloat(overtimeData.totalHours150 || "0") > 0 && (
-            <div className="flex items-center gap-1 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded px-2 py-1">
-              <span className="text-xs font-semibold text-yellow-600 dark:text-yellow-400">150%:</span>
-              <span className="text-xs sm:text-sm font-bold text-yellow-700 dark:text-yellow-300">{overtimeData.totalHours150}h</span>
-            </div>
-          )}
-          {parseFloat(overtimeData.totalHours200 || "0") > 0 && (
-            <div className="flex items-center gap-1 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded px-2 py-1">
-              <span className="text-xs font-semibold text-red-600 dark:text-red-400">200%:</span>
-              <span className="text-xs sm:text-sm font-bold text-red-700 dark:text-red-300">{overtimeData.totalHours200}h</span>
-            </div>
-          )}
-        </div>
+        {!loading && (
+          <div className="flex flex-wrap gap-2 sm:gap-3">
+            {parseFloat(displayData.totalHours125 || "0") > 0 && (
+              <div className="flex items-center gap-1 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded px-2 py-1">
+                <span className="text-xs font-semibold text-orange-600 dark:text-orange-400">125%:</span>
+                <span className="text-xs sm:text-sm font-bold text-orange-700 dark:text-orange-300">{displayData.totalHours125}h</span>
+              </div>
+            )}
+            {parseFloat(displayData.totalHours150 || "0") > 0 && (
+              <div className="flex items-center gap-1 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded px-2 py-1">
+                <span className="text-xs font-semibold text-yellow-600 dark:text-yellow-400">150%:</span>
+                <span className="text-xs sm:text-sm font-bold text-yellow-700 dark:text-yellow-300">{displayData.totalHours150}h</span>
+              </div>
+            )}
+            {parseFloat(displayData.totalHours200 || "0") > 0 && (
+              <div className="flex items-center gap-1 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded px-2 py-1">
+                <span className="text-xs font-semibold text-red-600 dark:text-red-400">200%:</span>
+                <span className="text-xs sm:text-sm font-bold text-red-700 dark:text-red-300">{displayData.totalHours200}h</span>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

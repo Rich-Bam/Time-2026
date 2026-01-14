@@ -209,9 +209,9 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
     fetchDaysOff();
   }, [currentUser]);
 
-  // Fetch all weeks where user has entries (only for normal users, not admins)
+  // Fetch all weeks where user has entries (for all users)
   const fetchAvailableWeeks = async () => {
-    if (!currentUser || currentUser?.isAdmin || currentUser?.userType === 'administratie') {
+    if (!currentUser) {
       setAvailableWeeks([]);
       return;
     }
@@ -1694,8 +1694,8 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
 
   return (
     <div className="flex flex-col gap-3 sm:gap-4">
-      {/* Overtime Summary Panel - Only for weekly_only users */}
-      {currentUser?.userType === 'weekly_only' && (
+      {/* Overtime Summary Panel - For all users (except admins/administratie) */}
+      {currentUser && !currentUser?.isAdmin && currentUser?.userType !== 'administratie' && (
         <OvertimeSummaryPanel currentUser={currentUser} weekStart={weekStart} />
       )}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 sm:gap-4">
@@ -1711,8 +1711,8 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
             <Button variant="outline" onClick={() => changeWeek(1)} size="sm" className="text-xs sm:text-sm">
               {t('weekly.next')} &gt;
             </Button>
-            {/* Week selector - Only for normal users (not admins or administratie) */}
-            {currentUser && !currentUser?.isAdmin && currentUser?.userType !== 'administratie' && availableWeeks.length > 0 && (
+            {/* Week selector - Available for all users */}
+            {currentUser && availableWeeks.length > 0 && (
               <Select
                 value={formatDateToYYYYMMDD(weekDates[0])}
                 onValueChange={(value) => {
