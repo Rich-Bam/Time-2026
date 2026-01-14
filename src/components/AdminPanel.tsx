@@ -456,10 +456,12 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
         }
       });
 
-      // Calculate overtime per day
+      // Calculate overtime per day with percentage breakdown
       // Overtime rules:
-      // 1. More than 8 hours on Monday-Friday = overtime
-      // 2. ALL hours on Saturday and Sunday = overtime (weekend is always overtime)
+      // 1. After 8 hours on Monday-Friday: 9th and 10th hour = 125%
+      // 2. After 10 hours on Monday-Friday: every hour = 150%
+      // 3. ALL hours on Saturday = 150%
+      // 4. ALL hours on Sunday = 200%
       const overtimeResults: any[] = [];
       
       Object.keys(userDateMap).forEach(userId => {
@@ -467,6 +469,9 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
         if (!user) return;
         
         let totalOvertime = 0;
+        let totalHours125 = 0; // 125% hours (9th and 10th hour on weekdays)
+        let totalHours150 = 0; // 150% hours (after 10th hour on weekdays, all Saturday)
+        let totalHours200 = 0; // 200% hours (all Sunday)
         const dailyOvertime: any[] = [];
         
         Object.keys(userDateMap[userId]).forEach(date => {
@@ -476,19 +481,40 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
           // Get day of week (0 = Sunday, 6 = Saturday)
           const dateObj = new Date(date);
           const dayOfWeek = dateObj.getDay();
-          const isWeekend = dayOfWeek === 0 || dayOfWeek === 6; // Sunday or Saturday
+          const isSaturday = dayOfWeek === 6;
+          const isSunday = dayOfWeek === 0;
+          const isWeekend = isSaturday || isSunday;
           
           let overtime = 0;
           let normalHours = 0;
+          let hours125 = 0;
+          let hours150 = 0;
+          let hours200 = 0;
           
-          if (isWeekend) {
-            // Weekend: ALL hours are overtime
+          if (isSunday) {
+            // Sunday: ALL hours are 200%
             overtime = totalHours;
             normalHours = 0;
+            hours200 = totalHours;
+          } else if (isSaturday) {
+            // Saturday: ALL hours are 150%
+            overtime = totalHours;
+            normalHours = 0;
+            hours150 = totalHours;
           } else {
-            // Weekday (Monday-Friday): overtime if more than 8 hours
-            normalHours = 8;
-            overtime = totalHours > normalHours ? totalHours - normalHours : 0;
+            // Weekday (Monday-Friday): calculate percentage breakdown
+            normalHours = Math.min(totalHours, 8); // First 8 hours are normal
+            const overtimeHours = totalHours > 8 ? totalHours - 8 : 0;
+            
+            if (overtimeHours > 0) {
+              // 9th and 10th hour = 125%
+              hours125 = Math.min(overtimeHours, 2);
+              // Hours after 10th = 150%
+              if (overtimeHours > 2) {
+                hours150 = overtimeHours - 2;
+              }
+              overtime = overtimeHours;
+            }
           }
           
           if (overtime > 0) {
@@ -501,14 +527,22 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
             
             dailyOvertime.push({
               date,
-              dayOfWeek: isWeekend ? (dayOfWeek === 0 ? 'Sunday' : 'Saturday') : ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'][dayOfWeek - 1],
+              dayOfWeek: isWeekend ? (isSunday ? 'Sunday' : 'Saturday') : ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'][dayOfWeek - 1],
               totalHours: totalHours.toFixed(2),
               normalHours: normalHours.toFixed(2),
               overtime: overtime.toFixed(2),
+              hours125: hours125.toFixed(2),
+              hours150: hours150.toFixed(2),
+              hours200: hours200.toFixed(2),
               isWeekend: isWeekend,
+              isSaturday: isSaturday,
+              isSunday: isSunday,
               entries: sortedEntries
             });
             totalOvertime += overtime;
+            totalHours125 += hours125;
+            totalHours150 += hours150;
+            totalHours200 += hours200;
           }
         });
         
@@ -518,6 +552,9 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
             userName: user.name || user.email,
             userEmail: user.email,
             totalOvertime: totalOvertime.toFixed(2),
+            totalHours125: totalHours125.toFixed(2),
+            totalHours150: totalHours150.toFixed(2),
+            totalHours200: totalHours200.toFixed(2),
             dailyOvertime: dailyOvertime.sort((a, b) => a.date.localeCompare(b.date))
           });
         }
@@ -1935,10 +1972,6 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
           <TabsTrigger value="reminders" className="flex items-center gap-2">
             <AlertTriangle className="h-4 w-4" />
             <span className="hidden sm:inline">Reminders</span>
-          </TabsTrigger>
-          <TabsTrigger value="export" className="flex items-center gap-2">
-            <Download className="h-4 w-4" />
-            <span className="hidden sm:inline">Export</span>
           </TabsTrigger>
           <TabsTrigger value="overtime" className="flex items-center gap-2">
             <BarChart3 className="h-4 w-4" />
@@ -3867,7 +3900,10 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
           Overuren Tracking
         </h3>
         <p className="text-xs sm:text-sm text-blue-700 dark:text-blue-300 mb-4">
-          Bekijk overuren per gebruiker. Een normale werkdag (maandag t/m vrijdag) is 8 uur. Alles wat meer is gewerkt wordt als overuren geteld. Zaterdag en zondag worden altijd als overuren gezien (alle uren op weekenddagen zijn overuren).
+          Bekijk overuren per gebruiker met percentage breakdown. Een normale werkdag (maandag t/m vrijdag) is 8 uur. 
+          <br className="hidden sm:inline" />
+          <strong>Percentage regels:</strong> Na 8 uur op weekdagen: 9e & 10e uur = 125%, elk uur na 10 uur = 150%. 
+          Zaterdag = 150% (alle uren). Zondag = 200% (alle uren).
         </p>
         
         {/* Filters */}
@@ -4025,6 +4061,42 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                   </div>
                 </div>
                 
+                {/* Percentage Breakdown */}
+                <div className="mb-4 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600">
+                  <h5 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2">
+                    Overuren per Percentage:
+                  </h5>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    {parseFloat(userData.totalHours125 || "0") > 0 && (
+                      <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded p-2">
+                        <div className="text-xs text-orange-700 dark:text-orange-300 font-medium">125%</div>
+                        <div className="text-lg font-bold text-orange-600 dark:text-orange-400">
+                          {userData.totalHours125}h
+                        </div>
+                        <div className="text-xs text-orange-600 dark:text-orange-400">9e & 10e uur (weekdagen)</div>
+                      </div>
+                    )}
+                    {parseFloat(userData.totalHours150 || "0") > 0 && (
+                      <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded p-2">
+                        <div className="text-xs text-yellow-700 dark:text-yellow-300 font-medium">150%</div>
+                        <div className="text-lg font-bold text-yellow-600 dark:text-yellow-400">
+                          {userData.totalHours150}h
+                        </div>
+                        <div className="text-xs text-yellow-600 dark:text-yellow-400">Na 10e uur & Zaterdag</div>
+                      </div>
+                    )}
+                    {parseFloat(userData.totalHours200 || "0") > 0 && (
+                      <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded p-2">
+                        <div className="text-xs text-red-700 dark:text-red-300 font-medium">200%</div>
+                        <div className="text-lg font-bold text-red-600 dark:text-red-400">
+                          {userData.totalHours200}h
+                        </div>
+                        <div className="text-xs text-red-600 dark:text-red-400">Zondag</div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                
                 <Accordion type="multiple" className="w-full">
                   {userData.dailyOvertime.map((day: any, idx: number) => (
                     <AccordionItem key={idx} value={`day-${userData.userId}-${idx}`} className="border border-gray-200 dark:border-gray-700 rounded-lg mb-2">
@@ -4055,11 +4127,55 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                             <div className="text-lg font-bold text-blue-600 dark:text-blue-400">
                               +{day.overtime}h overuren
                             </div>
+                            {/* Percentage breakdown for this day */}
+                            <div className="flex flex-wrap gap-1 mt-1 justify-end">
+                              {parseFloat(day.hours125 || "0") > 0 && (
+                                <span className="text-xs bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 px-1.5 py-0.5 rounded">
+                                  125%: {day.hours125}h
+                                </span>
+                              )}
+                              {parseFloat(day.hours150 || "0") > 0 && (
+                                <span className="text-xs bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 px-1.5 py-0.5 rounded">
+                                  150%: {day.hours150}h
+                                </span>
+                              )}
+                              {parseFloat(day.hours200 || "0") > 0 && (
+                                <span className="text-xs bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 px-1.5 py-0.5 rounded">
+                                  200%: {day.hours200}h
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </AccordionTrigger>
                       <AccordionContent className="px-4 pb-4">
                         <div className="mt-3">
+                          {/* Day percentage breakdown */}
+                          {(parseFloat(day.hours125 || "0") > 0 || parseFloat(day.hours150 || "0") > 0 || parseFloat(day.hours200 || "0") > 0) && (
+                            <div className="mb-3 p-2 bg-gray-50 dark:bg-gray-700/50 rounded border border-gray-200 dark:border-gray-600">
+                              <div className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Overuren per Percentage:</div>
+                              <div className="flex flex-wrap gap-2">
+                                {parseFloat(day.hours125 || "0") > 0 && (
+                                  <div className="text-xs">
+                                    <span className="font-semibold text-orange-600 dark:text-orange-400">125%:</span>
+                                    <span className="text-gray-900 dark:text-gray-100 ml-1">{day.hours125}h</span>
+                                  </div>
+                                )}
+                                {parseFloat(day.hours150 || "0") > 0 && (
+                                  <div className="text-xs">
+                                    <span className="font-semibold text-yellow-600 dark:text-yellow-400">150%:</span>
+                                    <span className="text-gray-900 dark:text-gray-100 ml-1">{day.hours150}h</span>
+                                  </div>
+                                )}
+                                {parseFloat(day.hours200 || "0") > 0 && (
+                                  <div className="text-xs">
+                                    <span className="font-semibold text-red-600 dark:text-red-400">200%:</span>
+                                    <span className="text-gray-900 dark:text-gray-100 ml-1">{day.hours200}h</span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
                           <h5 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2">
                             Details ({day.entries?.length || 0} entries):
                           </h5>
