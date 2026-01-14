@@ -1511,6 +1511,12 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
         date: today,
         hours: invertedHours, // Use inverted hours
         description: "31",
+        // IMPORTANT: Do NOT set startTime or endTime - this marks it as an admin adjustment
+        // Weekly entry views filter out entries without startTime/endTime
+        // This ensures admin adjustments don't show up in weekly entry view
+        startTime: null,
+        endTime: null,
+        notes: reason ? `Admin adjustment: ${reason}` : "Admin adjustment",
       },
     ]).select();
     
@@ -2689,7 +2695,10 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                     const weekEntries = allEntries.filter(
                       e => e.user_id === cw.user_id && 
                       e.date >= weekStartStr && 
-                      e.date <= weekEndStr
+                      e.date <= weekEndStr &&
+                      // Filter out admin adjustments (entries without startTime/endTime are admin adjustments)
+                      // Only show entries that have both startTime and endTime - these are user-created entries
+                      e.startTime && e.endTime
                     );
                     const totalHours = weekEntries.reduce((sum, e) => sum + Number(e.hours || 0), 0);
                     
@@ -2779,7 +2788,11 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
         let weekEntries = allEntries.filter(
           e => e.user_id === cw.user_id && 
           e.date >= weekStartStr && 
-          e.date <= weekEndStr
+          e.date <= weekEndStr &&
+          // Filter out admin adjustments (entries without startTime/endTime are admin adjustments)
+          // Only show entries that have both startTime and endTime - these are user-created entries
+          // Note: Full day off entries DO have startTime/endTime set (08:00-16:30), so they are included
+          e.startTime && e.endTime
         );
         
         // Sort entries by date (Monday to Sunday), then by startTime
@@ -2937,7 +2950,9 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
         <Accordion type="multiple" className="w-full">
           {users.map(user => {
             // Group this user's entries by week
-            const userEntries = allEntries.filter(e => e.user_id === user.id);
+            // Filter out admin adjustments (entries without startTime/endTime are admin adjustments)
+            // Only show entries that have both startTime and endTime - these are user-created entries
+            const userEntries = allEntries.filter(e => e.user_id === user.id && e.startTime && e.endTime);
             const weeks: Record<string, any[]> = {};
             userEntries.forEach(e => {
               const week = getISOWeek(e.date);
