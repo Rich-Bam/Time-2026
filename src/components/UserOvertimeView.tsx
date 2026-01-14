@@ -357,39 +357,25 @@ const UserOvertimeView = ({ currentUser }: UserOvertimeViewProps) => {
               </>
             )}
 
-            {(overtimePeriod === "month" || overtimePeriod === "year") && (
+            {overtimePeriod === "month" && (
               <>
                 <div>
-                  <Label className="text-sm font-semibold mb-2 block">
-                    {overtimePeriod === "month" ? t('overtime.month') : t('overtime.year')}
-                  </Label>
-                  {overtimePeriod === "month" ? (
-                    <Select value={overtimeSelectedMonth} onValueChange={setOvertimeSelectedMonth}>
-                      <SelectTrigger className="w-full bg-white dark:bg-gray-800">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Array.from({ length: 12 }, (_, i) => {
-                          const monthNum = String(i + 1).padStart(2, '0');
-                          return (
-                            <SelectItem key={monthNum} value={monthNum}>
-                              {monthNames[i]}
-                            </SelectItem>
-                          );
-                        })}
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <Input 
-                      type="number" 
-                      min="2020" 
-                      max="2100" 
-                      placeholder={t('export.yearPlaceholder') || "Year"} 
-                      value={overtimeSelectedYear} 
-                      onChange={e => setOvertimeSelectedYear(e.target.value)} 
-                      className="w-full bg-white dark:bg-gray-800" 
-                    />
-                  )}
+                  <Label className="text-sm font-semibold mb-2 block">{t('overtime.month')}</Label>
+                  <Select value={overtimeSelectedMonth} onValueChange={setOvertimeSelectedMonth}>
+                    <SelectTrigger className="w-full bg-white dark:bg-gray-800">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Array.from({ length: 12 }, (_, i) => {
+                        const monthNum = String(i + 1).padStart(2, '0');
+                        return (
+                          <SelectItem key={monthNum} value={monthNum}>
+                            {monthNames[i]}
+                          </SelectItem>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div>
                   <Label className="text-sm font-semibold mb-2 block">{t('overtime.year')}</Label>
@@ -404,6 +390,21 @@ const UserOvertimeView = ({ currentUser }: UserOvertimeViewProps) => {
                   />
                 </div>
               </>
+            )}
+
+            {overtimePeriod === "year" && (
+              <div>
+                <Label className="text-sm font-semibold mb-2 block">{t('overtime.year')}</Label>
+                <Input 
+                  type="number" 
+                  min="2020" 
+                  max="2100" 
+                  placeholder={t('export.yearPlaceholder') || "Year"} 
+                  value={overtimeSelectedYear} 
+                  onChange={e => setOvertimeSelectedYear(e.target.value)} 
+                  className="w-full bg-white dark:bg-gray-800" 
+                />
+              </div>
             )}
           </div>
 

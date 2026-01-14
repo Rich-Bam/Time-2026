@@ -57,16 +57,17 @@ const OvertimeSummaryPanel = ({ currentUser, weekStart }: OvertimeSummaryPanelPr
   useEffect(() => {
     if (!currentUser || !weekStart) return;
     calculateOvertime();
-  }, [currentUser, weekStart]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser, weekStart?.getTime()]);
 
   const calculateOvertime = async () => {
-    if (!currentUser) return;
+    if (!currentUser || !weekStart) return;
     
     setLoading(true);
     try {
       const { from, to } = getWeekDateRange(weekStart);
 
-      // Build query - only for current user and current week
+      // Build query - only for current user and the specific week being viewed
       const { data, error } = await supabase
         .from("timesheet")
         .select("user_id, date, hours, description")
@@ -178,7 +179,7 @@ const OvertimeSummaryPanel = ({ currentUser, weekStart }: OvertimeSummaryPanelPr
       <div className="flex items-center gap-2 mb-2">
         <BarChart3 className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 dark:text-blue-400" />
         <h3 className="text-sm sm:text-base font-semibold text-blue-800 dark:text-blue-200">
-          {t('overtime.title')}
+          {t('overtime.title')} - {t('weekly.week')}
         </h3>
       </div>
       
