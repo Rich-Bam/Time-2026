@@ -16,6 +16,7 @@ import ChangePasswordForm from "@/components/ChangePasswordForm";
 import WeeklyCalendarEntry from "@/components/WeeklyCalendarEntry";
 import WeeklyCalendarEntrySimple from "@/components/WeeklyCalendarEntrySimple";
 import ViewHours from "@/components/ViewHours";
+import UserOvertimeView from "@/components/UserOvertimeView";
 import ScreenshotButton from "@/components/ScreenshotButton";
 import BugReports from "@/components/BugReports";
 import InstallPWA from "@/components/InstallPWA";
@@ -1922,6 +1923,15 @@ const Index = () => {
                         {t('nav.viewHours')}
                       </button>
                     )}
+                    {/* Overtime - Available for all regular users */}
+                    {currentUser && !currentUser?.isAdmin && currentUser?.userType !== 'administratie' && !isTester(currentUser) && !isWeeklyOnly(currentUser) && (
+                      <button
+                        className={`text-[9px] sm:text-xs md:text-sm lg:text-sm xl:text-base font-medium px-1 sm:px-1.5 md:px-2 lg:px-2.5 py-1.5 sm:py-1 md:py-1.5 lg:py-2 rounded transition-colors whitespace-nowrap min-h-[32px] sm:min-h-0 flex-shrink-0 ${activeTab === 'overtime' ? 'bg-orange-600 text-white dark:bg-orange-500' : 'text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-700'}`}
+                        onClick={() => setActiveTab('overtime')}
+                      >
+                        {t('nav.overtime')}
+                      </button>
+                    )}
                   </>
                 )}
                 {canSeeProjects(currentUser) && (
@@ -2062,6 +2072,9 @@ const Index = () => {
         )}
         {activeTab === 'viewhours' && currentUser && !currentUser?.isAdmin && currentUser?.userType !== 'administratie' && !isTester(currentUser) && !isWeeklyOnly(currentUser) && (
           <ViewHours currentUser={currentUser} />
+        )}
+        {activeTab === 'overtime' && currentUser && !currentUser?.isAdmin && currentUser?.userType !== 'administratie' && !isTester(currentUser) && !isWeeklyOnly(currentUser) && (
+          <UserOvertimeView currentUser={currentUser} />
         )}
         {activeTab === 'projects' && (
           canSeeProjects(currentUser) ? (
