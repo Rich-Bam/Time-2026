@@ -543,8 +543,14 @@ const Index = () => {
         const dayName = dayNamesEN[dayIndex];
         const formattedDate = formatDateDDMMYY(dateStr);
         
-        // Calculate total hours for the day
-        const totalHours = dayEntries.reduce((sum, entry) => sum + (parseFloat(entry.hours) || 0), 0);
+        // Calculate total hours for the day (excluding breaks - work type 35)
+        const totalHours = dayEntries.reduce((sum, entry) => {
+          // Skip breaks (work type 35) - they should not count toward total hours
+          if (entry.description === "35") {
+            return sum;
+          }
+          return sum + (parseFloat(entry.hours) || 0);
+        }, 0);
         const totalHoursHHMM = formatHoursHHMM(totalHours);
         
         // Create header rows (similar to original template)
@@ -1224,8 +1230,14 @@ const Index = () => {
       const dayName = dayNamesEN[dayIdx];
       const formattedDate = formatDateDDMMYY(dateStr);
       
-      // Calculate total hours for the day
-      const totalHours = dayEntries.reduce((sum: number, entry: any) => sum + (parseFloat(entry.hours) || 0), 0);
+      // Calculate total hours for the day (excluding breaks - work type 35)
+      const totalHours = dayEntries.reduce((sum: number, entry: any) => {
+        // Skip breaks (work type 35) - they should not count toward total hours
+        if (entry.description === "35") {
+          return sum;
+        }
+        return sum + (parseFloat(entry.hours) || 0);
+      }, 0);
       const totalHoursHHMM = formatHoursHHMM(totalHours);
       
       // Create worksheet

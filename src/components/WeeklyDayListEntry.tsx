@@ -233,7 +233,7 @@ const WeeklyDayListEntry = ({ currentUser }: { currentUser: any }) => {
                     </div>
                     <div>
                       <Label>Project</Label>
-                      <Input value={entry.project} onChange={e => handleEntryChange(dayIdx, entryIdx, "project", e.target.value)} placeholder="Project" disabled={entry.workType === "31" || isLocked} />
+                      <Input value={entry.project} onChange={e => handleEntryChange(dayIdx, entryIdx, "project", e.target.value)} placeholder="Project" disabled={isLocked} />
                     </div>
                     <div>
                       <Label>Hours</Label>

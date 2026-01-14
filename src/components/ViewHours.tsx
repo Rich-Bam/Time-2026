@@ -192,8 +192,14 @@ const ViewHours = ({ currentUser }: { currentUser: any }) => {
     entriesByDay[dateStr] = entries.filter(e => e.date === dateStr);
   });
 
-  // Calculate totals
-  const totalHours = entries.reduce((sum, e) => sum + (parseFloat(String(e.hours)) || 0), 0);
+  // Calculate totals (excluding breaks - work type 35)
+  const totalHours = entries.reduce((sum, e) => {
+    // Skip breaks (work type 35) - they should not count toward total hours
+    if (e.description === "35") {
+      return sum;
+    }
+    return sum + (parseFloat(String(e.hours)) || 0);
+  }, 0);
   const totalHoursFormatted = formatHours(totalHours);
 
   return (
@@ -256,7 +262,13 @@ const ViewHours = ({ currentUser }: { currentUser: any }) => {
               {weekDates.map((date, idx) => {
                 const dateStr = formatDateToYYYYMMDD(date);
                 const dayEntries = entriesByDay[dateStr] || [];
-                const dayTotal = dayEntries.reduce((sum, e) => sum + (parseFloat(String(e.hours)) || 0), 0);
+                const dayTotal = dayEntries.reduce((sum, e) => {
+                  // Skip breaks (work type 35) - they should not count toward total hours
+                  if (e.description === "35") {
+                    return sum;
+                  }
+                  return sum + (parseFloat(String(e.hours)) || 0);
+                }, 0);
 
                 return (
                   <Card key={dateStr} className="border-l-4 border-l-orange-500">

@@ -915,6 +915,11 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
     const day = days[dayIdx];
     if (day && day.entries) {
       day.entries.forEach(entry => {
+        // Skip breaks (work type 35) - they should not count toward total hours
+        if (entry.workType === "35") {
+          return;
+        }
+        
         let hours = 0;
         
         // If full day off is checked, add 8 hours
@@ -936,6 +941,11 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
     // Add hours from submitted entries
     const submitted = submittedEntries[dateStr] || [];
     submitted.forEach(submittedEntry => {
+      // Skip breaks (work type 35) - they should not count toward total hours
+      if (submittedEntry.workType === "35") {
+        return;
+      }
+      
       const hours = parseFloat(submittedEntry.hours || "0") || 0;
       total += hours;
     });
@@ -1408,8 +1418,14 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
       const dayName = dayNamesEN[dayIdx];
       const formattedDate = formatDateDDMMYY(dateStr);
       
-      // Calculate total hours for the day
-      const totalHours = dayEntries.reduce((sum, entry) => sum + (parseFloat(entry.hours) || 0), 0);
+      // Calculate total hours for the day (excluding breaks - work type 35)
+      const totalHours = dayEntries.reduce((sum, entry) => {
+        // Skip breaks (work type 35) - they should not count toward total hours
+        if (entry.description === "35") {
+          return sum;
+        }
+        return sum + (parseFloat(entry.hours) || 0);
+      }, 0);
       const totalHoursHHMM = formatHoursHHMM(totalHours);
       
       // Create worksheet
@@ -1925,7 +1941,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
                                     variant="outline"
                                     role="combobox"
                                     className="w-full justify-between h-10 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-                                    disabled={!workTypeRequiresProject(entry.workType) || isLocked}
+                                    disabled={isLocked}
                                   >
                                     {entry.project || t('weekly.selectProject')}
                                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -2297,7 +2313,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
                                       variant="outline"
                                       role="combobox"
                                       className="w-full justify-between h-9 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-                                      disabled={!workTypeRequiresProject(entry.workType) || isLocked}
+                                      disabled={isLocked}
                                     >
                                       {entry.project || t('weekly.selectProject')}
                                       <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />

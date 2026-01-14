@@ -257,7 +257,7 @@ const WeeklyTimesheetEntry = ({ currentUser }: { currentUser: any }) => {
                         value={row.project}
                         onChange={e => handleChange(rowIdx, "project", e.target.value)}
                         placeholder="Project"
-                        disabled={row.workType === "31" || isLocked}
+                        disabled={isLocked}
                       />
                     </td>
                     {daysOfWeek.map((_, dayIdx) => (

@@ -2237,7 +2237,7 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
                           value={entry.project}
                           onChange={e => handleEntryChange(dayIdx, entryIdx, "project", e.target.value)}
                           placeholder={t('weekly.projectPlaceholder')}
-                          disabled={!workTypeRequiresProject(entry.workType) || (confirmedWeeks[formatDateToYYYYMMDD(weekDates[0])] && !currentUser?.isAdmin)}
+                          disabled={confirmedWeeks[formatDateToYYYYMMDD(weekDates[0])] && !currentUser?.isAdmin}
                         />
                         <Button 
                           size="sm" 
@@ -2253,7 +2253,7 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
                         <Select
                           value={entry.project}
                           onValueChange={val => handleEntryChange(dayIdx, entryIdx, "project", val)}
-                          disabled={!workTypeRequiresProject(entry.workType) || (confirmedWeeks[formatDateToYYYYMMDD(weekDates[0])] && !currentUser?.isAdmin)}
+                          disabled={confirmedWeeks[formatDateToYYYYMMDD(weekDates[0])] && !currentUser?.isAdmin}
                         >
                           <SelectTrigger><SelectValue placeholder={t('weekly.projectPlaceholder')} /></SelectTrigger>
                           <SelectContent>
