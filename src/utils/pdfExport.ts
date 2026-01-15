@@ -4,6 +4,7 @@ interface PDFExportOptions {
   userName?: string;
   dateRange?: { from: string; to: string };
   period?: string;
+  summaryLines?: Array<{ label: string; value: string }>;
   data: Array<{
     Date: string;
     Day: string;
@@ -105,6 +106,17 @@ export const createPDF = (options: PDFExportOptions, filename: string) => {
   doc.setFont('helvetica', 'normal');
   doc.text(`${totalHours.toFixed(2)} hours (${String(totalHoursHH).padStart(2, '0')}:${String(totalHoursMM).padStart(2, '0')})`, 60, yPos);
   yPos += 10;
+
+  if (options.summaryLines?.length) {
+    options.summaryLines.forEach(line => {
+      doc.setFont('helvetica', 'bold');
+      doc.text(`${line.label}:`, 15, yPos);
+      doc.setFont('helvetica', 'normal');
+      doc.text(String(line.value || ''), 60, yPos);
+      yPos += 7;
+    });
+    yPos += 3;
+  }
 
   // Table header with light orange background
   const tableStartY = yPos;

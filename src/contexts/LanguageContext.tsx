@@ -98,6 +98,13 @@ const translations: Record<Language, Record<string, string>> = {
     'export.userNote': 'Selecteer een periode en datum om je uren te exporteren naar Excel.',
     'export.weekPlaceholder': 'Week',
     'export.yearPlaceholder': 'Jaar',
+    'export.overtimeSummary': 'Overuren Samenvatting',
+    'export.overtimeTotal': 'Totaal overuren',
+    'export.overtime125': 'Overuren 125%',
+    'export.overtime150': 'Overuren 150%',
+    'export.overtime200': 'Overuren 200%',
+    'export.overnightStays': 'Overnachtingen',
+    'export.overnightDates': 'Data overnachtingen',
     
     // Weekly Entry
     'weekly.viewMode.cards': 'Kaarten',
@@ -183,6 +190,15 @@ const translations: Record<Language, Record<string, string>> = {
     'Confirm.Week': 'Bevestig Week',
     'weekly.confirm': 'Bevestigen',
     'weekly.confirmNote': 'Zodra je deze week bevestigt, kun je geen wijzigingen meer aanbrengen. Zorg ervoor dat alle invoeren correct zijn voordat je bevestigt.',
+    'weekly.weekLockedMessage': '✓ Deze week is bevestigd en vergrendeld. Neem contact op met een admin als je wijzigingen moet maken.',
+    'admin.weekReview.addCommentHint': 'Voeg een comment toe zodat de gebruiker weet wat er aangepast moet worden.',
+    'admin.weekReview.commentPlaceholder': 'Comment...',
+    'admin.weekReview.emailFailedTitle': 'Email mislukt',
+    'admin.weekReview.emailFailedDescription': 'Actie opgeslagen, maar email kon niet worden verzonden. Controleer Edge Function logs en secrets.',
+    'admin.weekReview.approvedToastTitle': 'Week goedgekeurd',
+    'admin.weekReview.approvedToastDescription': 'De week is goedgekeurd.',
+    'admin.weekReview.rejectedToastTitle': 'Week afgekeurd',
+    'admin.weekReview.rejectedToastDescription': 'De week is afgekeurd en ontgrendeld voor de gebruiker.',
     
     
     // View Hours
@@ -540,6 +556,13 @@ const translations: Record<Language, Record<string, string>> = {
     'export.userNote': 'Select a period and date to export your hours to Excel.',
     'export.weekPlaceholder': 'Week',
     'export.yearPlaceholder': 'Year',
+    'export.overtimeSummary': 'Overtime Summary',
+    'export.overtimeTotal': 'Total overtime',
+    'export.overtime125': 'Overtime 125%',
+    'export.overtime150': 'Overtime 150%',
+    'export.overtime200': 'Overtime 200%',
+    'export.overnightStays': 'Overnight stays',
+    'export.overnightDates': 'Overnight dates',
     
     // Weekly Entry
     'weekly.viewMode.cards': 'Cards',
@@ -624,6 +647,15 @@ const translations: Record<Language, Record<string, string>> = {
     'Confirm.Week': 'Confirm Week',
     'weekly.confirm': 'Confirm',
     'weekly.confirmNote': 'Once you confirm this week, you will not be able to make any changes. Please ensure all entries are correct before confirming.',
+    'weekly.weekLockedMessage': '✓ This week has been confirmed and locked. Contact an admin if you need to make changes.',
+    'admin.weekReview.addCommentHint': 'Add a comment so the user knows what to fix.',
+    'admin.weekReview.commentPlaceholder': 'Comment...',
+    'admin.weekReview.emailFailedTitle': 'Email failed',
+    'admin.weekReview.emailFailedDescription': 'Action saved, but email could not be sent. Check Edge Function logs and secrets.',
+    'admin.weekReview.approvedToastTitle': 'Week approved',
+    'admin.weekReview.approvedToastDescription': 'The week has been approved.',
+    'admin.weekReview.rejectedToastTitle': 'Week rejected',
+    'admin.weekReview.rejectedToastDescription': 'The week has been rejected and unlocked for the user.',
     
 
     

@@ -123,6 +123,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
   const [openWorkTypePopovers, setOpenWorkTypePopovers] = useState<Record<string, boolean>>({});
   const [workTypeSearchValues, setWorkTypeSearchValues] = useState<Record<string, string>>({});
   const [availableWeeks, setAvailableWeeks] = useState<Array<{ weekStart: string; weekNumber: number; year: number; label: string }>>([]);
+  const [weekReviewComment, setWeekReviewComment] = useState<string>("");
   
   const weekDates = getWeekDates(weekStart);
   const weekNumber = getISOWeekNumber(weekDates[0]);
@@ -424,7 +425,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
     const weekKey = formatDateToYYYYMMDD(weekDates[0]);
     const { data, error } = await supabase
       .from('confirmed_weeks')
-      .select('confirmed, admin_approved')
+      .select('confirmed, admin_approved, admin_reviewed, admin_review_comment')
       .eq('user_id', currentUser.id)
       .eq('week_start_date', weekKey)
       .single();
@@ -450,6 +451,12 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
       console.log('fetchConfirmedStatus updated state:', updated);
       return updated;
     });
+
+    if (data.admin_reviewed && !data.admin_approved) {
+      setWeekReviewComment(data.admin_review_comment || "");
+    } else {
+      setWeekReviewComment("");
+    }
   };
 
   useEffect(() => {
@@ -1429,6 +1436,19 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
 
   // Export week entries to Excel with per-day sheets
   const handleExportWeek = async () => {
+    // You can change the export font size here
+    const EXPORT_FONT_SIZE = 14;
+    const EXPORT_FONT_NAME = 'Calibri';
+
+    const applyDefaultFont = (ws: any, maxRow: number) => {
+      for (let r = 1; r <= maxRow; r++) {
+        const row = ws.getRow(r);
+        row.eachCell({ includeEmpty: true }, (cell: any) => {
+          cell.font = { ...(cell.font || {}), name: EXPORT_FONT_NAME, size: EXPORT_FONT_SIZE };
+        });
+      }
+    };
+
     if (!currentUser) {
       toast({
         title: "Error",
@@ -1441,19 +1461,37 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
     const fromDate = formatDateToYYYYMMDD(weekDates[0]);
     const toDate = formatDateToYYYYMMDD(weekDates[6]);
 
-    const { data, error } = await supabase
-      .from("timesheet")
-      .select("*, projects(name)")
-      .eq("user_id", currentUser.id)
-      .gte("date", fromDate)
-      .lte("date", toDate)
-      .order("date", { ascending: true })
-      .order("startTime", { ascending: true });
+    const [{ data, error }, { data: overnightRows, error: overnightError }] = await Promise.all([
+      supabase
+        .from("timesheet")
+        .select("*, projects(name)")
+        .eq("user_id", currentUser.id)
+        .gte("date", fromDate)
+        .lte("date", toDate)
+        .order("date", { ascending: true })
+        .order("startTime", { ascending: true }),
+      supabase
+        .from("overnight_stays")
+        .select("date")
+        .eq("user_id", currentUser.id)
+        .gte("date", fromDate)
+        .lte("date", toDate)
+        .order("date", { ascending: true }),
+    ]);
 
     if (error) {
       toast({
         title: t('weekly.exportFailed'),
         description: error.message,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (overnightError) {
+      toast({
+        title: t('weekly.exportFailed'),
+        description: overnightError.message,
         variant: "destructive",
       });
       return;
@@ -1504,12 +1542,96 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
     const workbook = new ExcelJS.Workbook();
     
     const dayNamesEN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    const overnightSet = new Set((overnightRows || []).map((r: any) => String(r.date)));
+
+    // Add week summary sheet (overtime + overnight) so it's visible immediately on open
+    const summarySheet = workbook.addWorksheet("Summary");
+    summarySheet.getColumn(1).width = 25;
+    summarySheet.getColumn(2).width = 80;
+
+    summarySheet.getCell('A1').value = t('weekly.employeeName');
+    summarySheet.getCell('B1').value = currentUser.name || currentUser.email || '';
+    summarySheet.getCell('A2').value = t('weekly.date');
+    summarySheet.getCell('B2').value = `${t('weekly.from')}: ${formatDateDDMMYY(fromDate)}  ${t('weekly.to')}: ${formatDateDDMMYY(toDate)}`;
+    summarySheet.getCell('A3').value = t('weekly.weekNumber');
+    summarySheet.getCell('B3').value = weekNumber.toString();
+    summarySheet.getCell('A4').value = t('weekly.year');
+    summarySheet.getCell('B4').value = new Date(fromDate).getFullYear().toString();
+
+    // Weekly overtime totals (same rules as overtime panel)
+    const dateHoursMap: Record<string, number> = {};
+    filteredData.forEach((entry: any) => {
+      const workType = parseInt(entry.description || "0");
+      if ((workType >= 10 && workType <= 29) || workType === 100) {
+        const h = parseFloat(entry.hours) || 0;
+        dateHoursMap[String(entry.date)] = (dateHoursMap[String(entry.date)] || 0) + h;
+      }
+    });
+    let totalOvertime = 0;
+    let total125 = 0;
+    let total150 = 0;
+    let total200 = 0;
+    Object.keys(dateHoursMap).forEach(dateStr => {
+      const totalHoursForDay = dateHoursMap[dateStr] || 0;
+      const dow = new Date(dateStr).getDay();
+      const isSat = dow === 6;
+      const isSun = dow === 0;
+      if (isSun) { totalOvertime += totalHoursForDay; total200 += totalHoursForDay; return; }
+      if (isSat) { totalOvertime += totalHoursForDay; total150 += totalHoursForDay; return; }
+      const overtimeHours = totalHoursForDay > 8 ? totalHoursForDay - 8 : 0;
+      if (overtimeHours > 0) {
+        totalOvertime += overtimeHours;
+        total125 += Math.min(overtimeHours, 2);
+        if (overtimeHours > 2) total150 += overtimeHours - 2;
+      }
+    });
+
+    const overnightDates = (overnightRows || []).map((r: any) => formatDateDDMMYY(String(r.date)));
+    // Make summary easy to read (separate cells)
+    summarySheet.getCell('A6').value = t('export.overtimeSummary');
+    summarySheet.getCell('A6').font = { bold: true };
+    summarySheet.mergeCells('A6:H6');
+
+    summarySheet.getCell('A7').value = t('export.overtimeTotal');
+    summarySheet.getCell('A7').font = { bold: true };
+    summarySheet.getCell('B7').value = totalOvertime;
+    summarySheet.getCell('B7').numFmt = '0.00';
+    summarySheet.getCell('C7').value = '125%';
+    summarySheet.getCell('C7').font = { bold: true };
+    summarySheet.getCell('D7').value = total125;
+    summarySheet.getCell('D7').numFmt = '0.00';
+    summarySheet.getCell('E7').value = '150%';
+    summarySheet.getCell('E7').font = { bold: true };
+    summarySheet.getCell('F7').value = total150;
+    summarySheet.getCell('F7').numFmt = '0.00';
+    summarySheet.getCell('G7').value = '200%';
+    summarySheet.getCell('G7').font = { bold: true };
+    summarySheet.getCell('H7').value = total200;
+    summarySheet.getCell('H7').numFmt = '0.00';
+
+    summarySheet.getCell('A9').value = t('export.overnightStays');
+    summarySheet.getCell('A9').font = { bold: true };
+    summarySheet.getCell('B9').value = overnightDates.length;
+    summarySheet.getCell('C9').value = t('export.overnightDates');
+    summarySheet.getCell('C9').font = { bold: true };
+    summarySheet.getCell('D9').value = overnightDates.join(', ');
+    summarySheet.mergeCells('D9:H9');
+
+    // Light styling band
+    ['A7','B7','C7','D7','E7','F7','G7','H7','A9','B9','C9','D9'].forEach(addr => {
+      const cell = summarySheet.getCell(addr);
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEFF6FF' } };
+    });
+
+    applyDefaultFont(summarySheet, 12);
     
     // Create sheets for each day
     weekDates.forEach((date, dayIdx) => {
       const dateStr = formatDateToYYYYMMDD(date);
       const dayEntries = entriesByDay[dateStr] || [];
-      const dayName = dayNamesEN[dayIdx];
+      const locale = language === 'nl' ? 'nl-NL' : 'en-GB';
+      const dayName = dayNamesEN[dayIdx]; // sheet name (stable)
+      const dayNameDisplay = date.toLocaleDateString(locale, { weekday: 'long' });
       const formattedDate = formatDateDDMMYY(dateStr);
       
       // Calculate total hours for the day (excluding breaks - work type 35)
@@ -1547,25 +1669,78 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
       worksheet.getColumn(7).width = 30; // Space for logo
 
       // Add header rows
-      worksheet.getCell('A1').value = 'Employee Name:';
+      worksheet.getCell('A1').value = t('weekly.employeeName');
       worksheet.getCell('B1').value = currentUser.name || currentUser.email || '';
       
-      worksheet.getCell('A2').value = 'Date:';
-      worksheet.getCell('B2').value = `From: ${formatDateDDMMYY(fromDate)}`;
-      worksheet.getCell('D2').value = `To: ${formatDateDDMMYY(toDate)}`;
+      worksheet.getCell('A2').value = t('weekly.date');
+      worksheet.getCell('B2').value = `${t('weekly.from')}: ${formatDateDDMMYY(fromDate)}`;
+      worksheet.getCell('D2').value = `${t('weekly.to')}: ${formatDateDDMMYY(toDate)}`;
       
-      worksheet.getCell('A3').value = 'Day:';
-      worksheet.getCell('B3').value = `${formattedDate} ${dayName}`;
+      worksheet.getCell('A3').value = t('weekly.day');
+      worksheet.getCell('B3').value = `${formattedDate} ${dayNameDisplay}`;
       
-      worksheet.getCell('A4').value = 'Week Number:';
+      worksheet.getCell('A4').value = t('weekly.weekNumber');
       worksheet.getCell('B4').value = weekNumber.toString();
       
-      worksheet.getCell('A5').value = 'Year:';
+      worksheet.getCell('A5').value = t('weekly.year');
       worksheet.getCell('B5').value = new Date(fromDate).getFullYear().toString();
 
+      // Overtime + overnight for this day (same rules as overtime panel)
+      let dayOvertime = 0;
+      let day125 = 0;
+      let day150 = 0;
+      let day200 = 0;
+      const dow = date.getDay();
+      const isSaturday = dow === 6;
+      const isSunday = dow === 0;
+      if (isSunday) {
+        dayOvertime = totalHours;
+        day200 = totalHours;
+      } else if (isSaturday) {
+        dayOvertime = totalHours;
+        day150 = totalHours;
+      } else {
+        const overtimeHours = totalHours > 8 ? totalHours - 8 : 0;
+        if (overtimeHours > 0) {
+          dayOvertime = overtimeHours;
+          day125 = Math.min(overtimeHours, 2);
+          if (overtimeHours > 2) day150 = overtimeHours - 2;
+        }
+      }
+      // Clear, per-day summary (separate cells)
+      worksheet.getCell('A6').value = t('export.overtimeSummary');
+      worksheet.getCell('A6').font = { bold: true };
+      worksheet.mergeCells('A6:H6');
+
+      worksheet.getCell('A7').value = t('export.overtimeTotal');
+      worksheet.getCell('A7').font = { bold: true };
+      worksheet.getCell('B7').value = dayOvertime;
+      worksheet.getCell('B7').numFmt = '0.00';
+      worksheet.getCell('C7').value = '125%';
+      worksheet.getCell('C7').font = { bold: true };
+      worksheet.getCell('D7').value = day125;
+      worksheet.getCell('D7').numFmt = '0.00';
+      worksheet.getCell('E7').value = '150%';
+      worksheet.getCell('E7').font = { bold: true };
+      worksheet.getCell('F7').value = day150;
+      worksheet.getCell('F7').numFmt = '0.00';
+      worksheet.getCell('G7').value = '200%';
+      worksheet.getCell('G7').font = { bold: true };
+      worksheet.getCell('H7').value = day200;
+      worksheet.getCell('H7').numFmt = '0.00';
+
+      worksheet.getCell('A8').value = t('export.overnightStays');
+      worksheet.getCell('A8').font = { bold: true };
+      worksheet.getCell('B8').value = overnightSet.has(dateStr) ? t('admin.yes') : t('admin.no');
+
+      ['A7','B7','C7','D7','E7','F7','G7','H7','A8','B8'].forEach(addr => {
+        const cell = worksheet.getCell(addr);
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEFF6FF' } };
+      });
+
       // Add table headers (row 7)
-      const headerRow = worksheet.getRow(7);
-      headerRow.values = ['Day', 'Work Type', 'Project Work Order', 'From', 'To', 'Hours Worked'];
+      const headerRow = worksheet.getRow(9);
+      headerRow.values = [t('weekly.day'), t('weekly.workType'), t('weekly.projectWorkOrder'), t('weekly.from'), t('weekly.to'), t('weekly.hoursWorked')];
       headerRow.font = { bold: true };
       headerRow.fill = {
         type: 'pattern',
@@ -1575,9 +1750,9 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
 
       // Add data rows
       dayEntries.forEach((entry, idx) => {
-        const row = worksheet.getRow(8 + idx);
+        const row = worksheet.getRow(10 + idx);
         row.values = [
-          dayName,
+          dayNameDisplay,
           getWorkTypeLabel(entry.description || ''),
           entry.projects?.name || entry.project || '',
           entry.startTime || '',
@@ -1587,12 +1762,15 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
       });
 
       // Add total row
-      const totalRowIndex = 8 + dayEntries.length;
+      const totalRowIndex = 10 + dayEntries.length;
       const totalRow = worksheet.getRow(totalRowIndex);
       totalRow.getCell(2).value = t('daily.total');
       totalRow.getCell(2).font = { bold: true };
       totalRow.getCell(6).value = totalHoursHHMM;
       totalRow.getCell(6).font = { bold: true };
+
+      // Make each sheet easier to read
+      applyDefaultFont(worksheet, totalRowIndex);
     });
 
     // Generate filename with user name and week number
@@ -1807,6 +1985,11 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
       {isLocked && (
         <div className="p-2 sm:p-3 bg-yellow-50 border border-yellow-200 rounded text-yellow-800 text-xs sm:text-sm">
           ⚠️ {t('weekly.confirmed')}
+        </div>
+      )}
+      {!isLocked && weekReviewComment && (
+        <div className="p-2 sm:p-3 bg-red-50 border border-red-200 rounded text-red-800 text-xs sm:text-sm">
+          <strong>{t('admin.rejectedStatus')}:</strong> {weekReviewComment}
         </div>
       )}
 
@@ -2743,7 +2926,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
         <Card className="mt-4 bg-blue-50 border-blue-200">
           <CardContent className="p-4">
             <div className="text-blue-800 font-semibold">
-              ✓ This week has been confirmed and locked. Contact an admin if you need to make changes.
+              {t('weekly.weekLockedMessage')}
             </div>
           </CardContent>
         </Card>

@@ -3,7 +3,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
@@ -11,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { User, Calendar, Pencil, Check, X, Download, FileText, FileDown, Calendar as CalendarIcon, Users, Eye, AlertTriangle, Trash2, BarChart3, RefreshCw, Clock } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import * as XLSX from "xlsx";
 import ExcelJS from "exceljs";
@@ -89,6 +89,15 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
   const [daysOffInput, setDaysOffInput] = useState<Record<string, string>>({});
   const [daysOffReasonInput, setDaysOffReasonInput] = useState<Record<string, string>>({});
   const [showDaysOffReasonDialog, setShowDaysOffReasonDialog] = useState(false);
+  const [weekReviewDialog, setWeekReviewDialog] = useState<{
+    open: boolean;
+    userId: string;
+    weekStartDate: string;
+    userName: string;
+    weekNumber: number;
+    year: number;
+  }>({ open: false, userId: "", weekStartDate: "", userName: "", weekNumber: 0, year: 0 });
+  const [weekReviewComment, setWeekReviewComment] = useState<string>("");
   const [pendingDaysOffAction, setPendingDaysOffAction] = useState<{userId: string, hours: number} | null>(null);
   const [allEntries, setAllEntries] = useState<any[]>([]);
   const [projectsMap, setProjectsMap] = useState<Record<string, string>>({});
@@ -1898,13 +1907,45 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
   const handleApproveWeek = async (userId: string, weekStartDate: string) => {
     const { error } = await supabase
       .from('confirmed_weeks')
-      .update({ admin_approved: true, admin_reviewed: true })
+      .update({ admin_approved: true, admin_reviewed: true, admin_review_comment: null, admin_reviewed_by: currentUser?.id || null, admin_reviewed_at: new Date().toISOString() })
       .eq('user_id', userId)
       .eq('week_start_date', weekStartDate);
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
-      toast({ title: "Week Goedgekeurd", description: "De week is goedgekeurd door admin." });
+      toast({ title: t('admin.weekReview.approvedToastTitle'), description: t('admin.weekReview.approvedToastDescription') });
+      try {
+        const user = users.find((u: any) => String(u.id) === String(userId));
+        const weekStart = new Date(weekStartDate);
+        const weekNum = getISOWeekNumber(weekStart);
+        const year = weekStart.getFullYear();
+        if (user?.id) {
+          const { error: emailError } = await supabase.functions.invoke('send-week-review-email', {
+            body: {
+              userId: user.id,
+              weekStartDate,
+              weekNumber: weekNum,
+              year,
+              status: "approved",
+            },
+          });
+          if (emailError) {
+            toast({
+              title: t('admin.weekReview.emailFailedTitle'),
+              description: emailError.message || t('admin.weekReview.emailFailedDescription'),
+              variant: "default",
+            });
+          }
+        }
+      } catch (e) {
+        // Email failure should not block approval
+        console.warn("Failed to send approval email", e);
+        toast({
+          title: t('admin.weekReview.emailFailedTitle'),
+          description: t('admin.weekReview.emailFailedDescription'),
+          variant: "default",
+        });
+      }
       // Refresh confirmed weeks
       const { data } = await supabase
         .from('confirmed_weeks')
@@ -1916,23 +1957,83 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
   };
 
   const handleRejectWeek = async (userId: string, weekStartDate: string) => {
+    const user = users.find((u: any) => String(u.id) === String(userId));
+    const weekStart = new Date(weekStartDate);
+    const weekNum = getISOWeekNumber(weekStart);
+    const year = weekStart.getFullYear();
+    setWeekReviewComment("");
+    setWeekReviewDialog({
+      open: true,
+      userId,
+      weekStartDate,
+      userName: user?.name || user?.email || t('admin.unknownUser'),
+      weekNumber: weekNum,
+      year,
+    });
+  };
+
+  const submitWeekRejection = async () => {
+    if (!weekReviewDialog.userId || !weekReviewDialog.weekStartDate) return;
+    const { userId, weekStartDate, weekNumber, year } = weekReviewDialog;
+
     const { error } = await supabase
       .from('confirmed_weeks')
-      .update({ admin_approved: false, admin_reviewed: true })
+      // Reject should UNLOCK the week so user can edit again
+      .update({
+        confirmed: false,
+        admin_approved: false,
+        admin_reviewed: true,
+        admin_review_comment: weekReviewComment || null,
+        admin_reviewed_by: currentUser?.id || null,
+        admin_reviewed_at: new Date().toISOString(),
+      })
       .eq('user_id', userId)
       .eq('week_start_date', weekStartDate);
+
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
-    } else {
-      toast({ title: "Week Afgekeurd", description: "De week is afgekeurd door admin." });
-      // Refresh confirmed weeks
-      const { data } = await supabase
-        .from('confirmed_weeks')
-        .select('*')
-        .eq('confirmed', true)
-        .order('week_start_date', { ascending: false });
-      setConfirmedWeeks(data || []);
+      return;
     }
+
+    toast({ title: t('admin.weekReview.rejectedToastTitle'), description: t('admin.weekReview.rejectedToastDescription') });
+
+    try {
+      const { error: emailError } = await supabase.functions.invoke('send-week-review-email', {
+        body: {
+          userId,
+          weekStartDate,
+          weekNumber,
+          year,
+          status: "rejected",
+          comment: weekReviewComment || undefined,
+        },
+      });
+      if (emailError) {
+        toast({
+          title: t('admin.weekReview.emailFailedTitle'),
+          description: emailError.message || t('admin.weekReview.emailFailedDescription'),
+          variant: "default",
+        });
+      }
+    } catch (e) {
+      console.warn("Failed to send rejection email", e);
+      toast({
+        title: t('admin.weekReview.emailFailedTitle'),
+        description: t('admin.weekReview.emailFailedDescription'),
+        variant: "default",
+      });
+    }
+
+    setWeekReviewDialog(prev => ({ ...prev, open: false }));
+    setWeekReviewComment("");
+
+    // Refresh confirmed weeks (only confirmed=true are listed)
+    const { data } = await supabase
+      .from('confirmed_weeks')
+      .select('*')
+      .eq('confirmed', true)
+      .order('week_start_date', { ascending: false });
+    setConfirmedWeeks(data || []);
   };
 
   const handleUnlockWeek = async (userId: string, weekStartDate: string) => {
@@ -2804,7 +2905,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                             </div>
                           </div>
                           <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
-                            {!cw.admin_approved && (
+                            {!cw.admin_reviewed && (
                               <Button
                                 size="sm"
                                 variant="default"
@@ -2812,6 +2913,16 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                                 onClick={() => handleApproveWeek(cw.user_id, cw.week_start_date)}
                               >
                                 {t('admin.approveButton')}
+                              </Button>
+                            )}
+                            {!cw.admin_reviewed && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="border-red-600 dark:border-red-500 text-red-600 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/40 h-8"
+                                onClick={() => handleRejectWeek(cw.user_id, cw.week_start_date)}
+                              >
+                                {t('admin.rejectButton')}
                               </Button>
                             )}
                             <Button
@@ -2931,7 +3042,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                     </div>
                   </div>
                   <div className="flex gap-2">
-                    {!cw.admin_approved && (
+                    {!cw.admin_reviewed && (
                       <Button
                         size="sm"
                         variant="default"
@@ -2942,6 +3053,19 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                         }}
                       >
                         {t('admin.approveButton')}
+                      </Button>
+                    )}
+                    {!cw.admin_reviewed && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="border-red-600 dark:border-red-500 text-red-600 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/40"
+                        onClick={() => {
+                          handleRejectWeek(cw.user_id, cw.week_start_date);
+                          setSelectedWeekForView(null);
+                        }}
+                      >
+                        {t('admin.rejectButton')}
                       </Button>
                     )}
                     <Button
@@ -3146,13 +3270,27 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
               className="h-20 flex flex-col items-center justify-center bg-orange-600 hover:bg-orange-700 text-white shadow-lg rounded-lg transition-all" 
               onClick={async () => {
                 setExporting(true);
-                const { data, error } = await supabase
-                  .from("timesheet")
-                  .select("*, projects(name)");
+                const [{ data, error }, { data: overnightRows, error: overnightError }] = await Promise.all([
+                  supabase
+                    .from("timesheet")
+                    .select("*, projects(name)"),
+                  supabase
+                    .from("overnight_stays")
+                    .select("user_id, date"),
+                ]);
                 if (error) {
                   toast({
                     title: "Export Failed",
                     description: error.message,
+                    variant: "destructive",
+                  });
+                  setExporting(false);
+                  return;
+                }
+                if (overnightError) {
+                  toast({
+                    title: "Export Failed",
+                    description: overnightError.message,
                     variant: "destructive",
                   });
                   setExporting(false);
@@ -3164,7 +3302,49 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                   user_name: users.find((u: any) => u.id === row.user_id)?.name || "",
                   user_email: users.find((u: any) => u.id === row.user_id)?.email || ""
                 }));
-                // Simple Excel export for now
+                // Excel export with summary (overtime + overnight)
+                const computeSummaryByUser = (entries: any[]) => {
+                  const byUserDate: Record<string, Record<string, number>> = {};
+                  entries.forEach(e => {
+                    const uid = String(e.user_id);
+                    const date = String(e.date);
+                    const workType = parseInt(e.description || "0");
+                    if (!((workType >= 10 && workType <= 29) || workType === 100)) return;
+                    const h = parseFloat(e.hours || 0) || 0;
+                    if (!byUserDate[uid]) byUserDate[uid] = {};
+                    byUserDate[uid][date] = (byUserDate[uid][date] || 0) + h;
+                  });
+                  const out: Record<string, { total: number; h125: number; h150: number; h200: number }> = {};
+                  Object.keys(byUserDate).forEach(uid => {
+                    let total = 0, h125 = 0, h150 = 0, h200 = 0;
+                    Object.keys(byUserDate[uid]).forEach(dateStr => {
+                      const totalHoursForDay = byUserDate[uid][dateStr] || 0;
+                      const dow = new Date(dateStr).getDay();
+                      const isSat = dow === 6;
+                      const isSun = dow === 0;
+                      if (isSun) { total += totalHoursForDay; h200 += totalHoursForDay; return; }
+                      if (isSat) { total += totalHoursForDay; h150 += totalHoursForDay; return; }
+                      const overtimeHours = totalHoursForDay > 8 ? totalHoursForDay - 8 : 0;
+                      if (overtimeHours > 0) {
+                        total += overtimeHours;
+                        h125 += Math.min(overtimeHours, 2);
+                        if (overtimeHours > 2) h150 += overtimeHours - 2;
+                      }
+                    });
+                    out[uid] = { total, h125, h150, h200 };
+                  });
+                  return out;
+                };
+
+                const overnightByUser: Record<string, Set<string>> = {};
+                (overnightRows || []).forEach((r: any) => {
+                  const uid = String(r.user_id);
+                  if (!overnightByUser[uid]) overnightByUser[uid] = new Set<string>();
+                  overnightByUser[uid].add(formatDateDDMMYY(String(r.date)));
+                });
+
+                const overtimeByUser = computeSummaryByUser(data || []);
+
                 const wb = XLSX.utils.book_new();
                 const ws = XLSX.utils.json_to_sheet(rows.map((row: any) => ({
                   Date: formatDateDDMMYY(row.date),
@@ -3180,6 +3360,24 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                   'User Email': row.user_email || ""
                 })));
                 XLSX.utils.book_append_sheet(wb, ws, "Timesheet");
+
+                const summaryRows = users.map((u: any) => {
+                  const uid = String(u.id);
+                  const ot = overtimeByUser[uid] || { total: 0, h125: 0, h150: 0, h200: 0 };
+                  const overnightDates = Array.from(overnightByUser[uid] || []);
+                  return {
+                    'User Name': u.name || "",
+                    'User Email': u.email || "",
+                    [t('export.overtimeTotal')]: Number(ot.total.toFixed(2)),
+                    [t('export.overtime125')]: Number(ot.h125.toFixed(2)),
+                    [t('export.overtime150')]: Number(ot.h150.toFixed(2)),
+                    [t('export.overtime200')]: Number(ot.h200.toFixed(2)),
+                    [t('export.overnightStays')]: overnightDates.length,
+                    [t('export.overnightDates')]: overnightDates.join(', '),
+                  };
+                });
+                const wsSummary = XLSX.utils.json_to_sheet(summaryRows);
+                XLSX.utils.book_append_sheet(wb, wsSummary, "Summary");
                 XLSX.writeFile(wb, "timesheet_all.xlsx");
                 setExporting(false);
                 toast({
@@ -3196,10 +3394,16 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
               className="h-20 flex flex-col items-center justify-center bg-red-600 hover:bg-red-700 text-white shadow-lg rounded-lg transition-all" 
               onClick={async () => {
                 setExporting(true);
-                const { data, error } = await supabase
-                  .from("timesheet")
-                  .select("*, projects(name)")
-                  .order("date", { ascending: true });
+                  const [{ data, error }, { data: overnightRows, error: overnightError }] = await Promise.all([
+                    supabase
+                      .from("timesheet")
+                      .select("*, projects(name)")
+                      .order("date", { ascending: true }),
+                    supabase
+                      .from("overnight_stays")
+                      .select("user_id, date")
+                      .order("date", { ascending: true }),
+                  ]);
                 if (error) {
                   toast({
                     title: "Export Failed",
@@ -3209,6 +3413,46 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                   setExporting(false);
                   return;
                 }
+                  if (overnightError) {
+                    toast({
+                      title: "Export Failed",
+                      description: overnightError.message,
+                      variant: "destructive",
+                    });
+                    setExporting(false);
+                    return;
+                  }
+
+                  // Compute global overtime totals across users (user+date rules)
+                  const byUserDate: Record<string, Record<string, number>> = {};
+                  (data || []).forEach((e: any) => {
+                    const uid = String(e.user_id);
+                    const date = String(e.date);
+                    const workType = parseInt(e.description || "0");
+                    if (!((workType >= 10 && workType <= 29) || workType === 100)) return;
+                    const h = parseFloat(e.hours || 0) || 0;
+                    if (!byUserDate[uid]) byUserDate[uid] = {};
+                    byUserDate[uid][date] = (byUserDate[uid][date] || 0) + h;
+                  });
+                  let total = 0, h125 = 0, h150 = 0, h200 = 0;
+                  Object.keys(byUserDate).forEach(uid => {
+                    Object.keys(byUserDate[uid]).forEach(dateStr => {
+                      const totalHoursForDay = byUserDate[uid][dateStr] || 0;
+                      const dow = new Date(dateStr).getDay();
+                      const isSat = dow === 6;
+                      const isSun = dow === 0;
+                      if (isSun) { total += totalHoursForDay; h200 += totalHoursForDay; return; }
+                      if (isSat) { total += totalHoursForDay; h150 += totalHoursForDay; return; }
+                      const overtimeHours = totalHoursForDay > 8 ? totalHoursForDay - 8 : 0;
+                      if (overtimeHours > 0) {
+                        total += overtimeHours;
+                        h125 += Math.min(overtimeHours, 2);
+                        if (overtimeHours > 2) h150 += overtimeHours - 2;
+                      }
+                    });
+                  });
+
+                  const totalOvernight = (overnightRows || []).length;
                 const formattedData = (data || []).map((row: any) => {
                   const user = users.find((u: any) => u.id === row.user_id);
                   return {
@@ -3227,6 +3471,10 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                 });
                 createPDF({
                   period: "All Data",
+                    summaryLines: [
+                      { label: t('export.overtimeTotal'), value: `${total.toFixed(2)}h (125% ${h125.toFixed(2)}h, 150% ${h150.toFixed(2)}h, 200% ${h200.toFixed(2)}h)` },
+                      { label: t('export.overnightStays'), value: `${totalOvernight}` },
+                    ],
                   data: formattedData
                 }, "timesheet_all.pdf");
                 setExporting(false);
@@ -3817,15 +4065,31 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                     return;
                   }
                   setExporting(true);
-                  const { data, error } = await supabase
-                    .from("timesheet")
-                    .select("*, projects(name)")
-                    .eq("user_id", selectedExportUserId)
-                    .order("date", { ascending: true });
+                  const [{ data, error }, { data: overnightRows, error: overnightError }] = await Promise.all([
+                    supabase
+                      .from("timesheet")
+                      .select("*, projects(name)")
+                      .eq("user_id", selectedExportUserId)
+                      .order("date", { ascending: true }),
+                    supabase
+                      .from("overnight_stays")
+                      .select("date")
+                      .eq("user_id", selectedExportUserId)
+                      .order("date", { ascending: true }),
+                  ]);
                   if (error) {
                     toast({
                       title: "Export Failed",
                       description: error.message,
+                      variant: "destructive",
+                    });
+                    setExporting(false);
+                    return;
+                  }
+                  if (overnightError) {
+                    toast({
+                      title: "Export Failed",
+                      description: overnightError.message,
                       variant: "destructive",
                     });
                     setExporting(false);
@@ -3839,6 +4103,33 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                     user_email: selectedUser?.email || ""
                   }));
                   const userName = selectedUser?.name || selectedUser?.email || "user";
+
+                  // Overtime summary (same rules as overtime panel)
+                  const dateHoursMap: Record<string, number> = {};
+                  (data || []).forEach((e: any) => {
+                    const workType = parseInt(e.description || "0");
+                    if (!((workType >= 10 && workType <= 29) || workType === 100)) return;
+                    const h = parseFloat(e.hours || 0) || 0;
+                    dateHoursMap[String(e.date)] = (dateHoursMap[String(e.date)] || 0) + h;
+                  });
+                  let total = 0, h125 = 0, h150 = 0, h200 = 0;
+                  Object.keys(dateHoursMap).forEach(dateStr => {
+                    const totalHoursForDay = dateHoursMap[dateStr] || 0;
+                    const dow = new Date(dateStr).getDay();
+                    const isSat = dow === 6;
+                    const isSun = dow === 0;
+                    if (isSun) { total += totalHoursForDay; h200 += totalHoursForDay; return; }
+                    if (isSat) { total += totalHoursForDay; h150 += totalHoursForDay; return; }
+                    const overtimeHours = totalHoursForDay > 8 ? totalHoursForDay - 8 : 0;
+                    if (overtimeHours > 0) {
+                      total += overtimeHours;
+                      h125 += Math.min(overtimeHours, 2);
+                      if (overtimeHours > 2) h150 += overtimeHours - 2;
+                    }
+                  });
+
+                  const overnightDates = (overnightRows || []).map((r: any) => formatDateDDMMYY(String(r.date)));
+
                   const wb = XLSX.utils.book_new();
                   const ws = XLSX.utils.json_to_sheet(rows.map((row: any) => ({
                     Date: formatDateDDMMYY(row.date),
@@ -3852,6 +4143,16 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                     Notes: row.notes || ""
                   })));
                   XLSX.utils.book_append_sheet(wb, ws, "Timesheet");
+
+                  const wsSummary = XLSX.utils.json_to_sheet([{
+                    [t('export.overtimeTotal')]: Number(total.toFixed(2)),
+                    [t('export.overtime125')]: Number(h125.toFixed(2)),
+                    [t('export.overtime150')]: Number(h150.toFixed(2)),
+                    [t('export.overtime200')]: Number(h200.toFixed(2)),
+                    [t('export.overnightStays')]: overnightDates.length,
+                    [t('export.overnightDates')]: overnightDates.join(', '),
+                  }]);
+                  XLSX.utils.book_append_sheet(wb, wsSummary, "Summary");
                   XLSX.writeFile(wb, `timesheet_${userName.replace(/[^a-zA-Z0-9]/g, '_')}.xlsx`);
                   setExporting(false);
                   toast({
@@ -3877,11 +4178,18 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                     return;
                   }
                   setExporting(true);
-                  const { data, error } = await supabase
-                    .from("timesheet")
-                    .select("*, projects(name)")
-                    .eq("user_id", selectedExportUserId)
-                    .order("date", { ascending: true });
+                  const [{ data, error }, { data: overnightRows, error: overnightError }] = await Promise.all([
+                    supabase
+                      .from("timesheet")
+                      .select("*, projects(name)")
+                      .eq("user_id", selectedExportUserId)
+                      .order("date", { ascending: true }),
+                    supabase
+                      .from("overnight_stays")
+                      .select("date")
+                      .eq("user_id", selectedExportUserId)
+                      .order("date", { ascending: true }),
+                  ]);
                   if (error) {
                     toast({
                       title: "Export Failed",
@@ -3891,8 +4199,43 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                     setExporting(false);
                     return;
                   }
+                  if (overnightError) {
+                    toast({
+                      title: "Export Failed",
+                      description: overnightError.message,
+                      variant: "destructive",
+                    });
+                    setExporting(false);
+                    return;
+                  }
                   const selectedUser = users.find((u: any) => u.id === selectedExportUserId);
                   const userName = selectedUser?.name || selectedUser?.email || "user";
+
+                  // Overtime summary (same rules as overtime panel)
+                  const dateHoursMap: Record<string, number> = {};
+                  (data || []).forEach((e: any) => {
+                    const workType = parseInt(e.description || "0");
+                    if (!((workType >= 10 && workType <= 29) || workType === 100)) return;
+                    const h = parseFloat(e.hours || 0) || 0;
+                    dateHoursMap[String(e.date)] = (dateHoursMap[String(e.date)] || 0) + h;
+                  });
+                  let total = 0, h125 = 0, h150 = 0, h200 = 0;
+                  Object.keys(dateHoursMap).forEach(dateStr => {
+                    const totalHoursForDay = dateHoursMap[dateStr] || 0;
+                    const dow = new Date(dateStr).getDay();
+                    const isSat = dow === 6;
+                    const isSun = dow === 0;
+                    if (isSun) { total += totalHoursForDay; h200 += totalHoursForDay; return; }
+                    if (isSat) { total += totalHoursForDay; h150 += totalHoursForDay; return; }
+                    const overtimeHours = totalHoursForDay > 8 ? totalHoursForDay - 8 : 0;
+                    if (overtimeHours > 0) {
+                      total += overtimeHours;
+                      h125 += Math.min(overtimeHours, 2);
+                      if (overtimeHours > 2) h150 += overtimeHours - 2;
+                    }
+                  });
+                  const overnightDates = (overnightRows || []).map((r: any) => formatDateDDMMYY(String(r.date)));
+
                   const formattedData = (data || []).map((row: any) => {
                     return {
                       Date: formatDateDDMMYY(row.date),
@@ -3909,6 +4252,10 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                   createPDF({
                     userName: userName,
                     period: "All Data",
+                    summaryLines: [
+                      { label: t('export.overtimeTotal'), value: `${total.toFixed(2)}h (125% ${h125.toFixed(2)}h, 150% ${h150.toFixed(2)}h, 200% ${h200.toFixed(2)}h)` },
+                      { label: t('export.overnightStays'), value: `${overnightDates.length}${overnightDates.length ? ` (${overnightDates.slice(0, 20).join(', ')}${overnightDates.length > 20 ? ', ...' : ''})` : ''}` },
+                    ],
                     data: formattedData
                   }, `timesheet_${userName.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`);
                   setExporting(false);
@@ -6025,6 +6372,45 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
             <Button onClick={handleConfirmDaysOffChange}>
               Confirm
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Week Rejection Dialog (comment) */}
+      <Dialog open={weekReviewDialog.open} onOpenChange={(open) => setWeekReviewDialog(prev => ({ ...prev, open }))}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t('admin.rejectButton')}</DialogTitle>
+            <DialogDescription>
+              {weekReviewDialog.userName} — {t('admin.week')} {weekReviewDialog.weekNumber} ({weekReviewDialog.year})
+              <br />
+              {t('admin.weekReview.addCommentHint')}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Textarea
+              value={weekReviewComment}
+              onChange={(e) => setWeekReviewComment(e.target.value)}
+              placeholder={t('admin.weekReview.commentPlaceholder')}
+              className="min-h-[120px]"
+            />
+            <div className="flex gap-2 justify-end">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setWeekReviewDialog(prev => ({ ...prev, open: false }));
+                  setWeekReviewComment("");
+                }}
+              >
+                {t('common.cancel')}
+              </Button>
+              <Button
+                className="bg-red-600 hover:bg-red-700 text-white"
+                onClick={submitWeekRejection}
+              >
+                {t('admin.rejectButton')}
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
