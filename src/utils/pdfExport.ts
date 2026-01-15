@@ -91,8 +91,13 @@ export const createPDF = (options: PDFExportOptions, filename: string) => {
     yPos += 7;
   }
 
+  const isBreakWorkType = (workType: string) => /^35(\s*-|\b)/.test(String(workType || '').trim());
+
   // Calculate total hours
-  const totalHours = options.data.reduce((sum, row) => sum + (row.Hours || 0), 0);
+  const totalHours = options.data.reduce(
+    (sum, row) => sum + (isBreakWorkType(row['Work Type']) ? 0 : (row.Hours || 0)),
+    0
+  );
   const totalHoursHH = Math.floor(totalHours);
   const totalHoursMM = Math.round((totalHours % 1) * 60);
   doc.setFont('helvetica', 'bold');

@@ -57,6 +57,9 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
   const { t, language } = useLanguage();
   const { toast } = useToast();
   const isMobile = useIsMobile();
+ 
+  // Break entries (work type 35) should never count as worked hours in totals/exports
+  const isBreakEntry = (entry: any): boolean => String(entry?.description ?? "").trim() === "35";
   
   // Helper function to check if user is admin or administratie
   const isAdminOrAdministratie = (user: any): boolean => {
@@ -2733,7 +2736,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                       // Only show entries that have both startTime and endTime - these are user-created entries
                       e.startTime && e.endTime
                     );
-                    const totalHours = weekEntries.reduce((sum, e) => sum + Number(e.hours || 0), 0);
+                    const totalHours = weekEntries.reduce((sum, e) => sum + (isBreakEntry(e) ? 0 : Number(e.hours || 0)), 0);
                     
                     const isNotApproved = !cw.admin_approved;
                     
@@ -2860,7 +2863,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
           weekDays.push(formatDateToYYYYMMDD(day));
         }
         
-        const totalHours = weekEntries.reduce((sum, e) => sum + Number(e.hours || 0), 0);
+        const totalHours = weekEntries.reduce((sum, e) => sum + (isBreakEntry(e) ? 0 : Number(e.hours || 0)), 0);
         
         return (
           <Dialog open={!!selectedWeekForView} onOpenChange={(open) => !open && setSelectedWeekForView(null)}>
@@ -2938,7 +2941,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                       ) : (
                         weekDays.map((dayDate, dayIdx) => {
                           const dayEntries = entriesByDay[dayDate] || [];
-                          const dayTotal = dayEntries.reduce((sum, e) => sum + Number(e.hours || 0), 0);
+                          const dayTotal = dayEntries.reduce((sum, e) => sum + (isBreakEntry(e) ? 0 : Number(e.hours || 0)), 0);
                           const day = new Date(dayDate);
                           const dayName = getDayNameNL(dayDate);
                           
@@ -3353,7 +3356,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                     const formattedDate = formatDateDDMMYY(dateStr);
                     
                     // Calculate total hours for the day
-                    const totalHours = dayEntries.reduce((sum: number, entry: any) => sum + (parseFloat(entry.hours) || 0), 0);
+                    const totalHours = dayEntries.reduce((sum: number, entry: any) => sum + (isBreakEntry(entry) ? 0 : (parseFloat(entry.hours) || 0)), 0);
                     const totalHoursHHMM = formatHoursHHMM(totalHours);
                     
                     // Create worksheet
