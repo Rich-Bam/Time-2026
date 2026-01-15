@@ -17,6 +17,7 @@ import ExcelJS from "exceljs";
 import { cn } from "@/lib/utils";
 import { formatDateToYYYYMMDD } from "@/utils/dateUtils";
 import OvertimeSummaryPanel from "@/components/OvertimeSummaryPanel";
+import OvernightSummaryPanel from "@/components/OvernightSummaryPanel";
 
 const workTypes = [
   { value: 10, label: "Work" },
@@ -1711,7 +1712,10 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
     <div className="flex flex-col gap-3 sm:gap-4">
       {/* Overtime Summary Panel - For all users (except admins/administratie) */}
       {currentUser && !currentUser?.isAdmin && currentUser?.userType !== 'administratie' && (
-        <OvertimeSummaryPanel currentUser={currentUser} weekStart={weekStart} />
+        <>
+          <OvertimeSummaryPanel currentUser={currentUser} weekStart={weekStart} />
+          <OvernightSummaryPanel currentUser={currentUser} weekStart={weekStart} />
+        </>
       )}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
         <div className="flex-1">
