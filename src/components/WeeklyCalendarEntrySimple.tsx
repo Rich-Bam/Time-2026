@@ -91,6 +91,7 @@ interface Entry {
 
 interface DayData {
   date: Date;
+  stayedOvernight: boolean;
   entries: Entry[];
 }
 
@@ -106,6 +107,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
   const [days, setDays] = useState<DayData[]>(() => 
     getWeekDates(new Date()).map(date => ({ 
       date, 
+      stayedOvernight: false,
       entries: [{ workType: "", project: "", hours: "", startTime: "", endTime: "", fullDayOff: false }] 
     }))
   );
@@ -374,10 +376,21 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
     if (!currentUser) return;
     const { data } = await supabase
       .from("timesheet")
-      .select("id, project, hours, description, date, startTime, endTime")
+      .select("id, project, hours, description, date, startTime, endTime, stayed_overnight")
       .eq("user_id", currentUser.id)
       .eq("date", dateStr);
     if (data) {
+      // Day-level overnight flag is primarily sourced from `overnight_stays`.
+      // We only OR-in any legacy `timesheet.stayed_overnight` flags here, and never clear the checkbox.
+      const hasOvernightFromTimesheet = (data || []).some((e: any) => !!e.stayed_overnight);
+      if (hasOvernightFromTimesheet) {
+        setDays(prevDays =>
+          prevDays.map(d =>
+            formatDateToYYYYMMDD(d.date) === dateStr ? { ...d, stayedOvernight: true } : d
+          )
+        );
+      }
+
       // Filter out admin adjustments (entries without startTime/endTime are admin adjustments)
       // Only show entries that have both startTime and endTime - these are user-created entries
       // Admin adjustments don't have startTime/endTime and should not be shown in weekly entry
@@ -392,7 +405,8 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
           hours: String(e.hours || 0),
           startTime: e.startTime || "",
           endTime: e.endTime || "",
-          isSubmitted: true
+          isSubmitted: true,
+          fullDayOff: false,
         }))
       }));
     }
@@ -441,6 +455,73 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
     fetchConfirmedStatus();
   }, [currentUser, weekStart]);
 
+  // Fetch overnight stays for the visible week (saved independently from timesheet entries)
+  useEffect(() => {
+    const fetchOvernightStaysForWeek = async () => {
+      if (!currentUser?.id) return;
+      const from = formatDateToYYYYMMDD(weekDates[0]);
+      const to = formatDateToYYYYMMDD(weekDates[6]);
+
+      const { data, error } = await supabase
+        .from("overnight_stays")
+        .select("date")
+        .eq("user_id", currentUser.id)
+        .gte("date", from)
+        .lte("date", to);
+
+      if (error) {
+        console.warn("Failed to fetch overnight stays:", error);
+        return;
+      }
+
+      const dates = new Set((data || []).map((r: any) => String(r.date)));
+      setDays(prevDays =>
+        prevDays.map(d => ({
+          ...d,
+          stayedOvernight: dates.has(formatDateToYYYYMMDD(d.date)),
+        }))
+      );
+    };
+
+    fetchOvernightStaysForWeek();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.id, weekStart]);
+
+  const persistOvernightStay = async (dayIdx: number, checked: boolean) => {
+    if (!currentUser?.id) return;
+    const weekKey = formatDateToYYYYMMDD(weekDates[0]);
+    if (confirmedWeeks[weekKey]) return;
+
+    const dateStr = formatDateToYYYYMMDD(days[dayIdx].date);
+
+    // Optimistic UI
+    setDays(prevDays => prevDays.map((d, i) => (i === dayIdx ? { ...d, stayedOvernight: checked } : d)));
+
+    try {
+      if (checked) {
+        const { error } = await supabase
+          .from("overnight_stays")
+          .upsert([{ user_id: currentUser.id, date: dateStr }], { onConflict: "user_id,date" });
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from("overnight_stays")
+          .delete()
+          .eq("user_id", currentUser.id)
+          .eq("date", dateStr);
+        if (error) throw error;
+      }
+    } catch (error: any) {
+      // Revert on failure
+      setDays(prevDays => prevDays.map((d, i) => (i === dayIdx ? { ...d, stayedOvernight: !checked } : d)));
+      toast({
+        title: t('common.error'),
+        description: error?.message || "Failed to save overnight stay",
+        variant: "destructive",
+      });
+    }
+  };
+
   // Set up real-time subscription to listen for changes to confirmed_weeks
   useEffect(() => {
     if (!currentUser) return;
@@ -461,7 +542,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
           console.log('Real-time update for confirmed_weeks (Simple view):', payload);
           // Update confirmed status immediately when it changes
           // Week is locked if confirmed = true (regardless of admin status)
-          const isLocked = !!payload.new?.confirmed;
+          const isLocked = !!(payload.new as any)?.confirmed;
           setConfirmedWeeks(prev => ({ ...prev, [weekKey]: isLocked }));
           // Also refresh from database to ensure consistency
           fetchConfirmedStatus();
@@ -481,6 +562,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
     setWeekStart(getWeekDates(newStart)[0]);
     setDays(getWeekDates(newStart).map(date => ({ 
       date, 
+      stayedOvernight: false,
       entries: [{ workType: "", project: "", hours: "", startTime: "", endTime: "", fullDayOff: false }] 
     })));
   };
@@ -773,6 +855,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
           date: dateStr,
           hours: hoursToSave,
           description: entry.workType,
+          stayed_overnight: !!days[dayIdx]?.stayedOvernight,
         };
         
         // Only include startTime/endTime if they are provided (not for full day off)
@@ -1024,7 +1107,8 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
           project: e.project || "",
           hours: e.hours?.toString() || "",
           startTime: e.startTime || "",
-          endTime: e.endTime || ""
+          endTime: e.endTime || "",
+          fullDayOff: false,
         }))
     ];
     
@@ -1100,6 +1184,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
         description: entry.workType,
         startTime: entry.startTime || null,
         endTime: entry.endTime || null,
+        stayed_overnight: !!currentDay?.stayedOvernight,
       });
     }
     
@@ -1120,6 +1205,11 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
       
       // Refresh submitted entries for the current day
       await fetchSubmittedEntries(currentDateStr);
+
+      // Copy "stayed overnight" flag at day level
+      setDays(prevDays => prevDays.map((d, i) => (
+        i === dayIdx ? { ...d, stayedOvernight: !!previousDay?.stayedOvernight } : d
+      )));
       
       // Check if any copied entries were day off entries and refresh days off
       const hasDayOffEntry = entriesToSave.some(e => e.description === "31");
@@ -1260,6 +1350,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
           description: entry.workType,
           startTime: entry.startTime || null,
           endTime: entry.endTime || null,
+          stayed_overnight: !!day.stayedOvernight,
         });
       }
     }
@@ -1284,6 +1375,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
       // Reset entries
       setDays(getWeekDates(weekStart).map(date => ({ 
         date, 
+        stayedOvernight: false,
         entries: [{ workType: "", project: "", hours: "", startTime: "", endTime: "", fullDayOff: false }] 
       })));
     }
@@ -1645,6 +1737,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
                     setWeekStart(getWeekDates(newStart)[0]);
                     setDays(getWeekDates(newStart).map(date => ({ 
                       date, 
+                      stayedOvernight: false,
                       entries: [{ workType: "", project: "", hours: "", startTime: "", endTime: "", fullDayOff: false }] 
                     })));
                   }
@@ -1807,6 +1900,26 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
                         </Button>
                       </div>
                     )}
+                  </div>
+
+                  {/* Stayed overnight checkbox */}
+                  <div className={`px-3 sm:px-4 py-2 border-b ${dayColor.replace('50', '200')} flex items-center justify-between`}>
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id={`stayedOvernight-simple-${dayIdx}`}
+                        checked={!!day.stayedOvernight}
+                        onCheckedChange={(checked) => {
+                          persistOvernightStay(dayIdx, checked === true);
+                        }}
+                        disabled={isDayLocked}
+                      />
+                      <Label
+                        htmlFor={`stayedOvernight-simple-${dayIdx}`}
+                        className="text-xs sm:text-sm font-medium cursor-pointer text-gray-800 dark:text-gray-900"
+                      >
+                        {t('weekly.overnightStay')}
+                      </Label>
+                    </div>
                   </div>
                   
                   {/* Mobile: Card Layout, Desktop: Table Layout */}

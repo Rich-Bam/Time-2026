@@ -181,14 +181,15 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
     return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
   };
 
-  // Helper to get day name in Dutch
+  // Helper to get day name (language-aware)
+  // Kept as getDayNameNL because other parts of the file reference it.
   const getDayNameNL = (dateStr: string) => {
     const date = new Date(dateStr);
-    const days = ['Zondag', 'Maandag', 'Dinsdag', 'Woensdag', 'Donderdag', 'Vrijdag', 'Zaterdag'];
-    return days[date.getDay()];
+    const locale = language === 'nl' ? 'nl-NL' : 'en-US';
+    return date.toLocaleDateString(locale, { weekday: 'long' });
   };
 
-  // Helper to format date with day name (DD-MM-YYYY Dagnaam)
+  // Helper to format date with day name (DD-MM-YYYY weekday)
   const formatDateWithDayName = (dateStr: string) => {
     const date = new Date(dateStr);
     const day = String(date.getDate()).padStart(2, '0');
@@ -400,21 +401,31 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
         toDate = "";
       }
 
-      // Build query - include more fields for detailed breakdown
-      let queryBuilder = supabase
+      // Fetch timesheet + overnight stays (separate table so checkbox persists without entries)
+      let timesheetQuery = supabase
         .from("timesheet")
-        .select("user_id, date, hours, description, project, startTime, endTime, notes")
+        .select("user_id, date, hours, description, project, startTime, endTime, notes, stayed_overnight")
+        .order("date", { ascending: true });
+
+      let overnightQuery = supabase
+        .from("overnight_stays")
+        .select("user_id, date")
         .order("date", { ascending: true });
       
       if (fromDate && toDate) {
-        queryBuilder = queryBuilder.gte("date", fromDate).lte("date", toDate);
+        timesheetQuery = timesheetQuery.gte("date", fromDate).lte("date", toDate);
+        overnightQuery = overnightQuery.gte("date", fromDate).lte("date", toDate);
       }
       
       if (overtimeSelectedUserId && overtimeSelectedUserId !== "all") {
-        queryBuilder = queryBuilder.eq("user_id", overtimeSelectedUserId);
+        timesheetQuery = timesheetQuery.eq("user_id", overtimeSelectedUserId);
+        overnightQuery = overnightQuery.eq("user_id", overtimeSelectedUserId);
       }
 
-      const { data, error } = await queryBuilder;
+      const [{ data, error }, { data: overnightData, error: overnightError }] = await Promise.all([
+        timesheetQuery,
+        overnightQuery,
+      ]);
       
       if (error) {
         toast({
@@ -426,8 +437,18 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
         return;
       }
 
+      if (overnightError) {
+        toast({
+          title: "Error",
+          description: overnightError.message,
+          variant: "destructive",
+        });
+        setOvertimeLoading(false);
+        return;
+      }
+
       // Group entries by user and date, and store detailed entry information
-      const userDateMap: Record<string, Record<string, { totalHours: number; entries: any[] }>> = {};
+      const userDateMap: Record<string, Record<string, { totalHours: number; entries: any[]; stayedOvernight: boolean }>> = {};
       
       (data || []).forEach((entry: any) => {
         const userId = String(entry.user_id);
@@ -437,7 +458,11 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
           userDateMap[userId] = {};
         }
         if (!userDateMap[userId][date]) {
-          userDateMap[userId][date] = { totalHours: 0, entries: [] };
+          userDateMap[userId][date] = { totalHours: 0, entries: [], stayedOvernight: false };
+        }
+
+        if (entry.stayed_overnight) {
+          userDateMap[userId][date].stayedOvernight = true;
         }
         
         // Only count work hours (not day off, sick, etc.)
@@ -467,6 +492,13 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
       // 4. ALL hours on Sunday = 200%
       const overtimeResults: any[] = [];
       
+      const overnightByUser: Record<string, Set<string>> = {};
+      (overnightData || []).forEach((r: any) => {
+        const uid = String(r.user_id);
+        if (!overnightByUser[uid]) overnightByUser[uid] = new Set<string>();
+        overnightByUser[uid].add(String(r.date));
+      });
+
       Object.keys(userDateMap).forEach(userId => {
         const user = users.find(u => String(u.id) === userId);
         if (!user) return;
@@ -548,8 +580,12 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
             totalHours200 += hours200;
           }
         });
+
+        const overnightFromTimesheet = Object.keys(userDateMap[userId]).filter(date => userDateMap[userId][date].stayedOvernight);
+        const overnightFromTable = Array.from(overnightByUser[userId] || []);
+        const overnightDates = Array.from(new Set([...overnightFromTimesheet, ...overnightFromTable])).sort((a, b) => a.localeCompare(b));
         
-        if (totalOvertime > 0 || dailyOvertime.length > 0) {
+        if (totalOvertime > 0 || dailyOvertime.length > 0 || overnightDates.length > 0) {
           overtimeResults.push({
             userId,
             userName: user.name || user.email,
@@ -558,7 +594,9 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
             totalHours125: totalHours125.toFixed(2),
             totalHours150: totalHours150.toFixed(2),
             totalHours200: totalHours200.toFixed(2),
-            dailyOvertime: dailyOvertime.sort((a, b) => a.date.localeCompare(b.date))
+            dailyOvertime: dailyOvertime.sort((a, b) => a.date.localeCompare(b.date)),
+            overnightDates,
+            totalOvernightStays: overnightDates.length,
           });
         }
       });
@@ -3900,13 +3938,12 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
           <div className="p-4 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg">
         <h3 className="text-base sm:text-lg font-semibold mb-3 text-blue-800 dark:text-blue-200 flex items-center gap-2">
           <Calendar className="h-5 w-5" />
-          Overuren Tracking
+          {t('overtime.title')}
         </h3>
         <p className="text-xs sm:text-sm text-blue-700 dark:text-blue-300 mb-4">
-          Bekijk overuren per gebruiker met percentage breakdown. Een normale werkdag (maandag t/m vrijdag) is 8 uur. 
+          {t('overtime.description')}
           <br className="hidden sm:inline" />
-          <strong>Percentage regels:</strong> Na 8 uur op weekdagen: 9e & 10e uur = 125%, elk uur na 10 uur = 150%. 
-          Zaterdag = 150% (alle uren). Zondag = 200% (alle uren).
+          <strong>{t('overtime.percentageRules')}</strong>
         </p>
         
         {/* Filters */}
@@ -3914,17 +3951,17 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
           <div className={`grid ${isMobile ? 'grid-cols-1' : 'grid-cols-2 md:grid-cols-4'} gap-4 mb-4`}>
             <div>
               <Label className="block text-sm font-medium text-blue-900 dark:text-blue-100 mb-2">
-                Periode
+                {t('overtime.period')}
               </Label>
               <Select value={overtimePeriod} onValueChange={(value: any) => setOvertimePeriod(value)}>
                 <SelectTrigger className="w-full bg-white dark:bg-gray-800">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="week">Week</SelectItem>
-                  <SelectItem value="month">Maand</SelectItem>
-                  <SelectItem value="year">Jaar</SelectItem>
-                  <SelectItem value="all">Alles</SelectItem>
+                  <SelectItem value="week">{t('overtime.week')}</SelectItem>
+                  <SelectItem value="month">{t('overtime.month')}</SelectItem>
+                  <SelectItem value="year">{t('overtime.year')}</SelectItem>
+                  <SelectItem value="all">{t('overtime.all')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -3933,7 +3970,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
               <>
                 <div>
                   <Label className="block text-sm font-medium text-blue-900 dark:text-blue-100 mb-2">
-                    Week
+                    {t('overtime.week')}
                   </Label>
                   <Input 
                     type="number" 
@@ -3947,7 +3984,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                 </div>
                 <div>
                   <Label className="block text-sm font-medium text-blue-900 dark:text-blue-100 mb-2">
-                    Jaar
+                    {t('overtime.year')}
                   </Label>
                   <Input 
                     type="number" 
@@ -3965,7 +4002,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
             {(overtimePeriod === "month" || overtimePeriod === "year") && (
               <div>
                 <Label className="block text-sm font-medium text-blue-900 dark:text-blue-100 mb-2">
-                  {overtimePeriod === "month" ? "Maand" : "Jaar"}
+                  {overtimePeriod === "month" ? t('overtime.month') : t('overtime.year')}
                 </Label>
                 {overtimePeriod === "month" ? (
                   <Select value={overtimeSelectedMonth} onValueChange={setOvertimeSelectedMonth}>
@@ -3975,7 +4012,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                     <SelectContent>
                       {Array.from({ length: 12 }, (_, i) => {
                         const monthNum = String(i + 1).padStart(2, '0');
-                        const monthName = new Date(2000, i, 1).toLocaleDateString('nl-NL', { month: 'long' });
+                        const monthName = new Date(2000, i, 1).toLocaleDateString(language === 'nl' ? 'nl-NL' : 'en-US', { month: 'long' });
                         return (
                           <SelectItem key={monthNum} value={monthNum}>
                             {monthName}
@@ -3989,7 +4026,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                     type="number" 
                     min="2020" 
                     max="2100" 
-                    placeholder="Jaar" 
+                    placeholder={t('export.yearPlaceholder') || "Year"}
                     value={overtimeSelectedYear} 
                     onChange={e => setOvertimeSelectedYear(e.target.value)} 
                     className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100" 
@@ -4001,13 +4038,13 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
             {overtimePeriod === "year" && (
               <div>
                 <Label className="block text-sm font-medium text-blue-900 dark:text-blue-100 mb-2">
-                  Jaar
+                  {t('overtime.year')}
                 </Label>
                 <Input 
                   type="number" 
                   min="2020" 
                   max="2100" 
-                  placeholder="Jaar" 
+                  placeholder={t('export.yearPlaceholder') || "Year"}
                   value={overtimeSelectedYear} 
                   onChange={e => setOvertimeSelectedYear(e.target.value)} 
                   className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100" 
@@ -4017,14 +4054,14 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
             
             <div>
               <Label className="block text-sm font-medium text-blue-900 dark:text-blue-100 mb-2">
-                Gebruiker
+                {t('common.user')}
               </Label>
               <Select value={overtimeSelectedUserId} onValueChange={setOvertimeSelectedUserId}>
                 <SelectTrigger className="w-full bg-white dark:bg-gray-800">
-                  <SelectValue placeholder="Alle gebruikers" />
+                  <SelectValue placeholder={t('export.allUsers')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Alle gebruikers</SelectItem>
+                  <SelectItem value="all">{t('export.allUsers')}</SelectItem>
                   {users && users.length > 0 && users.map((user) => (
                     <SelectItem key={user.id} value={user.id}>
                       {user.name || user.email}
@@ -4040,7 +4077,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
             disabled={overtimeLoading || (overtimePeriod === "week" && (!overtimeSelectedWeek || !overtimeSelectedYear))}
             className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white"
           >
-            {overtimeLoading ? "Berekenen..." : "Bereken Overuren"}
+            {overtimeLoading ? t('overtime.calculating') : t('overtime.calculate')}
           </Button>
         </div>
 
@@ -4057,7 +4094,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                     <p className="text-xs text-gray-600 dark:text-gray-400">{userData.userEmail}</p>
                   </div>
                   <div className="text-right">
-                    <div className="text-sm text-gray-600 dark:text-gray-400">Totaal Overuren</div>
+                    <div className="text-sm text-gray-600 dark:text-gray-400">{t('overtime.totalOvertime')}</div>
                     <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
                       {userData.totalOvertime}h
                     </div>
@@ -4067,7 +4104,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                 {/* Percentage Breakdown */}
                 <div className="mb-4 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600">
                   <h5 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2">
-                    Overuren per Percentage:
+                    {t('overtime.percentageBreakdown')}
                   </h5>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     {parseFloat(userData.totalHours125 || "0") > 0 && (
@@ -4076,7 +4113,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                         <div className="text-lg font-bold text-orange-600 dark:text-orange-400">
                           {userData.totalHours125}h
                         </div>
-                        <div className="text-xs text-orange-600 dark:text-orange-400">9e & 10e uur (weekdagen)</div>
+                        <div className="text-xs text-orange-600 dark:text-orange-400">{t('overtime.hours125')}</div>
                       </div>
                     )}
                     {parseFloat(userData.totalHours150 || "0") > 0 && (
@@ -4085,7 +4122,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                         <div className="text-lg font-bold text-yellow-600 dark:text-yellow-400">
                           {userData.totalHours150}h
                         </div>
-                        <div className="text-xs text-yellow-600 dark:text-yellow-400">Na 10e uur & Zaterdag</div>
+                        <div className="text-xs text-yellow-600 dark:text-yellow-400">{t('overtime.hours150')}</div>
                       </div>
                     )}
                     {parseFloat(userData.totalHours200 || "0") > 0 && (
@@ -4094,10 +4131,38 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                         <div className="text-lg font-bold text-red-600 dark:text-red-400">
                           {userData.totalHours200}h
                         </div>
-                        <div className="text-xs text-red-600 dark:text-red-400">Zondag</div>
+                        <div className="text-xs text-red-600 dark:text-red-400">{t('overtime.hours200')}</div>
                       </div>
                     )}
                   </div>
+                </div>
+
+                {/* Overnight stays */}
+                <div className="mb-4 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600">
+                  <div className="flex items-center justify-between gap-3 mb-2">
+                    <h5 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                      {t('overtime.overnightTitle')}
+                    </h5>
+                    <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                      {t('overtime.overnightCount')}: {userData.totalOvernightStays || 0}
+                    </div>
+                  </div>
+                  {userData.overnightDates?.length ? (
+                    <div className="flex flex-wrap gap-2">
+                      {userData.overnightDates.map((date: string) => (
+                        <span
+                          key={date}
+                          className="text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200 px-2 py-1 rounded"
+                        >
+                          {formatDateWithDayName(date)}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-xs text-gray-600 dark:text-gray-400">
+                      {t('overtime.overnightNone')}
+                    </div>
+                  )}
                 </div>
                 
                 <Accordion type="multiple" className="w-full">
@@ -4110,18 +4175,18 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                               {formatDateWithDayName(day.date)}
                               {day.isWeekend && (
                                 <span className="text-xs bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 px-2 py-0.5 rounded">
-                                  Weekend
+                                  {t('overtime.weekend')}
                                 </span>
                               )}
                             </div>
                             <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">
                               {day.isWeekend ? (
                                 <span className="text-orange-600 dark:text-orange-400">
-                                  {day.totalHours}h totaal (alle uren zijn overuren)
+                                  {day.totalHours}{t('overtime.totalHours')}
                                 </span>
                               ) : (
                                 <span>
-                                  {day.totalHours}h totaal - {day.normalHours}h normaal
+                                  {day.totalHours}{t('overtime.totalHoursNormal', { normalHours: day.normalHours })}
                                 </span>
                               )}
                             </div>
@@ -4156,7 +4221,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                           {/* Day percentage breakdown */}
                           {(parseFloat(day.hours125 || "0") > 0 || parseFloat(day.hours150 || "0") > 0 || parseFloat(day.hours200 || "0") > 0) && (
                             <div className="mb-3 p-2 bg-gray-50 dark:bg-gray-700/50 rounded border border-gray-200 dark:border-gray-600">
-                              <div className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Overuren per Percentage:</div>
+                              <div className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">{t('overtime.perDayBreakdown')}</div>
                               <div className="flex flex-wrap gap-2">
                                 {parseFloat(day.hours125 || "0") > 0 && (
                                   <div className="text-xs">
@@ -4267,7 +4332,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
         
         {overtimeData.length === 0 && !overtimeLoading && (
           <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-            Klik op "Bereken Overuren" om de overuren te berekenen.
+            {t('overtime.clickToCalculate')}
           </div>
         )}
       </div>

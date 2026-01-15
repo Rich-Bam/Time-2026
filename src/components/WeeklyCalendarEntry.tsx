@@ -83,6 +83,23 @@ const timeOptions = Array.from({ length: 24 * 4 }, (_, i) => {
   return `${h}:${m}`;
 });
 
+type WeeklyEntryRow = {
+  workType: string;
+  project: string;
+  hours: string;
+  startTime: string;
+  endTime: string;
+  fullDayOff?: boolean;
+  id?: any;
+};
+
+type WeeklyDayState = {
+  date: Date;
+  stayedOvernight: boolean;
+  entries: WeeklyEntryRow[];
+  open: boolean;
+};
+
 const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false, useSimpleView, setUseSimpleView }: { currentUser: any; hasUnreadDaysOffNotification?: boolean; useSimpleView?: boolean; setUseSimpleView?: (value: boolean) => void }) => {
   const { t } = useLanguage();
   const [weekStart, setWeekStart] = useState(() => {
@@ -90,7 +107,14 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
     now.setHours(0, 0, 0, 0);
     return getWeekDates(now)[0];
   });
-  const [days, setDays] = useState(() => getWeekDates(new Date()).map(date => ({ date, entries: [{ workType: "", project: "", hours: "", startTime: "", endTime: "", fullDayOff: false }], open: true }))); // Default open for better overview
+  const [days, setDays] = useState<WeeklyDayState[]>(() =>
+    getWeekDates(new Date()).map(date => ({
+      date,
+      stayedOvernight: false,
+      entries: [{ workType: "", project: "", hours: "", startTime: "", endTime: "", fullDayOff: false }],
+      open: true,
+    }))
+  ); // Default open for better overview
   const [viewMode, setViewMode] = useState<"cards" | "overview">("cards"); // View mode: cards (current) or overview (week table)
   const [projects, setProjects] = useState<{ id: number; name: string }[]>([]);
   const { toast } = useToast();
@@ -184,6 +208,70 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
     };
     fetchProjects();
   }, [currentUser]);
+
+  // Fetch overnight stays for the visible week (saved independently from timesheet entries)
+  useEffect(() => {
+    const fetchOvernightStaysForWeek = async () => {
+      if (!currentUser?.id) return;
+      const from = formatDateToYYYYMMDD(weekDates[0]);
+      const to = formatDateToYYYYMMDD(weekDates[6]);
+
+      const { data, error } = await supabase
+        .from("overnight_stays")
+        .select("date")
+        .eq("user_id", currentUser.id)
+        .gte("date", from)
+        .lte("date", to);
+
+      if (error) {
+        console.warn("Failed to fetch overnight stays:", error);
+        return;
+      }
+
+      const dates = new Set((data || []).map((r: any) => String(r.date)));
+      setDays(prevDays =>
+        prevDays.map(d => ({
+          ...d,
+          stayedOvernight: dates.has(formatDateToYYYYMMDD(d.date)),
+        }))
+      );
+    };
+
+    fetchOvernightStaysForWeek();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.id, weekStart]);
+
+  const persistOvernightStay = async (dayIdx: number, checked: boolean, isLocked: boolean) => {
+    if (!currentUser?.id || isLocked) return;
+    const dateStr = formatDateToYYYYMMDD(days[dayIdx].date);
+
+    // Optimistic UI
+    setDays(prevDays => prevDays.map((d, i) => (i === dayIdx ? { ...d, stayedOvernight: checked } : d)));
+
+    try {
+      if (checked) {
+        const { error } = await supabase
+          .from("overnight_stays")
+          .upsert([{ user_id: currentUser.id, date: dateStr }], { onConflict: "user_id,date" });
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from("overnight_stays")
+          .delete()
+          .eq("user_id", currentUser.id)
+          .eq("date", dateStr);
+        if (error) throw error;
+      }
+    } catch (error: any) {
+      // Revert on failure
+      setDays(prevDays => prevDays.map((d, i) => (i === dayIdx ? { ...d, stayedOvernight: !checked } : d)));
+      toast({
+        title: t('common.error'),
+        description: error?.message || "Failed to save overnight stay",
+        variant: "destructive",
+      });
+    }
+  };
 
   // Fetch days off from database for the current user and year
   const fetchDaysOff = async () => {
@@ -397,7 +485,7 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
           console.log('Real-time update for confirmed_weeks:', payload);
           // Update confirmed status immediately when it changes
           // Week is locked if confirmed = true (regardless of admin status)
-          const isLocked = !!payload.new?.confirmed;
+          const isLocked = !!(payload.new as any)?.confirmed;
           setConfirmedWeeks(prev => ({ ...prev, [weekKey]: isLocked }));
           // Also refresh from database to ensure consistency
           fetchConfirmedStatus();
@@ -425,7 +513,12 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
     const newStart = new Date(weekStart);
     newStart.setDate(newStart.getDate() + delta * 7);
     setWeekStart(getWeekDates(newStart)[0]);
-    setDays(getWeekDates(newStart).map(date => ({ date, entries: [{ workType: "", project: "", hours: "", startTime: "", endTime: "" }], open: false })));
+    setDays(getWeekDates(newStart).map(date => ({
+      date,
+      stayedOvernight: false,
+      entries: [{ workType: "", project: "", hours: "", startTime: "", endTime: "", fullDayOff: false }],
+      open: false,
+    })));
   };
 
   const handleOpenDay = (dayIdx: number) => {
@@ -776,6 +869,7 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
           date: formatDateToYYYYMMDD(day.date),
           hours: hoursToSave,
           description: entry.workType,
+          stayed_overnight: !!day.stayedOvernight,
         };
         
         // Only include startTime/endTime if they are provided
@@ -813,7 +907,9 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
       // Reset entries to empty
       setDays(getWeekDates(weekStart).map(date => ({ 
         date, 
-        entries: [{ workType: "", project: "", hours: "", startTime: "", endTime: "", fullDayOff: false }] 
+        stayedOvernight: false,
+        entries: [{ workType: "", project: "", hours: "", startTime: "", endTime: "", fullDayOff: false }],
+        open: false,
       })));
     }
   };
@@ -1050,6 +1146,7 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
         date: formatDateToYYYYMMDD(day.date),
         hours: hoursToSave,
         description: entry.workType,
+        stayed_overnight: !!day.stayedOvernight,
       };
       
       // Only include startTime/endTime if they are provided (not for full day off)
@@ -1079,7 +1176,7 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
       // Reset that day's entries to a single empty entry
       setDays(prevDays => prevDays.map((d, i) =>
         i === dayIdx
-          ? { ...d, entries: [{ workType: "", project: "", hours: "", startTime: "", endTime: "", fullDayOff: false }] }
+          ? { ...d, stayedOvernight: false, entries: [{ workType: "", project: "", hours: "", startTime: "", endTime: "", fullDayOff: false }] }
           : d
       ));
       await fetchSubmittedEntries(formatDateToYYYYMMDD(day.date));
@@ -1307,7 +1404,8 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
           project: e.project || "",
           hours: e.hours?.toString() || "",
           startTime: e.startTime || "",
-          endTime: e.endTime || ""
+          endTime: e.endTime || "",
+          fullDayOff: false,
         }))
     ];
     
@@ -1425,6 +1523,7 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
         date: currentDateStr,
         hours: hoursToSave,
         description: entry.workType,
+        stayed_overnight: !!previousDay?.stayedOvernight,
       };
       
       // Only include startTime/endTime if they are provided (not for full day off)
@@ -1460,6 +1559,11 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
       
       // Refresh submitted entries for the current day
       await fetchSubmittedEntries(currentDateStr);
+
+      // Copy "stayed overnight" flag at day level
+      setDays(prevDays => prevDays.map((d, i) => (
+        i === dayIdx ? { ...d, stayedOvernight: !!previousDay?.stayedOvernight } : d
+      )));
       
       // Check if any copied entries were day off entries and refresh days off
       const hasDayOffEntry = entriesToSave.some(e => e.description === "31");
@@ -1720,7 +1824,12 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
                   if (selectedWeek) {
                     const newStart = new Date(selectedWeek.weekStart);
                     setWeekStart(getWeekDates(newStart)[0]);
-                    setDays(getWeekDates(newStart).map(date => ({ date, entries: [{ workType: "", project: "", hours: "", startTime: "", endTime: "" }], open: false })));
+                    setDays(getWeekDates(newStart).map(date => ({
+                      date,
+                      stayedOvernight: false,
+                      entries: [{ workType: "", project: "", hours: "", startTime: "", endTime: "", fullDayOff: false }],
+                      open: false,
+                    })));
                   }
                 }}
               >
@@ -1891,6 +2000,22 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
                                         {t('weekly.copyPrevious')}
                                       </Button>
                                     )}
+                                  </div>
+                                  <div className="mt-3 flex items-center space-x-2">
+                                    <Checkbox
+                                      id={`stayedOvernight-${dayIdx}`}
+                                      checked={!!day.stayedOvernight}
+                                      onCheckedChange={(checked) => {
+                                        persistOvernightStay(dayIdx, checked === true, isLocked);
+                                      }}
+                                      disabled={isLocked}
+                                    />
+                                    <Label
+                                      htmlFor={`stayedOvernight-${dayIdx}`}
+                                      className="text-xs font-medium cursor-pointer"
+                                    >
+                                      {t('weekly.overnightStay')}
+                                    </Label>
                                   </div>
                                 </td>
                               )}
@@ -2139,6 +2264,23 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
           {days.map((day, dayIdx) => day.open && (
             <div key={dayIdx} className="mb-3 sm:mb-4 border rounded-lg p-3 sm:p-4 bg-white dark:bg-gray-800 shadow">
               <div className="font-semibold mb-2 text-sm sm:text-base">{day.date.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'short', day: 'numeric' })}</div>
+              <div className="mb-3 flex items-center space-x-2">
+                <Checkbox
+                  id={`stayedOvernight-cards-${dayIdx}`}
+                  checked={!!day.stayedOvernight}
+                  onCheckedChange={(checked) => {
+                    const isLocked = !!confirmedWeeks[formatDateToYYYYMMDD(weekDates[0])];
+                    persistOvernightStay(dayIdx, checked === true, isLocked);
+                  }}
+                  disabled={confirmedWeeks[formatDateToYYYYMMDD(weekDates[0])] && !currentUser?.isAdmin}
+                />
+                <Label
+                  htmlFor={`stayedOvernight-cards-${dayIdx}`}
+                  className="text-sm font-medium cursor-pointer"
+                >
+                  {t('weekly.overnightStay')}
+                </Label>
+              </div>
               {confirmedWeeks[formatDateToYYYYMMDD(weekDates[0])] && (
                 <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded text-yellow-800 text-sm">
                   ⚠️ {t('weekly.confirmed')}

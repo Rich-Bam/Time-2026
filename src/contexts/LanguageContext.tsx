@@ -1,4 +1,4 @@
-﻿import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 
 type Language = 'nl' | 'en';
 
@@ -149,6 +149,7 @@ const translations: Record<Language, Record<string, string>> = {
     'weekly.editEntry': 'Bewerk invoer',
     'weekly.deleteEntry': 'Verwijder invoer',
     'weekly.fullDayOff': 'Hele dag vrij (8 uren)',
+    'weekly.overnightStay': 'Overnachting (niet thuis geslapen)',
     'weekly.weekConfirmedWarning': 'Deze week is bevestigd. Je kunt geen wijzigingen meer aanbrengen tot een admin dit heeft goedgekeurd of teruggezet.',
     'weekly.noEntries': 'Geen Invoeren',
     'weekly.noEntriesToCopy': 'De vorige dag heeft geen invoeren om te kopi├½ren.',
@@ -425,6 +426,9 @@ const translations: Record<Language, Record<string, string>> = {
     'overtime.totalHours': 'h totaal (alle uren zijn overuren)',
     'overtime.totalHoursNormal': 'h totaal - {normalHours}h normaal',
     'overtime.clickToCalculate': 'Klik op "Bereken Overuren" om de overuren te berekenen.',
+    'overtime.overnightTitle': 'Overnachtingen',
+    'overtime.overnightCount': 'Totaal overnachtingen',
+    'overtime.overnightNone': 'Geen overnachtingen in deze periode.',
     'overtime.missingInformation': 'Ontbrekende Informatie',
     'overtime.selectWeekAndYear': 'Selecteer een week en jaar.',
     'overtime.error': 'Fout',
@@ -586,6 +590,7 @@ const translations: Record<Language, Record<string, string>> = {
     'weekly.editEntry': 'Edit entry',
     'weekly.deleteEntry': 'Delete entry',
     'weekly.fullDayOff': 'Full day off (8 hours)',
+    'weekly.overnightStay': 'Overnight stay (didn’t sleep at home)',
     'weekly.total': 'Total per day',
     'weekly.weekConfirmedWarning': 'This week is confirmed. You cannot make any more changes until an admin has approved or reset it.',
     'weekly.noEntries': 'No Entries',
@@ -864,6 +869,9 @@ const translations: Record<Language, Record<string, string>> = {
     'overtime.totalHours': 'h total (all hours are overtime)',
     'overtime.totalHoursNormal': 'h total - {normalHours}h normal',
     'overtime.clickToCalculate': 'Click on "Calculate Overtime" to calculate the overtime.',
+    'overtime.overnightTitle': 'Overnight stays',
+    'overtime.overnightCount': 'Total overnight stays',
+    'overtime.overnightNone': 'No overnight stays in this period.',
     'overtime.missingInformation': 'Missing Information',
     'overtime.selectWeekAndYear': 'Please select a week and year.',
     'overtime.error': 'Error',

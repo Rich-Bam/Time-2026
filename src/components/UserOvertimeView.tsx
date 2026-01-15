@@ -45,20 +45,14 @@ function getWeekDateRange(weekNumber: number, year: number) {
   }
 }
 
-// Helper to get day name in Dutch
-const getDayNameNL = (dateStr: string) => {
-  const date = new Date(dateStr);
-  const days = ['Zondag', 'Maandag', 'Dinsdag', 'Woensdag', 'Donderdag', 'Vrijdag', 'Zaterdag'];
-  return days[date.getDay()];
-};
-
-// Helper to format date with day name (DD-MM-YYYY Dagnaam)
-const formatDateWithDayName = (dateStr: string) => {
+// Helper to format date with day name (DD-MM-YYYY weekday)
+const formatDateWithDayName = (dateStr: string, language: 'nl' | 'en') => {
   const date = new Date(dateStr);
   const day = String(date.getDate()).padStart(2, '0');
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const year = date.getFullYear();
-  const dayName = getDayNameNL(dateStr);
+  const locale = language === 'nl' ? 'nl-NL' : 'en-US';
+  const dayName = date.toLocaleDateString(locale, { weekday: 'long' });
   return `${day}-${month}-${year} ${dayName}`;
 };
 
@@ -143,18 +137,28 @@ const UserOvertimeView = ({ currentUser }: UserOvertimeViewProps) => {
         toDate = "";
       }
 
-      // Build query - only for current user
-      let queryBuilder = supabase
+      // Fetch timesheet + overnight stays (separate table so checkbox persists without entries)
+      let timesheetQuery = supabase
         .from("timesheet")
-        .select("user_id, date, hours, description, project, startTime, endTime, notes")
+        .select("user_id, date, hours, description, project, startTime, endTime, notes, stayed_overnight")
+        .eq("user_id", currentUser.id)
+        .order("date", { ascending: true });
+
+      let overnightQuery = supabase
+        .from("overnight_stays")
+        .select("date")
         .eq("user_id", currentUser.id)
         .order("date", { ascending: true });
       
       if (fromDate && toDate) {
-        queryBuilder = queryBuilder.gte("date", fromDate).lte("date", toDate);
+        timesheetQuery = timesheetQuery.gte("date", fromDate).lte("date", toDate);
+        overnightQuery = overnightQuery.gte("date", fromDate).lte("date", toDate);
       }
 
-      const { data, error } = await queryBuilder;
+      const [{ data, error }, { data: overnightData, error: overnightError }] = await Promise.all([
+        timesheetQuery,
+        overnightQuery,
+      ]);
       
       if (error) {
         toast({
@@ -166,14 +170,28 @@ const UserOvertimeView = ({ currentUser }: UserOvertimeViewProps) => {
         return;
       }
 
+      if (overnightError) {
+        toast({
+          title: t('overtime.error'),
+          description: overnightError.message,
+          variant: "destructive",
+        });
+        setOvertimeLoading(false);
+        return;
+      }
+
       // Group entries by date
-      const dateMap: Record<string, { totalHours: number; entries: any[] }> = {};
+      const dateMap: Record<string, { totalHours: number; entries: any[]; stayedOvernight: boolean }> = {};
       
       (data || []).forEach((entry: any) => {
         const date = entry.date;
         
         if (!dateMap[date]) {
-          dateMap[date] = { totalHours: 0, entries: [] };
+          dateMap[date] = { totalHours: 0, entries: [], stayedOvernight: false };
+        }
+
+        if (entry.stayed_overnight) {
+          dateMap[date].stayedOvernight = true;
         }
         
         // Only count work hours (not day off, sick, etc.)
@@ -274,12 +292,18 @@ const UserOvertimeView = ({ currentUser }: UserOvertimeViewProps) => {
         }
       });
       
+      const overnightFromTimesheet = Object.keys(dateMap).filter(date => dateMap[date].stayedOvernight);
+      const overnightFromTable = (overnightData || []).map((r: any) => String(r.date));
+      const overnightDates = Array.from(new Set([...overnightFromTimesheet, ...overnightFromTable])).sort((a, b) => a.localeCompare(b));
+
       setOvertimeData({
         totalOvertime: totalOvertime.toFixed(2),
         totalHours125: totalHours125.toFixed(2),
         totalHours150: totalHours150.toFixed(2),
         totalHours200: totalHours200.toFixed(2),
-        dailyOvertime: dailyOvertime.sort((a, b) => a.date.localeCompare(b.date))
+        dailyOvertime: dailyOvertime.sort((a, b) => a.date.localeCompare(b.date)),
+        overnightDates,
+        totalOvernightStays: overnightDates.length,
       });
     } catch (error: any) {
       toast({
@@ -470,6 +494,34 @@ const UserOvertimeView = ({ currentUser }: UserOvertimeViewProps) => {
                   )}
                 </div>
               </div>
+
+              {/* Overnight stays */}
+              <div className="mb-4 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600">
+                <div className="flex items-center justify-between gap-3 mb-2">
+                  <h5 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                    {t('overtime.overnightTitle')}
+                  </h5>
+                  <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                    {t('overtime.overnightCount')}: {overtimeData.totalOvernightStays || 0}
+                  </div>
+                </div>
+                {overtimeData.overnightDates?.length ? (
+                  <div className="flex flex-wrap gap-2">
+                    {overtimeData.overnightDates.map((date: string) => (
+                      <span
+                        key={date}
+                        className="text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200 px-2 py-1 rounded"
+                      >
+                        {formatDateWithDayName(date, language)}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-xs text-gray-600 dark:text-gray-400">
+                    {t('overtime.overnightNone')}
+                  </div>
+                )}
+              </div>
               
               <Accordion type="multiple" className="w-full">
                 {overtimeData.dailyOvertime.map((day: any, idx: number) => (
@@ -478,7 +530,7 @@ const UserOvertimeView = ({ currentUser }: UserOvertimeViewProps) => {
                       <div className="flex items-center justify-between w-full pr-4">
                         <div className="text-left">
                           <div className="font-semibold text-sm text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                            {formatDateWithDayName(day.date)}
+                            {formatDateWithDayName(day.date, language)}
                             {day.isWeekend && (
                               <span className="text-xs bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 px-2 py-0.5 rounded">
                                 {t('overtime.weekend')}
