@@ -2898,7 +2898,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                               {t('admin.status')}: {cw.admin_approved ? (
                                 <span className="text-green-600 dark:text-green-400 font-semibold">{t('admin.approvedStatus')}</span>
                               ) : cw.admin_reviewed ? (
-                                <span className="text-red-600 dark:text-red-400 font-semibold">{t('admin.rejectedStatus')}</span>
+                                <span className="text-orange-600 dark:text-orange-400 font-semibold">{t('admin.rejectedStatus')}</span>
                               ) : (
                                 <span className="text-orange-600 dark:text-orange-400 font-semibold">{t('admin.pendingReviewStatus')}</span>
                               )}
@@ -2919,7 +2919,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                               <Button
                                 size="sm"
                                 variant="outline"
-                                className="border-red-600 dark:border-red-500 text-red-600 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/40 h-8"
+                                className="border-orange-600 dark:border-orange-500 text-orange-600 dark:text-white-400 hover:bg-red-100 dark:hover:bg-red-900/40 h-8"
                                 onClick={() => handleRejectWeek(cw.user_id, cw.week_start_date)}
                               >
                                 {t('admin.rejectButton')}
@@ -2928,7 +2928,7 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
                             <Button
                               size="sm"
                               variant="outline"
-                              className="border-orange-600 dark:border-orange-500 text-orange-600 dark:text-orange-400 hover:bg-orange-100 dark:hover:bg-orange-900/40 h-8"
+                              className="border-red-600 dark:border-orange-500 text-orange-600 dark:text-orange-400 hover:bg-orange-100 dark:hover:bg-orange-900/40 h-8"
                               onClick={() => handleUnlockWeek(cw.user_id, cw.week_start_date)}
                             >
                               {t('admin.unlockButton')}

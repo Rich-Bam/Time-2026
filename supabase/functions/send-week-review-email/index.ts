@@ -86,64 +86,128 @@ Deno.serve(async (req) => {
     }
 
     const safeComment = (comment || "").trim();
-    const commentHtml = safeComment ? `<p style="margin:16px 0 0 0;"><strong>Comment / Opmerking:</strong><br>${escapeHtml(safeComment)}</p>` : "";
 
     const subject =
       status === "approved"
-        ? `Timesheet approved - Week ${weekNumber} (${year})`
-        : `Timesheet rejected - Week ${weekNumber} (${year})`;
+        ? `Timesheet approved - Week ${weekNumber} of ${year}`
+        : `Timesheet rejected - Week ${weekNumber} of ${year}`;
 
-    const headlineEn = status === "approved" ? "Your timesheet was approved" : "Your timesheet was rejected";
-    const headlineNl = status === "approved" ? "Je weekstaat is goedgekeurd" : "Je weekstaat is afgekeurd";
+    const headline = status === "approved" ? "Your timesheet was approved" : "Your timesheet was rejected";
 
-    const bodyEn =
+    const bodyText =
       status === "approved"
         ? `Week ${weekNumber} of ${year} has been approved.`
         : `Week ${weekNumber} of ${year} has been rejected. Please review and correct your entries.`;
 
-    const bodyNl =
-      status === "approved"
-        ? `Week ${weekNumber} van ${year} is goedgekeurd.`
-        : `Week ${weekNumber} van ${year} is afgekeurd. Controleer en corrigeer je invoer.`;
+    // Calculate week date range for display (ISO week standard)
+    const getWeekDateRange = (weekNum: number, year: number) => {
+      try {
+        // Calculate the date of the first Thursday of the year (ISO week standard)
+        const jan4 = new Date(year, 0, 4);
+        const jan4Day = jan4.getDay() || 7; // Convert Sunday (0) to 7
+        const daysToMonday = jan4Day === 1 ? 0 : 1 - jan4Day;
+        
+        // Get the Monday of week 1
+        const week1Monday = new Date(year, 0, 4 + daysToMonday);
+        
+        // Calculate the Monday of the requested week
+        const weekMonday = new Date(week1Monday);
+        weekMonday.setDate(week1Monday.getDate() + (weekNum - 1) * 7);
+        
+        // Calculate the Sunday of that week
+        const weekSunday = new Date(weekMonday);
+        weekSunday.setDate(weekMonday.getDate() + 6);
+        
+        return { start: weekMonday, end: weekSunday };
+      } catch (error) {
+        console.error("Error calculating week date range:", error);
+        // Fallback: return current week
+        const today = new Date();
+        const dayOfWeek = today.getDay();
+        const diff = today.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
+        const monday = new Date(today.setDate(diff));
+        const sunday = new Date(monday);
+        sunday.setDate(monday.getDate() + 6);
+        return { start: monday, end: sunday };
+      }
+    };
 
-    const ctaTextEn = "Open BAMPRO Timesheet";
-    const ctaTextNl = "Open BAMPRO Urenregistratie";
+    const weekRange = getWeekDateRange(weekNumber, year);
+    const weekStartStr = weekRange.start.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+    const weekEndStr = weekRange.end.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
 
-    const html = `<!doctype html>
+    const html = `<!DOCTYPE html>
 <html>
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Timesheet review</title>
-  </head>
-  <body style="font-family: Arial, sans-serif; background: #f3f4f6; margin: 0; padding: 24px;">
-    <div style="max-width: 720px; margin: 0 auto; background: #ffffff; border-radius: 10px; overflow: hidden; border: 1px solid #e5e7eb;">
-      <div style="background: #ea580c; color: #fff; padding: 16px 20px;">
-        <div style="font-size: 18px; font-weight: 700;">BAMPRO MARINE</div>
-        <div style="font-size: 12px; opacity: 0.9;">Timesheet System</div>
-      </div>
-      <div style="padding: 18px 20px; color: #111827;">
-        <h2 style="margin: 0 0 8px 0; font-size: 18px;">${escapeHtml(headlineEn)}</h2>
-        <p style="margin: 0; color: #374151;">${escapeHtml(bodyEn)}</p>
-
-        <hr style="border:0; border-top:1px solid #e5e7eb; margin:16px 0;" />
-
-        <h2 style="margin: 0 0 8px 0; font-size: 18px;">${escapeHtml(headlineNl)}</h2>
-        <p style="margin: 0; color: #374151;">${escapeHtml(bodyNl)}</p>
-
-        ${commentHtml}
-
-        <div style="margin-top: 18px;">
-          <a href="${appUrl}" style="display:inline-block;background:#2563eb;color:#fff;text-decoration:none;padding:10px 14px;border-radius:8px;font-weight:600;">
-            ${escapeHtml(ctaTextEn)} / ${escapeHtml(ctaTextNl)}
-          </a>
-        </div>
-      </div>
-      <div style="padding: 12px 20px; background: #f9fafb; color: #6b7280; font-size: 12px;">
-        This is an automated email. / Dit is een automatische e-mail.
-      </div>
-    </div>
-  </body>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Timesheet ${status === "approved" ? "Approval" : "Rejection"}</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f5f5f5;">
+  <table role="presentation" style="width: 100%; border-collapse: collapse; background-color: #f5f5f5; padding: 20px;">
+    <tr>
+      <td align="center" style="padding: 20px 0;">
+        <table role="presentation" style="max-width: 600px; width: 100%; border-collapse: collapse; background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+          <!-- Header -->
+          <tr>
+            <td style="background-color: #ea580c; padding: 30px; text-align: center; border-radius: 8px 8px 0 0;">
+              <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: bold;">BAMPRO MARINE</h1>
+            </td>
+          </tr>
+          
+          <!-- Content -->
+          <tr>
+            <td style="padding: 40px 30px;">
+              <h2 style="margin: 0 0 20px 0; color: #1f2937; font-size: 20px; font-weight: 600;">${escapeHtml(headline)}</h2>
+              
+              <p style="margin: 0 0 20px 0; color: #4b5563; font-size: 16px; line-height: 1.6;">
+                Hello ${escapeHtml(user.name || "there")},
+              </p>
+              
+              <p style="margin: 0 0 20px 0; color: #4b5563; font-size: 16px; line-height: 1.6;">
+                ${escapeHtml(bodyText)}
+              </p>
+              
+              <div style="background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 16px; margin: 20px 0; border-radius: 4px;">
+                <p style="margin: 0; color: #92400e; font-size: 14px; font-weight: 600;">Week Period:</p>
+                <p style="margin: 8px 0 0 0; color: #78350f; font-size: 16px;">
+                  ${weekStartStr} - ${weekEndStr}
+                </p>
+              </div>
+              
+              ${safeComment ? `<div style="margin: 20px 0; padding: 16px; background-color: #f9fafb; border-radius: 4px; border-left: 4px solid #6b7280;">
+                <p style="margin: 0 0 8px 0; color: #374151; font-size: 14px; font-weight: 600;">Comment:</p>
+                <p style="margin: 0; color: #4b5563; font-size: 16px; line-height: 1.6;">${escapeHtml(safeComment)}</p>
+              </div>` : ''}
+              
+              <div style="margin: 30px 0; text-align: center;">
+                <a href="${appUrl}" style="display: inline-block; background-color: #ea580c; color: #ffffff; text-decoration: none; padding: 14px 28px; border-radius: 6px; font-weight: 600; font-size: 16px;">Go to Timesheet</a>
+              </div>
+              
+              ${status === "rejected" ? `<p style="margin: 30px 0 0 0; color: #6b7280; font-size: 14px; line-height: 1.6;">
+                Please log in to your account and review your entries for this week.
+              </p>` : ''}
+              
+              <p style="margin: 20px 0 0 0; color: #6b7280; font-size: 14px; line-height: 1.6;">
+                If you have any questions, please contact your administrator.
+              </p>
+            </td>
+          </tr>
+          
+          <!-- Footer -->
+          <tr>
+            <td style="background-color: #f9fafb; padding: 20px 30px; text-align: center; border-radius: 0 0 8px 8px; border-top: 1px solid #e5e7eb;">
+              <p style="margin: 0; color: #6b7280; font-size: 12px; line-height: 1.6;">
+                This is an automated email from BAMPRO MARINE Timesheet System.<br>
+                You are receiving this email because you have an account on our platform.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
 </html>`;
 
     const res = await fetch("https://api.resend.com/emails", {
