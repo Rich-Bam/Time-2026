@@ -22,13 +22,11 @@ const TimeOverview = ({ currentUser }: TimeOverviewProps) => {
 
   useEffect(() => {
     const fetchData = async () => {
-      if (!currentUser) return;
       setLoading(true);
-      // Only fetch data for the current user
+      // fetch data for all users
       const { data: timesheetData } = await supabase
         .from("timesheet")
         .select("*, projects(name)")
-        .eq("user_id", currentUser.id)
         .order("date", { ascending: false });
       const { data: projectData } = await supabase.from("projects").select("*");
       setTimesheet(timesheetData || []);
@@ -198,10 +196,10 @@ const TimeOverview = ({ currentUser }: TimeOverviewProps) => {
             <div className="flex items-center">
               <Clock className="h-6 w-6 sm:h-8 sm:w-8 text-orange-600" />
               <div className="ml-3 sm:ml-4">
-                <p className="text-xs sm:text-sm font-medium text-gray-600">
+                <p className="text-xs sm:text-sm font-medium text-orange-600">
                   {timePeriod === "all" ? t('overview.totalHours') : timePeriod === "month" ? t('overview.thisMonth') : t('overview.thisWeek')}
                 </p>
-                <p className="text-xl sm:text-2xl font-bold text-gray-900">{loading ? "-" : totalHours.toFixed(1) + "h"}</p>
+                <p className="text-xl sm:text-2xl font-bold text-white-900">{loading ? "-" : totalHours.toFixed(1) + "h"}</p>
               </div>
             </div>
           </CardContent>
@@ -211,8 +209,8 @@ const TimeOverview = ({ currentUser }: TimeOverviewProps) => {
             <div className="flex items-center">
               <BarChart3 className="h-6 w-6 sm:h-8 sm:w-8 text-purple-600" />
               <div className="ml-3 sm:ml-4">
-                <p className="text-xs sm:text-sm font-medium text-gray-600">{t('overview.projects')}</p>
-                <p className="text-xl sm:text-2xl font-bold text-gray-900">{loading ? "-" : projectHours.length}</p>
+                <p className="text-xs sm:text-sm font-medium text-purple-600">{t('overview.projects')}</p>
+                <p className="text-xl sm:text-2xl font-bold text-white-900">{loading ? "-" : projectHours.length}</p>
               </div>
             </div>
           </CardContent>
@@ -222,8 +220,8 @@ const TimeOverview = ({ currentUser }: TimeOverviewProps) => {
             <div className="flex items-center">
               <TrendingUp className="h-6 w-6 sm:h-8 sm:w-8 text-green-600" />
               <div className="ml-3 sm:ml-4">
-                <p className="text-xs sm:text-sm font-medium text-gray-600">{t('overview.avgPerProject')}</p>
-                <p className="text-xl sm:text-2xl font-bold text-gray-900">
+                <p className="text-xs sm:text-sm font-medium text-green-600">{t('overview.avgPerProject')}</p>
+                <p className="text-xl sm:text-2xl font-bold text-white-900">
                   {loading ? "-" : projectHours.length > 0 ? (totalHours / projectHours.length).toFixed(1) + "h" : "0h"}
                 </p>
               </div>

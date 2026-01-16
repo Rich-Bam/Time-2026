@@ -8,7 +8,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { User, Calendar, Pencil, Check, X, Download, FileText, FileDown, Calendar as CalendarIcon, Users, Eye, AlertTriangle, Trash2, BarChart3, RefreshCw, Clock } from "lucide-react";
+import { User, Calendar, Pencil, Check, X, Download, FileText, FileDown, Calendar as CalendarIcon, Users, Eye, AlertTriangle, Trash2, BarChart3, RefreshCw, Clock, Search, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,6 +19,8 @@ import { hashPassword } from "@/utils/password";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { formatDateToYYYYMMDD } from "@/utils/dateUtils";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
 
 interface AdminPanelProps {
   currentUser: any;
@@ -138,6 +140,15 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
   
   // Active tab state
   const [activeTab, setActiveTab] = useState<string>("users");
+  
+  // State for confirmed weeks table: search, filters, sorting, pagination
+  const [confirmedWeeksSearch, setConfirmedWeeksSearch] = useState<string>("");
+  const [confirmedWeeksStatusFilter, setConfirmedWeeksStatusFilter] = useState<'all' | 'approved' | 'pending' | 'rejected'>('all');
+  const [confirmedWeeksUserFilter, setConfirmedWeeksUserFilter] = useState<string>('all');
+  const [confirmedWeeksSortBy, setConfirmedWeeksSortBy] = useState<'user' | 'week' | 'date' | 'hours' | 'status'>('date');
+  const [confirmedWeeksSortOrder, setConfirmedWeeksSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [confirmedWeeksPage, setConfirmedWeeksPage] = useState<number>(1);
+  const confirmedWeeksPerPage = 20;
   
   // UI-only hours taken overrides - ONLY affects the display in the "Hours Taken" column
   // Does NOT affect: database, weekly entries, days off calculations, or any other views
@@ -2836,120 +2847,400 @@ const AdminPanel = ({ currentUser }: AdminPanelProps) => {
         {/* Weeks Tab */}
         <TabsContent value="weeks" className="space-y-6">
           {/* All Confirmed Weeks Section - Available for admin and administratie */}
-          {isAdminOrAdministratie(currentUser) && (
-          <div>
-        <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4 text-green-600 dark:text-green-400">{t('admin.allConfirmedWeeks')}</h3>
-        <div className="space-y-3">
-          {users.map(user => {
-            const userConfirmedWeeks = confirmedWeeks.filter(
-              cw => cw.user_id === user.id && cw.confirmed
-            );
+          {isAdminOrAdministratie(currentUser) && (() => {
+            // Process all confirmed weeks into a flat array with computed data
+            const processedWeeks = confirmedWeeks
+              .filter(cw => cw.confirmed)
+              .map((cw) => {
+                const storedDate = new Date(cw.week_start_date);
+                const isoWeekMonday = getISOWeekMonday(storedDate);
+                const weekStart = isoWeekMonday;
+                const weekEnd = new Date(weekStart);
+                weekEnd.setDate(weekEnd.getDate() + 6);
+                const weekNum = getISOWeekNumber(weekStart);
+                const weekStartStr = formatDateToYYYYMMDD(weekStart);
+                const weekEndStr = formatDateToYYYYMMDD(weekEnd);
+                const weekEntries = allEntries.filter(
+                  e => e.user_id === cw.user_id && 
+                  e.date >= weekStartStr && 
+                  e.date <= weekEndStr &&
+                  e.startTime && e.endTime
+                );
+                const totalHours = weekEntries.reduce((sum, e) => sum + (isBreakEntry(e) ? 0 : Number(e.hours || 0)), 0);
+                const user = usersMap[cw.user_id];
+                const userName = user?.name || user?.email || 'Unknown';
+                const status = cw.admin_approved ? 'approved' : cw.admin_reviewed ? 'rejected' : 'pending';
+                
+                return {
+                  ...cw,
+                  weekStart,
+                  weekEnd,
+                  weekNum,
+                  totalHours,
+                  entryCount: weekEntries.length,
+                  userName,
+                  status,
+                  weekStartDateStr: weekStartStr
+                };
+              });
+
+            // Calculate current week and previous week for default filtering
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const currentWeekMonday = getISOWeekMonday(today);
+            const previousWeekMonday = new Date(currentWeekMonday);
+            previousWeekMonday.setDate(previousWeekMonday.getDate() - 7);
             
-            if (userConfirmedWeeks.length === 0) {
-              return null;
-            }
-            
+            // Apply filters
+            let filteredWeeks = processedWeeks.filter((week) => {
+              const hasSearchQuery = confirmedWeeksSearch.trim().length > 0;
+              
+              // If no search query, only show current week and previous week
+              if (!hasSearchQuery) {
+                const weekMondayStr = formatDateToYYYYMMDD(week.weekStart);
+                const currentWeekStr = formatDateToYYYYMMDD(currentWeekMonday);
+                const previousWeekStr = formatDateToYYYYMMDD(previousWeekMonday);
+                
+                // Only show if it's the current week or previous week
+                if (weekMondayStr !== currentWeekStr && weekMondayStr !== previousWeekStr) {
+                  return false;
+                }
+              } else {
+                // If there's a search query, apply search filter
+                const searchLower = confirmedWeeksSearch.toLowerCase();
+                const matchesSearch = 
+                  week.userName.toLowerCase().includes(searchLower) ||
+                  week.weekNum.toString().includes(searchLower) ||
+                  week.weekStart.toLocaleDateString('nl-NL').toLowerCase().includes(searchLower) ||
+                  week.weekEnd.toLocaleDateString('nl-NL').toLowerCase().includes(searchLower);
+                if (!matchesSearch) return false;
+              }
+              
+              // Status filter
+              if (confirmedWeeksStatusFilter !== 'all' && week.status !== confirmedWeeksStatusFilter) {
+                return false;
+              }
+              
+              // User filter
+              if (confirmedWeeksUserFilter !== 'all' && week.user_id !== confirmedWeeksUserFilter) {
+                return false;
+              }
+              
+              return true;
+            });
+
+            // Apply sorting
+            filteredWeeks.sort((a, b) => {
+              let comparison = 0;
+              switch (confirmedWeeksSortBy) {
+                case 'user':
+                  comparison = a.userName.localeCompare(b.userName);
+                  break;
+                case 'week':
+                  comparison = a.weekNum - b.weekNum;
+                  if (comparison === 0) {
+                    comparison = a.weekStart.getTime() - b.weekStart.getTime();
+                  }
+                  break;
+                case 'date':
+                  comparison = a.weekStart.getTime() - b.weekStart.getTime();
+                  break;
+                case 'hours':
+                  comparison = a.totalHours - b.totalHours;
+                  break;
+                case 'status':
+                  const statusOrder = { 'approved': 1, 'pending': 2, 'rejected': 3 };
+                  comparison = (statusOrder[a.status as keyof typeof statusOrder] || 0) - (statusOrder[b.status as keyof typeof statusOrder] || 0);
+                  break;
+              }
+              return confirmedWeeksSortOrder === 'asc' ? comparison : -comparison;
+            });
+
+            // Pagination
+            const totalPages = Math.ceil(filteredWeeks.length / confirmedWeeksPerPage);
+            const startIndex = (confirmedWeeksPage - 1) * confirmedWeeksPerPage;
+            const paginatedWeeks = filteredWeeks.slice(startIndex, startIndex + confirmedWeeksPerPage);
+
+            const handleSort = (column: typeof confirmedWeeksSortBy) => {
+              if (confirmedWeeksSortBy === column) {
+                setConfirmedWeeksSortOrder(confirmedWeeksSortOrder === 'asc' ? 'desc' : 'asc');
+              } else {
+                setConfirmedWeeksSortBy(column);
+                setConfirmedWeeksSortOrder('desc');
+              }
+              setConfirmedWeeksPage(1); // Reset to first page when sorting changes
+            };
+
+            const SortIcon = ({ column }: { column: typeof confirmedWeeksSortBy }) => {
+              if (confirmedWeeksSortBy !== column) {
+                return <ArrowUpDown className="h-3 w-3 ml-1 opacity-50" />;
+              }
+              return confirmedWeeksSortOrder === 'asc' 
+                ? <ArrowUp className="h-3 w-3 ml-1" />
+                : <ArrowDown className="h-3 w-3 ml-1" />;
+            };
+
             return (
-              <div key={user.id} className="border rounded-lg p-3 sm:p-4 bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 shadow">
-                <div className="font-semibold text-base sm:text-lg mb-3 text-gray-900 dark:text-gray-100">
-                  {user.name || user.email}
+              <div>
+                <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4 text-green-600 dark:text-green-400">{t('admin.allConfirmedWeeks')}</h3>
+                
+                {/* Filters and Search */}
+                <div className="mb-4 space-y-3">
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    {/* Search */}
+                    <div className="flex-1 relative">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                      <Input
+                        type="text"
+                        placeholder={t('admin.searchWeeks') || "Search by user, week number, or date..."}
+                        value={confirmedWeeksSearch}
+                        onChange={(e) => {
+                          setConfirmedWeeksSearch(e.target.value);
+                          setConfirmedWeeksPage(1);
+                        }}
+                        className="pl-10"
+                      />
+                    </div>
+                    
+                    {/* Status Filter */}
+                    <Select
+                      value={confirmedWeeksStatusFilter}
+                      onValueChange={(value: 'all' | 'approved' | 'pending' | 'rejected') => {
+                        setConfirmedWeeksStatusFilter(value);
+                        setConfirmedWeeksPage(1);
+                      }}
+                    >
+                      <SelectTrigger className="w-full sm:w-[180px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">{t('admin.allStatuses') || "All Statuses"}</SelectItem>
+                        <SelectItem value="approved">{t('admin.approvedStatus')}</SelectItem>
+                        <SelectItem value="pending">{t('admin.pendingReviewStatus')}</SelectItem>
+                        <SelectItem value="rejected">{t('admin.rejectedStatus')}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    
+                    {/* User Filter */}
+                    <Select
+                      value={confirmedWeeksUserFilter}
+                      onValueChange={(value) => {
+                        setConfirmedWeeksUserFilter(value);
+                        setConfirmedWeeksPage(1);
+                      }}
+                    >
+                      <SelectTrigger className="w-full sm:w-[180px]">
+                        <SelectValue placeholder={t('admin.allUsers') || "All Users"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">{t('admin.allUsers') || "All Users"}</SelectItem>
+                        {users.map((user) => (
+                          <SelectItem key={user.id} value={user.id}>
+                            {user.name || user.email}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  {/* Results count */}
+                  <div className="text-sm text-gray-600 dark:text-gray-400">
+                    {confirmedWeeksSearch.trim() ? (
+                      <>
+                        {filteredWeeks.length} {filteredWeeks.length === 1 ? t('admin.week') || 'week' : t('admin.weeks') || 'weeks'} {filteredWeeks.length !== confirmedWeeks.filter(cw => cw.confirmed).length && `(${confirmedWeeks.filter(cw => cw.confirmed).length} total)`}
+                      </>
+                    ) : (
+                      <>
+                        Showing current and previous week: {filteredWeeks.length} {filteredWeeks.length === 1 ? t('admin.weeks') || 'Confirmed' : t('cofirmed') || 'weeks'} ({confirmedWeeks.filter(cw => cw.confirmed).length} total - use search to find older weeks)
+                      </>
+                    )}
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  {userConfirmedWeeks.map((cw) => {
-                    // Calculate the correct ISO week Monday based on the stored week_start_date
-                    // This ensures we get the correct week number even if week_start_date was stored incorrectly
-                    const storedDate = new Date(cw.week_start_date);
-                    const isoWeekMonday = getISOWeekMonday(storedDate);
-                    const weekStart = isoWeekMonday;
-                    const weekEnd = new Date(weekStart);
-                    weekEnd.setDate(weekEnd.getDate() + 6);
-                    const weekNum = getISOWeekNumber(weekStart);
-                    // Use the ISO week date range for filtering entries, not the stored week_start_date
-                    const weekStartStr = formatDateToYYYYMMDD(weekStart);
-                    const weekEndStr = formatDateToYYYYMMDD(weekEnd);
-                    const weekEntries = allEntries.filter(
-                      e => e.user_id === cw.user_id && 
-                      e.date >= weekStartStr && 
-                      e.date <= weekEndStr &&
-                      // Filter out admin adjustments (entries without startTime/endTime are admin adjustments)
-                      // Only show entries that have both startTime and endTime - these are user-created entries
-                      e.startTime && e.endTime
-                    );
-                    const totalHours = weekEntries.reduce((sum, e) => sum + (isBreakEntry(e) ? 0 : Number(e.hours || 0)), 0);
-                    
-                    const isNotApproved = !cw.admin_approved;
-                    
-                    return (
-                      <div 
-                        key={`${cw.user_id}-${cw.week_start_date}`} 
-                        className="border rounded p-2 bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
-                        onClick={() => setSelectedWeekForView({ userId: cw.user_id, weekStartDate: cw.week_start_date })}
-                      >
-                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                          <div className="flex-1">
-                            <div className="font-medium text-sm sm:text-base text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                              {t('admin.week')} {weekNum} ({weekStart.toLocaleDateString('nl-NL')} - {weekEnd.toLocaleDateString('nl-NL')})
-                              <Eye className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                            </div>
-                            <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
-                              {t('admin.total')}: {totalHours.toFixed(2)} ({weekEntries.length} {t('admin.entries')})
-                            </div>
-                            <div className="text-xs sm:text-sm mt-1 text-gray-700 dark:text-gray-300">
-                              {t('admin.status')}: {cw.admin_approved ? (
-                                <span className="text-green-600 dark:text-green-400 font-semibold">{t('admin.approvedStatus')}</span>
-                              ) : cw.admin_reviewed ? (
-                                <span className="text-orange-600 dark:text-orange-400 font-semibold">{t('admin.rejectedStatus')}</span>
-                              ) : (
-                                <span className="text-orange-600 dark:text-orange-400 font-semibold">{t('admin.pendingReviewStatus')}</span>
-                              )}
-                            </div>
-                          </div>
-                          <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
-                            {!cw.admin_reviewed && (
-                              <Button
-                                size="sm"
-                                variant="default"
-                                className="bg-green-600 hover:bg-green-700 h-8"
-                                onClick={() => handleApproveWeek(cw.user_id, cw.week_start_date)}
-                              >
-                                {t('admin.approveButton')}
-                              </Button>
-                            )}
-                            {!cw.admin_reviewed && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="border-orange-600 dark:border-orange-500 text-orange-600 dark:text-white-400 hover:bg-red-100 dark:hover:bg-red-900/40 h-8"
-                                onClick={() => handleRejectWeek(cw.user_id, cw.week_start_date)}
-                              >
-                                {t('admin.rejectButton')}
-                              </Button>
-                            )}
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="border-red-600 dark:border-orange-500 text-orange-600 dark:text-orange-400 hover:bg-orange-100 dark:hover:bg-orange-900/40 h-8"
-                              onClick={() => handleUnlockWeek(cw.user_id, cw.week_start_date)}
+
+                {/* Table */}
+                {paginatedWeeks.length > 0 ? (
+                  <>
+                    <div className="border rounded-lg overflow-hidden">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead 
+                              className="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800"
+                              onClick={() => handleSort('user')}
                             >
-                              {t('admin.unlockButton')}
-                            </Button>
-                          </div>
-                        </div>
+                              <div className="flex items-center">
+                                {t('admin.user') || "User"}
+                                <SortIcon column="user" />
+                              </div>
+                            </TableHead>
+                            <TableHead 
+                              className="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800"
+                              onClick={() => handleSort('week')}
+                            >
+                              <div className="flex items-center">
+                                {t('admin.week') || "Week"}
+                                <SortIcon column="week" />
+                              </div>
+                            </TableHead>
+                            <TableHead 
+                              className="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800"
+                              onClick={() => handleSort('date')}
+                            >
+                              <div className="flex items-center">
+                                {t('admin.dateRange') || "Date Range"}
+                                <SortIcon column="date" />
+                              </div>
+                            </TableHead>
+                            <TableHead 
+                              className="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800"
+                              onClick={() => handleSort('hours')}
+                            >
+                              <div className="flex items-center">
+                                {t('admin.total') || "Total Hours"}
+                                <SortIcon column="hours" />
+                              </div>
+                            </TableHead>
+                            <TableHead 
+                              className="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800"
+                              onClick={() => handleSort('status')}
+                            >
+                              <div className="flex items-center">
+                                {t('admin.status') || "Status"}
+                                <SortIcon column="status" />
+                              </div>
+                            </TableHead>
+                            <TableHead className="text-right">{t('admin.actions') || "Actions"}</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {paginatedWeeks.map((week) => (
+                            <TableRow 
+                              key={`${week.user_id}-${week.week_start_date}`}
+                              className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800"
+                              onClick={() => setSelectedWeekForView({ userId: week.user_id, weekStartDate: week.week_start_date })}
+                            >
+                              <TableCell className="font-medium">{week.userName}</TableCell>
+                              <TableCell>Week {week.weekNum}</TableCell>
+                              <TableCell>
+                                {week.weekStart.toLocaleDateString('nl-NL')} - {week.weekEnd.toLocaleDateString('nl-NL')}
+                              </TableCell>
+                              <TableCell>
+                                {week.totalHours.toFixed(2)} ({week.entryCount} {t('admin.entries') || 'entries'})
+                              </TableCell>
+                              <TableCell>
+                                {week.status === 'approved' ? (
+                                  <span className="text-green-600 dark:text-green-400 font-semibold">{t('admin.approvedStatus')}</span>
+                                ) : week.status === 'rejected' ? (
+                                  <span className="text-orange-600 dark:text-orange-400 font-semibold">{t('admin.rejectedStatus')}</span>
+                                ) : (
+                                  <span className="text-orange-600 dark:text-orange-400 font-semibold">{t('admin.pendingReviewStatus')}</span>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                                <div className="flex justify-end gap-2">
+                                  {!week.admin_reviewed && (
+                                    <>
+                                      <Button
+                                        size="sm"
+                                        variant="default"
+                                        className="bg-green-600 hover:bg-green-700 h-8"
+                                        onClick={() => handleApproveWeek(week.user_id, week.week_start_date)}
+                                      >
+                                        {t('admin.approveButton')}
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="border-orange-600 dark:border-orange-500 text-orange-600 dark:text-white-400 hover:bg-red-100 dark:hover:bg-red-900/40 h-8"
+                                        onClick={() => handleRejectWeek(week.user_id, week.week_start_date)}
+                                      >
+                                        {t('admin.rejectButton')}
+                                      </Button>
+                                    </>
+                                  )}
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="border-red-600 dark:border-orange-500 text-orange-600 dark:text-orange-400 hover:bg-orange-100 dark:hover:bg-orange-900/40 h-8"
+                                    onClick={() => handleUnlockWeek(week.user_id, week.week_start_date)}
+                                  >
+                                    {t('admin.unlockButton')}
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-8"
+                                    onClick={() => setSelectedWeekForView({ userId: week.user_id, weekStartDate: week.week_start_date })}
+                                  >
+                                    <Eye className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+
+                    {/* Pagination */}
+                    {totalPages > 1 && (
+                      <div className="mt-4">
+                        <Pagination>
+                          <PaginationContent>
+                            <PaginationItem>
+                              <PaginationPrevious 
+                                href="#"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  if (confirmedWeeksPage > 1) {
+                                    setConfirmedWeeksPage(confirmedWeeksPage - 1);
+                                  }
+                                }}
+                                className={confirmedWeeksPage === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                              />
+                            </PaginationItem>
+                            {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                              <PaginationItem key={page}>
+                                <PaginationLink
+                                  href="#"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    setConfirmedWeeksPage(page);
+                                  }}
+                                  isActive={page === confirmedWeeksPage}
+                                  className="cursor-pointer"
+                                >
+                                  {page}
+                                </PaginationLink>
+                              </PaginationItem>
+                            ))}
+                            <PaginationItem>
+                              <PaginationNext 
+                                href="#"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  if (confirmedWeeksPage < totalPages) {
+                                    setConfirmedWeeksPage(confirmedWeeksPage + 1);
+                                  }
+                                }}
+                                className={confirmedWeeksPage === totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                              />
+                            </PaginationItem>
+                          </PaginationContent>
+                        </Pagination>
                       </div>
-                    );
-                  })}
-                </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="text-gray-400 dark:text-gray-500 text-center italic p-6 border rounded-lg bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700">
+                    {confirmedWeeks.filter(cw => cw.confirmed).length === 0 
+                      ? t('admin.noConfirmedWeeks')
+                      : t('admin.noWeeksMatchFilters') || "No weeks match your filters"}
+                  </div>
+                )}
               </div>
             );
-          })}
-          {confirmedWeeks.filter(cw => cw.confirmed).length === 0 && (
-            <div className="text-gray-400 dark:text-gray-500 text-center italic p-6 border rounded-lg bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700">
-              {t('admin.noConfirmedWeeks')}
-            </div>
-          )}
-        </div>
-      </div>
-      )}
+          })()}
       
       {/* Week Details Dialog */}
       {selectedWeekForView && (() => {

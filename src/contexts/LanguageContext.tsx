@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+﻿import React, { createContext, useContext, useState, useEffect } from 'react';
 
 type Language = 'nl' | 'en';
 
@@ -339,6 +339,9 @@ const translations: Record<Language, Record<string, string>> = {
     'admin.missingInformation': 'Ontbrekende Informatie',
     'admin.selectWeekAndYear': 'Selecteer een week en jaar.',
     'admin.existingUsers': 'Bestaande Gebruikers',
+    'admin.searchWeeks': 'Zoek week',
+    'admin.allStatuses': 'Status',
+    'admin.noWeeksMatchFilters': 'Geen weken komen overeen met de filters.',
     
     // Auth/Login
     'auth.loginSuccessful': 'Login Succesvol',
@@ -797,6 +800,9 @@ const translations: Record<Language, Record<string, string>> = {
     'admin.weekLockedText': 'This week is confirmed and cannot be modified.',
     'admin.missingInformation': 'Missing Information',
     'admin.selectWeekAndYear': 'Please select a week and year.',
+    'admin.searchWeeks': 'Search week',
+    'admin.allStatuses': 'All Statuses',
+    'admin.noWeeksMatchFilters': 'No weeks match the filters.',
     
     // Auth/Login
     'auth.loginSuccessful': 'Login Successful',
