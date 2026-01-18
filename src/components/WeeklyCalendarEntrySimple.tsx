@@ -51,8 +51,9 @@ const workTypes = [
 const workTypeRequiresProject = (workType: string): boolean => {
   if (!workType) return true; // Empty work type requires project
   const workTypeNum = parseInt(workType, 10);
-  // Work types 17 and 30-40 don't require a project
+  // Work types 17, 20, 21, and 30-40 don't require a project
   if (workTypeNum === 17) return false;
+  if (workTypeNum === 20 || workTypeNum === 21) return false;
   if (workTypeNum >= 30 && workTypeNum <= 40) return false;
   return true;
 };
@@ -89,6 +90,7 @@ interface Entry {
   endTime: string;
   isSubmitted?: boolean;
   fullDayOff?: boolean;
+  kilometers?: string;
 }
 
 interface DayData {
@@ -110,7 +112,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
     getWeekDates(new Date()).map(date => ({ 
       date, 
       stayedOvernight: false,
-      entries: [{ workType: "", project: "", hours: "", startTime: "", endTime: "", fullDayOff: false }] 
+      entries: [{ workType: "", project: "", hours: "", startTime: "", endTime: "", fullDayOff: false, kilometers: "" }] 
     }))
   );
   const [projects, setProjects] = useState<{ id: number; name: string }[]>([]);
@@ -384,7 +386,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
     if (!currentUser) return;
     const { data } = await supabase
       .from("timesheet")
-      .select("id, project, hours, description, date, startTime, endTime, stayed_overnight")
+      .select("id, project, hours, description, date, startTime, endTime, stayed_overnight, kilometers")
       .eq("user_id", currentUser.id)
       .eq("date", dateStr);
     if (data) {
@@ -406,7 +408,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
       
       setSubmittedEntries(prev => ({ 
         ...prev, 
-        [dateStr]: filteredData.map(e => ({
+        [dateStr]: filteredData.map((e: any) => ({
           id: e.id,
           workType: e.description || "",
           project: e.project || "",
@@ -415,6 +417,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
           endTime: e.endTime || "",
           isSubmitted: true,
           fullDayOff: false,
+          kilometers: e.kilometers ? String(e.kilometers) : "",
         }))
       }));
     }
@@ -577,7 +580,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
     setDays(getWeekDates(newStart).map(date => ({ 
       date, 
       stayedOvernight: false,
-      entries: [{ workType: "", project: "", hours: "", startTime: "", endTime: "", fullDayOff: false }] 
+      entries: [{ workType: "", project: "", hours: "", startTime: "", endTime: "", fullDayOff: false, kilometers: "" }] 
     })));
   };
 
@@ -624,7 +627,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
     
     setDays(days.map((day, i) =>
       i === dayIdx 
-        ? { ...day, entries: [...day.entries, { workType: "", project: lastProject, hours: "", startTime: lastEndTime, endTime: "", fullDayOff: false }] }
+        ? { ...day, entries: [...day.entries, { workType: "", project: lastProject, hours: "", startTime: lastEndTime, endTime: "", fullDayOff: false, kilometers: "" }] }
         : day
     ));
   };
@@ -820,7 +823,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
         // Update existing entry in database
         // For full day off, set startTime and endTime to null explicitly
         const updateData: any = {
-          project: (isDayOff || entry.workType === "35") ? null : entry.project,
+          project: (isDayOff || entry.workType === "35" || entry.workType === "20" || entry.workType === "21") ? (entry.project?.trim() || null) : entry.project,
           hours: hoursToSave,
           description: entry.workType,
         };
@@ -836,6 +839,13 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
           updateData.endTime = entry.endTime;
         } else {
           updateData.endTime = null;
+        }
+        
+        // Include kilometers for work types 20 and 21
+        if (entry.workType === "20" || entry.workType === "21") {
+          updateData.kilometers = entry.kilometers ? parseFloat(entry.kilometers) : null;
+        } else {
+          updateData.kilometers = null;
         }
         
         const { error } = await supabase
@@ -869,7 +879,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
         // Create new entry
         // For full day off, set startTime and endTime to null explicitly
         const insertData: any = {
-          project: (isDayOff || entry.workType === "35") ? null : entry.project,
+          project: (isDayOff || entry.workType === "35" || entry.workType === "20" || entry.workType === "21") ? (entry.project?.trim() || null) : entry.project,
           user_id: currentUser.id,
           date: dateStr,
           hours: hoursToSave,
@@ -888,6 +898,13 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
           insertData.endTime = entry.endTime;
         } else {
           insertData.endTime = null;
+        }
+        
+        // Include kilometers for work types 20 and 21
+        if (entry.workType === "20" || entry.workType === "21") {
+          insertData.kilometers = entry.kilometers ? parseFloat(entry.kilometers) : null;
+        } else {
+          insertData.kilometers = null;
         }
         
         const { data: newEntry, error } = await supabase.from("timesheet").insert([insertData]).select("id").single();
@@ -922,7 +939,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
         if (i !== dayIdx) return d;
         return {
           ...d,
-          entries: [...d.entries, { workType: "", project: nextProject, hours: "", startTime: nextStartTime, endTime: "", fullDayOff: false }]
+          entries: [...d.entries, { workType: "", project: nextProject, hours: "", startTime: nextStartTime, endTime: "", fullDayOff: false, kilometers: "" }]
         };
       }));
     } catch (error: any) {
@@ -1041,9 +1058,20 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
       });
     }
     
-    // Add hours from submitted entries
+    // Add hours from submitted entries (excluding those currently being edited to avoid double-counting)
     const submitted = submittedEntries[dateStr] || [];
-    submitted.forEach(submittedEntry => {
+    // Get IDs of entries currently being edited
+    const editableEntryIds = new Set(
+      (day?.entries || [])
+        .filter(e => e.id)
+        .map(e => e.id!)
+    );
+    // Filter submitted entries to exclude those being edited
+    const submittedForTotal = submitted.filter(
+      se => !se.id || !editableEntryIds.has(se.id)
+    );
+    
+    submittedForTotal.forEach(submittedEntry => {
       // Skip breaks (work type 35) - they should not count toward total hours
       if (submittedEntry.workType === "35") {
         return;
@@ -1051,6 +1079,42 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
       
       const hours = parseFloat(submittedEntry.hours || "0") || 0;
       total += hours;
+    });
+    
+    return total;
+  };
+
+  // Calculate total kilometers for a day (only for work types 20 and 21)
+  const calculateDayKilometersTotal = (dayIdx: number, dateStr: string): number => {
+    let total = 0;
+    
+    // Sum from editable entries (workType 20 or 21)
+    const day = days[dayIdx];
+    if (day && day.entries) {
+      day.entries.forEach(entry => {
+        if ((entry.workType === "20" || entry.workType === "21") && entry.kilometers) {
+          total += parseFloat(entry.kilometers) || 0;
+        }
+      });
+    }
+    
+    // Sum from submitted entries (workType 20 or 21), excluding those currently being edited to avoid double-counting
+    const submitted = submittedEntries[dateStr] || [];
+    // Get IDs of entries currently being edited
+    const editableEntryIds = new Set(
+      (day?.entries || [])
+        .filter(e => e.id)
+        .map(e => e.id!)
+    );
+    // Filter submitted entries to exclude those being edited
+    const submittedForTotal = submitted.filter(
+      se => !se.id || !editableEntryIds.has(se.id)
+    );
+    
+    submittedForTotal.forEach(submittedEntry => {
+      if ((submittedEntry.workType === "20" || submittedEntry.workType === "21") && submittedEntry.kilometers) {
+        total += parseFloat(submittedEntry.kilometers) || 0;
+      }
     });
     
     return total;
@@ -1128,6 +1192,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
           startTime: e.startTime || "",
           endTime: e.endTime || "",
           fullDayOff: false,
+          kilometers: e.kilometers || "",
         }))
     ];
     
@@ -1196,7 +1261,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
       }
       
       entriesToSave.push({
-        project: (isDayOff || entry.workType === "35") ? null : entry.project,
+        project: (isDayOff || entry.workType === "35" || entry.workType === "20" || entry.workType === "21") ? (entry.project?.trim() || null) : entry.project,
         user_id: currentUser.id,
         date: currentDateStr,
         hours: hoursToSave,
@@ -1204,6 +1269,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
         startTime: entry.startTime || null,
         endTime: entry.endTime || null,
         stayed_overnight: !!currentDay?.stayedOvernight,
+        kilometers: (entry.workType === "20" || entry.workType === "21") && entry.kilometers ? parseFloat(entry.kilometers) : null,
       });
     }
     
@@ -1362,7 +1428,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
         }
         
         entriesToSave.push({
-          project: (isDayOff || entry.workType === "35") ? null : entry.project,
+          project: (isDayOff || entry.workType === "35" || entry.workType === "20" || entry.workType === "21") ? (entry.project?.trim() || null) : entry.project,
           user_id: currentUser?.id || null,
           date: formatDateToYYYYMMDD(day.date),
           hours: hoursToSave,
@@ -1370,6 +1436,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
           startTime: entry.startTime || null,
           endTime: entry.endTime || null,
           stayed_overnight: !!day.stayedOvernight,
+          kilometers: (entry.workType === "20" || entry.workType === "21") && entry.kilometers ? parseFloat(entry.kilometers) : null,
         });
       }
     }
@@ -1395,7 +1462,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
       setDays(getWeekDates(weekStart).map(date => ({ 
         date, 
         stayedOvernight: false,
-        entries: [{ workType: "", project: "", hours: "", startTime: "", endTime: "", fullDayOff: false }] 
+        entries: [{ workType: "", project: "", hours: "", startTime: "", endTime: "", fullDayOff: false, kilometers: "" }] 
       })));
     }
   };
@@ -1598,6 +1665,16 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
     });
 
     const overnightDates = (overnightRows || []).map((r: any) => formatDateDDMMYY(String(r.date)));
+    
+    // Calculate weekly total kilometers (work types 20 and 21 only)
+    const weeklyTotalKilometers = filteredData.reduce((sum, entry) => {
+      const workType = parseInt(entry.description || "0");
+      if ((workType === 20 || workType === 21) && entry.kilometers) {
+        return sum + (parseFloat(String(entry.kilometers)) || 0);
+      }
+      return sum;
+    }, 0);
+    
     // Make summary easy to read (separate cells)
     summarySheet.getCell('A6').value = t('export.overtimeSummary');
     summarySheet.getCell('A6').font = { bold: true };
@@ -1628,8 +1705,16 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
     summarySheet.getCell('D9').value = overnightDates.join(', ');
     summarySheet.mergeCells('D9:H9');
 
+    summarySheet.getCell('A11').value = t('weekly.kilometers') || 'Kilometers';
+    summarySheet.getCell('A11').font = { bold: true };
+    summarySheet.getCell('B11').value = weeklyTotalKilometers > 0 ? weeklyTotalKilometers : '';
+    summarySheet.getCell('B11').font = { bold: true };
+    if (weeklyTotalKilometers > 0) {
+      summarySheet.getCell('B11').numFmt = '0.0';
+    }
+
     // Light styling band
-    ['A7','B7','C7','D7','E7','F7','G7','H7','A9','B9','C9','D9'].forEach(addr => {
+    ['A7','B7','C7','D7','E7','F7','G7','H7','A9','B9','C9','D9','A11','B11'].forEach(addr => {
       const cell = summarySheet.getCell(addr);
       cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEFF6FF' } };
     });
@@ -1658,14 +1743,14 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
       // Create worksheet
       const worksheet = workbook.addWorksheet(dayName);
 
-      // Add logo to cell G1 (column 7, row 1) if logo is available
+      // Add logo to cell H1 (column 8, row 1) if logo is available
       if (logoBuffer) {
         const logoId = workbook.addImage({
           buffer: logoBuffer,
           extension: 'jpeg',
         });
         worksheet.addImage(logoId, {
-          tl: { col: 6, row: 0 }, // Column G (0-indexed = 6), Row 1 (0-indexed = 0)
+          tl: { col: 7, row: 0 }, // Column H (0-indexed = 7), Row 1 (0-indexed = 0)
           ext: { width: 200, height: 60 }, // Adjust size as needed
         });
       }
@@ -1677,7 +1762,8 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
       worksheet.getColumn(4).width = 8;  // From
       worksheet.getColumn(5).width = 8;  // To
       worksheet.getColumn(6).width = 15; // Hours Worked
-      worksheet.getColumn(7).width = 30; // Space for logo
+      worksheet.getColumn(7).width = 12; // Kilometers
+      worksheet.getColumn(8).width = 30; // Space for logo
 
       // Add header rows
       worksheet.getCell('A1').value = t('weekly.employeeName');
@@ -1751,7 +1837,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
 
       // Add table headers (row 7)
       const headerRow = worksheet.getRow(9);
-      headerRow.values = [t('weekly.day'), t('weekly.workType'), t('weekly.projectWorkOrder'), t('weekly.from'), t('weekly.to'), t('weekly.hoursWorked')];
+      headerRow.values = [t('weekly.day'), t('weekly.workType'), t('weekly.projectWorkOrder'), t('weekly.from'), t('weekly.to'), t('weekly.hoursWorked'), t('weekly.kilometers')];
       headerRow.font = { bold: true };
       headerRow.fill = {
         type: 'pattern',
@@ -1761,6 +1847,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
 
       // Add data rows
       dayEntries.forEach((entry, idx) => {
+        const workType = parseInt(entry.description || "0");
         const row = worksheet.getRow(10 + idx);
         row.values = [
           dayNameDisplay,
@@ -1769,8 +1856,18 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
           entry.startTime || '',
           entry.endTime || '',
           formatHoursHHMM(parseFloat(entry.hours) || 0),
+          (workType === 20 || workType === 21) ? (entry.kilometers ? String(entry.kilometers) : '') : '',
         ];
       });
+
+      // Calculate total kilometers for the day (work types 20 and 21 only)
+      const totalKilometers = dayEntries.reduce((sum, entry) => {
+        const workType = parseInt(entry.description || "0");
+        if ((workType === 20 || workType === 21) && entry.kilometers) {
+          return sum + (parseFloat(String(entry.kilometers)) || 0);
+        }
+        return sum;
+      }, 0);
 
       // Add total row
       const totalRowIndex = 10 + dayEntries.length;
@@ -1779,6 +1876,11 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
       totalRow.getCell(2).font = { bold: true };
       totalRow.getCell(6).value = totalHoursHHMM;
       totalRow.getCell(6).font = { bold: true };
+      totalRow.getCell(7).value = totalKilometers > 0 ? totalKilometers : '';
+      totalRow.getCell(7).font = { bold: true };
+      if (totalKilometers > 0) {
+        totalRow.getCell(7).numFmt = '0.0';
+      }
 
       // Make each sheet easier to read
       applyDefaultFont(worksheet, totalRowIndex);
@@ -1973,6 +2075,16 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
       });
 
       const overnightDates = (overnightRows || []).map((r: any) => formatDateDDMMYY(String(r.date)));
+      
+      // Calculate weekly total kilometers (work types 20 and 21 only)
+      const weeklyTotalKilometers = filteredData.reduce((sum, entry) => {
+        const workType = parseInt(entry.description || "0");
+        if ((workType === 20 || workType === 21) && entry.kilometers) {
+          return sum + (parseFloat(String(entry.kilometers)) || 0);
+        }
+        return sum;
+      }, 0);
+      
       // Make summary easy to read (separate cells)
       summarySheet.getCell('A6').value = t('export.overtimeSummary');
       summarySheet.getCell('A6').font = { bold: true };
@@ -2003,8 +2115,16 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
       summarySheet.getCell('D9').value = overnightDates.join(', ');
       summarySheet.mergeCells('D9:H9');
 
+      summarySheet.getCell('A11').value = t('weekly.kilometers') || 'Kilometers';
+      summarySheet.getCell('A11').font = { bold: true };
+      summarySheet.getCell('B11').value = weeklyTotalKilometers > 0 ? weeklyTotalKilometers : '';
+      summarySheet.getCell('B11').font = { bold: true };
+      if (weeklyTotalKilometers > 0) {
+        summarySheet.getCell('B11').numFmt = '0.0';
+      }
+
       // Light styling band
-      ['A7','B7','C7','D7','E7','F7','G7','H7','A9','B9','C9','D9'].forEach(addr => {
+      ['A7','B7','C7','D7','E7','F7','G7','H7','A9','B9','C9','D9','A11','B11'].forEach(addr => {
         const cell = summarySheet.getCell(addr);
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEFF6FF' } };
       });
@@ -2052,7 +2172,8 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
         worksheet.getColumn(4).width = 8;  // From
         worksheet.getColumn(5).width = 8;  // To
         worksheet.getColumn(6).width = 15; // Hours Worked
-        worksheet.getColumn(7).width = 30; // Space for logo
+        worksheet.getColumn(7).width = 12; // Kilometers
+        worksheet.getColumn(8).width = 30; // Space for logo
 
         // Add header rows
         worksheet.getCell('A1').value = t('weekly.employeeName');
@@ -2126,7 +2247,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
 
         // Add table headers (row 7)
         const headerRow = worksheet.getRow(9);
-        headerRow.values = [t('weekly.day'), t('weekly.workType'), t('weekly.projectWorkOrder'), t('weekly.from'), t('weekly.to'), t('weekly.hoursWorked')];
+        headerRow.values = [t('weekly.day'), t('weekly.workType'), t('weekly.projectWorkOrder'), t('weekly.from'), t('weekly.to'), t('weekly.hoursWorked'), t('weekly.kilometers')];
         headerRow.font = { bold: true };
         headerRow.fill = {
           type: 'pattern',
@@ -2136,6 +2257,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
 
         // Add data rows
         dayEntries.forEach((entry, idx) => {
+          const workType = parseInt(entry.description || "0");
           const row = worksheet.getRow(10 + idx);
           row.values = [
             dayNameDisplay,
@@ -2144,8 +2266,18 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
             entry.startTime || '',
             entry.endTime || '',
             formatHoursHHMM(parseFloat(entry.hours) || 0),
+            (workType === 20 || workType === 21) ? (entry.kilometers ? String(entry.kilometers) : '') : '',
           ];
         });
+
+        // Calculate total kilometers for the day (work types 20 and 21 only)
+        const totalKilometers = dayEntries.reduce((sum, entry) => {
+          const workType = parseInt(entry.description || "0");
+          if ((workType === 20 || workType === 21) && entry.kilometers) {
+            return sum + (parseFloat(String(entry.kilometers)) || 0);
+          }
+          return sum;
+        }, 0);
 
         // Add total row
         const totalRowIndex = 10 + dayEntries.length;
@@ -2154,6 +2286,11 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
         totalRow.getCell(2).font = { bold: true };
         totalRow.getCell(6).value = totalHoursHHMM;
         totalRow.getCell(6).font = { bold: true };
+        totalRow.getCell(7).value = totalKilometers > 0 ? totalKilometers : '';
+        totalRow.getCell(7).font = { bold: true };
+        if (totalKilometers > 0) {
+          totalRow.getCell(7).numFmt = '0.0';
+        }
 
         // Make each sheet easier to read
         applyDefaultFont(worksheet, totalRowIndex);
@@ -2367,7 +2504,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
                     setDays(getWeekDates(newStart).map(date => ({ 
                       date, 
                       stayedOvernight: false,
-                      entries: [{ workType: "", project: "", hours: "", startTime: "", endTime: "", fullDayOff: false }] 
+                      entries: [{ workType: "", project: "", hours: "", startTime: "", endTime: "", fullDayOff: false, kilometers: "" }] 
                     })));
                   }
                 }}
@@ -2893,6 +3030,23 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
                               </div>
                             </div>
                           </div>
+
+                          {/* Kilometers field for work types 20 and 21 */}
+                          {(entry.workType === "20" || entry.workType === "21") && (
+                            <div>
+                              <Label className="text-xs font-semibold">{t('weekly.kilometers')}</Label>
+                              <Input
+                                type="number"
+                                step="0.1"
+                                min="0"
+                                value={entry.kilometers || ""}
+                                onChange={e => handleEntryChange(dayIdx, entryIdx, "kilometers", e.target.value)}
+                                placeholder="0.0"
+                                className="h-10 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 mt-1"
+                                disabled={isLocked}
+                              />
+                            </div>
+                          )}
                         </div>
                       );
                       })}
@@ -2937,16 +3091,28 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
                                   : "-"
                             }</div>
                             <div><strong className="text-gray-900 dark:text-gray-200">{t('weekly.hours')}:</strong> {submittedEntry.hours || "0"}h</div>
+                            {(submittedEntry.workType === "20" || submittedEntry.workType === "21") && (
+                              <div><strong className="text-gray-900 dark:text-gray-200">{t('weekly.kilometers')}:</strong> {submittedEntry.kilometers ? `${submittedEntry.kilometers} km` : "-"}</div>
+                            )}
                           </div>
                         </div>
                       ))}
                       
                       {/* Total for mobile */}
                       <div className="bg-gray-200 dark:bg-gray-700 rounded-lg border-2 border-gray-400 dark:border-gray-600 p-3 font-bold">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm sm:text-base text-gray-900 dark:text-gray-900">{t('daily.total') || 'Totaal per dag'}:</span>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-sm sm:text-base text-gray-900 dark:text-gray-900">{t('weekly.hours')}:</span>
                           <span className="text-sm sm:text-base text-gray-900 dark:text-gray-100">
                             {calculateDayTotal(dayIdx, dateStr).toFixed(2)}h
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm sm:text-base text-gray-900 dark:text-gray-900">{t('weekly.kilometers')}:</span>
+                          <span className="text-sm sm:text-base text-gray-900 dark:text-gray-100">
+                            {(() => {
+                              const kmTotal = calculateDayKilometersTotal(dayIdx, dateStr);
+                              return kmTotal > 0 ? `${kmTotal.toFixed(1)} km` : "-";
+                            })()}
                           </span>
                         </div>
                       </div>
@@ -2962,6 +3128,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
                             <th className="border border-gray-300 dark:border-gray-700 p-2 text-left min-w-[80px] text-gray-900 dark:text-gray-100">{t('weekly.from')}</th>
                             <th className="border border-gray-300 dark:border-gray-700 p-2 text-left min-w-[80px] text-gray-900 dark:text-gray-100">{t('weekly.to')}</th>
                             <th className="border border-gray-300 dark:border-gray-700 p-2 text-left min-w-[80px] text-gray-900 dark:text-gray-100">{t('weekly.hours')}</th>
+                            <th className="border border-gray-300 dark:border-gray-700 p-2 text-left min-w-[100px] text-gray-900 dark:text-gray-100">{t('weekly.kilometers')}</th>
                             {!isLocked && <th className="border border-gray-300 dark:border-gray-700 p-2 text-center min-w-[50px] text-gray-900 dark:text-gray-100">{t('weekly.actions')}</th>}
                           </tr>
                         </thead>
@@ -3257,6 +3424,22 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
                                   })()}
                                 </div>
                               </td>
+                              <td className="border border-gray-300 dark:border-gray-700 p-2">
+                                {(entry.workType === "20" || entry.workType === "21") ? (
+                                  <Input
+                                    type="number"
+                                    step="0.1"
+                                    min="0"
+                                    value={entry.kilometers || ""}
+                                    onChange={e => handleEntryChange(dayIdx, entryIdx, "kilometers", e.target.value)}
+                                    placeholder="0.0"
+                                    className="h-9 text-sm w-24 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                                    disabled={isLocked}
+                                  />
+                                ) : (
+                                  <div className="h-9 flex items-center justify-center text-gray-400 text-sm">-</div>
+                                )}
+                              </td>
                               <td className="border border-gray-300 dark:border-gray-700 p-2 text-center">
                                 <div className="flex items-center justify-center gap-1">
                                   <Button 
@@ -3303,6 +3486,13 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
                               <td className="border border-gray-300 dark:border-gray-700 p-2">
                                 <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{submittedEntry.hours || "0"}</span>
                               </td>
+                              <td className="border border-gray-300 dark:border-gray-700 p-2">
+                                <span className="text-sm text-gray-900 dark:text-gray-100">
+                                  {(submittedEntry.workType === "20" || submittedEntry.workType === "21") 
+                                    ? (submittedEntry.kilometers ? `${submittedEntry.kilometers} km` : "-")
+                                    : "-"}
+                                </span>
+                              </td>
                               {!isLocked && (
                                 <td className="border border-gray-300 dark:border-gray-700 p-2 text-center">
                                   <div className="flex justify-center gap-1">
@@ -3340,6 +3530,14 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
                             <td className="border border-gray-300 dark:border-gray-700 p-2">
                               <span className="text-sm sm:text-base text-gray-900 dark:text-gray-900">
                                 {calculateDayTotal(dayIdx, dateStr).toFixed(2)}h
+                              </span>
+                            </td>
+                            <td className="border border-gray-300 dark:border-gray-700 p-2">
+                              <span className="text-sm sm:text-base text-gray-900 dark:text-gray-900">
+                                {(() => {
+                                  const kmTotal = calculateDayKilometersTotal(dayIdx, dateStr);
+                                  return kmTotal > 0 ? `${kmTotal.toFixed(1)} km` : "-";
+                                })()}
                               </span>
                             </td>
                             {!isLocked && <td className="border p-2"></td>}

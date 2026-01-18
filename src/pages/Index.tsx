@@ -500,7 +500,8 @@ const Index = () => {
     
     // Prepare formatted data - only include user columns if user info exists
     const formattedData = sortedData.map((entry) => {
-      const baseRow = {
+      const workType = parseInt(entry.description || "0");
+      const baseRow: any = {
         Date: formatDateDDMMYY(entry.date),
         Day: getDayNameNL(entry.date),
         'Work Type': getWorkTypeLabel(entry.description || ""),
@@ -511,6 +512,11 @@ const Index = () => {
         'Hours (HH:MM)': formatHoursHHMM(entry.hours || 0),
         Notes: entry.notes || "",
       };
+      
+      // Add kilometers for work types 20 and 21
+      if (workType === 20 || workType === 21) {
+        baseRow['Kilometers'] = entry.kilometers ? parseFloat(String(entry.kilometers)) : "";
+      }
       
       // Only add user columns if user info exists (for admin exports)
       if (entry.user_name || entry.user_email) {
