@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -125,6 +126,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
   const [availableWeeks, setAvailableWeeks] = useState<Array<{ weekStart: string; weekNumber: number; year: number; label: string }>>([]);
   const [weekReviewComment, setWeekReviewComment] = useState<string>("");
   const [sendingEmail, setSendingEmail] = useState(false);
+  const [showSendEmailDialog, setShowSendEmailDialog] = useState(false);
   
   // Configurable email address - change this after testing
   const ADMINISTRATIE_EMAIL = "r.blance@bampro.nl";
@@ -663,6 +665,11 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
             if (j !== entryIdx) return entry;
             let updated = { ...entry, [field]: value };
             
+            // Clear project when work type is changed to 35 (Break) - breaks don't need a project
+            if (field === "workType" && value === "35") {
+              updated.project = "";
+            }
+            
             // Auto-calculate hours from start/end time
             if (field === "startTime" || field === "endTime") {
               const calculatedHours = calculateHours(updated.startTime, updated.endTime);
@@ -813,7 +820,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
         // Update existing entry in database
         // For full day off, set startTime and endTime to null explicitly
         const updateData: any = {
-          project: isDayOff ? null : entry.project,
+          project: (isDayOff || entry.workType === "35") ? null : entry.project,
           hours: hoursToSave,
           description: entry.workType,
         };
@@ -862,7 +869,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
         // Create new entry
         // For full day off, set startTime and endTime to null explicitly
         const insertData: any = {
-          project: isDayOff ? null : entry.project,
+          project: (isDayOff || entry.workType === "35") ? null : entry.project,
           user_id: currentUser.id,
           date: dateStr,
           hours: hoursToSave,
@@ -1189,7 +1196,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
       }
       
       entriesToSave.push({
-        project: isDayOff ? null : entry.project,
+        project: (isDayOff || entry.workType === "35") ? null : entry.project,
         user_id: currentUser.id,
         date: currentDateStr,
         hours: hoursToSave,
@@ -1355,7 +1362,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
         }
         
         entriesToSave.push({
-          project: isDayOff ? null : entry.project,
+          project: (isDayOff || entry.workType === "35") ? null : entry.project,
           user_id: currentUser?.id || null,
           date: formatDateToYYYYMMDD(day.date),
           hours: hoursToSave,
@@ -2285,10 +2292,16 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
         entries: [] // Clear all editable entries when week is confirmed
       })));
       
-      toast({
-        title: "Week Confirmed",
-        description: "This week has been confirmed and locked. You can no longer make changes.",
-      });
+      // If user is weekly_only, show dialog to optionally send email
+      if (currentUser?.userType === 'weekly_only') {
+        setShowSendEmailDialog(true);
+      } else {
+        // For non-weekly-only users, show existing success toast
+        toast({
+          title: "Week Confirmed",
+          description: "This week has been confirmed and locked. You can no longer make changes.",
+        });
+      }
       
       // DON'T call fetchConfirmedStatus here - it might overwrite our state
       // The state is already set correctly above
@@ -2301,7 +2314,16 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
   // Admins will need to use the admin panel to approve/unlock weeks
   const weekKey = formatDateToYYYYMMDD(weekDates[0]);
   const isLocked = !!confirmedWeeks[weekKey];
-  
+
+  // Check if week has submitted entries for all weekdays (Monday through Friday)
+  const hasSubmittedEntries = () => {
+    // Check that all weekdays (Monday-Friday, indices 0-4) have at least one entry
+    return weekDates.slice(0, 5).every(date => {
+      const dateStr = formatDateToYYYYMMDD(date);
+      const entries = submittedEntries[dateStr] || [];
+      return entries.length > 0;
+    });
+  };
   // Debug logging
   console.log('RENDER - isLocked calculation:', { 
     weekKey, 
@@ -2366,19 +2388,6 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
               <Download className="h-4 w-4 mr-2" />
               {t('weekly.exportWeek')}
             </Button>
-            {/* Email export button - only for weekly_only users */}
-            {currentUser?.userType === 'weekly_only' && (
-              <Button 
-                variant="outline" 
-                size={isMobile ? "sm" : "default"} 
-                onClick={handleSendWeekToEmail} 
-                disabled={sendingEmail}
-                className="text-xs sm:text-sm"
-              >
-                <Mail className="h-4 w-4 mr-2" />
-                {sendingEmail ? t('weekly.sendingEmail') : t('weekly.sendWeekToEmail')}
-              </Button>
-            )}
             {setUseSimpleView && (
               <Button 
                 variant="outline" 
@@ -2425,6 +2434,14 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
           ⚠️ {t('weekly.confirmed')}
         </div>
       )}
+      
+      {/* Reminder to confirm week when entries are filled */}
+      {!isLocked && hasSubmittedEntries() && (
+        <div className="p-2 sm:p-3 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded text-orange-800 dark:text-orange-200 text-xs sm:text-sm">
+          <strong>💡 {t('weekly.confirmReminder')}</strong>
+        </div>
+      )}
+      
       {!isLocked && weekReviewComment && (
         <div className="p-2 sm:p-3 bg-red-50 border border-red-200 rounded text-red-800 text-xs sm:text-sm">
           <strong>{t('admin.rejectedStatus')}:</strong> {weekReviewComment}
@@ -2684,7 +2701,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
                                     variant="outline"
                                     role="combobox"
                                     className="w-full justify-between h-10 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-                                    disabled={isLocked}
+                                    disabled={isLocked || entry.workType === "31" || entry.workType === "35"}
                                   >
                                     {entry.project || t('weekly.selectProject')}
                                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -3056,7 +3073,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
                                       variant="outline"
                                       role="combobox"
                                       className="w-full justify-between h-9 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-                                      disabled={isLocked}
+                                      disabled={isLocked || entry.workType === "31" || entry.workType === "35"}
                                     >
                                       {entry.project || t('weekly.selectProject')}
                                       <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -3369,7 +3386,48 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
           </CardContent>
         </Card>
       )}
-    </div>
+      
+      {/* Send Email Dialog - shown after week confirmation for weekly_only users */}
+      <Dialog open={showSendEmailDialog} onOpenChange={setShowSendEmailDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('weekly.weekConfirmed')}</DialogTitle>
+            <DialogDescription>
+              {t('weekly.weekConfirmedSendEmailPrompt')}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => setShowSendEmailDialog(false)}
+              disabled={sendingEmail}
+            >
+              {t('weekly.skip')}
+            </Button>
+            <Button
+              className="bg-orange-600 hover:bg-orange-700 text-white"
+              onClick={async () => {
+                setShowSendEmailDialog(false);
+                await handleSendWeekToEmail();
+              }}
+              disabled={sendingEmail}
+            >
+              {sendingEmail ? (
+                <>
+                  <Mail className="h-4 w-4 mr-2" />
+                  {t('weekly.sendingEmail')}
+                </>
+              ) : (
+                <>
+                  <Mail className="h-4 w-4 mr-2" />
+                  {t('weekly.sendWeekToEmail')}
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+          </div>
   );
 };
 

@@ -1891,8 +1891,9 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
     // Make the entire sheet easier to read
     applyDefaultFont(worksheet, totalRowIndex);
 
-    // Generate filename
-    const filename = `Week_${weekNumber}_${formatDateDDMMYY(fromDate)}_${formatDateDDMMYY(toDate)}.xlsx`;
+    // Generate filename with user name and week number
+    const userName = (currentUser.name || currentUser.email || t('common.user') || 'User').replace(/[^a-zA-Z0-9]/g, '_');
+    const filename = `${userName}_Week${weekNumber}_${new Date(fromDate).getFullYear()}.xlsx`;
     
     // Write to buffer and download
     const buffer = await workbook.xlsx.writeBuffer();
