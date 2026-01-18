@@ -1,4 +1,4 @@
-﻿import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 
 type Language = 'nl' | 'en';
 
@@ -19,6 +19,7 @@ const translations: Record<Language, Record<string, string>> = {
     'nav.projects': 'Projecten',
     'nav.export': 'Exporteren',
     'nav.admin': 'Beheer',
+    'nav.weeks': 'Weken',
     'nav.reportBug': 'Rapporteer Bug',
     'nav.overview': 'Overzicht',
     'nav.welcome': 'Welkom',
@@ -163,6 +164,11 @@ const translations: Record<Language, Record<string, string>> = {
     'weekly.noValidEntriesToCopy': 'Geen geldige invoeren om te kopi├½ren.',
     'weekly.exportSuccessful': 'Export Succesvol',
     'weekly.exportSuccessfulDescription': 'Week {weekNumber} invoeren ge├½xporteerd naar {filename} met {dayCount} dag bladen',
+    'weekly.sendWeekToEmail': 'Verstuur Week naar Email',
+    'weekly.sendingEmail': 'Versturen...',
+    'weekly.emailSentSuccess': 'Week succesvol verzonden naar {email}',
+    'weekly.emailSentSuccessDescription': 'Week {weekNumber} {year} is verzonden via email',
+    'weekly.emailSentError': 'Fout bij verzenden: {error}',
     'weekly.switchToOriginal': 'Schakel naar originele weergave',
     'weekly.switchToSimple': 'Schakel naar eenvoudige weergave',
     'weekly.original': 'Origineel',
@@ -342,6 +348,8 @@ const translations: Record<Language, Record<string, string>> = {
     'admin.searchWeeks': 'Zoek week',
     'admin.allStatuses': 'Status',
     'admin.noWeeksMatchFilters': 'Geen weken komen overeen met de filters.',
+    'admin.user': 'Gebruiker',
+    'admin.dateRange': 'Datumbereik',
     
     // Auth/Login
     'auth.loginSuccessful': 'Login Succesvol',
@@ -480,6 +488,7 @@ const translations: Record<Language, Record<string, string>> = {
     'nav.projects': 'Projects',
     'nav.export': 'Export',
     'nav.admin': 'Admin',
+    'nav.weeks': 'Weeks',
     'nav.reportBug': 'Report Bug',
     'nav.overview': 'Overview',
     'nav.welcome': 'Welcome',
@@ -606,6 +615,7 @@ const translations: Record<Language, Record<string, string>> = {
     'weekly.copyPrevious': 'Copy Previous',
     'weekly.searchWorkType': 'Search work type...',
     'weekly.noWorkTypeFound': 'No work type found.',
+    'weekly.switchToOriginalView': 'Switch to original view',
     'weekly.addEntry': 'Add Entry',
     'weekly.searchProject': 'Search project or type to create new...',
     'weekly.noProjectFound': 'No project found. Press Enter to create',
@@ -624,6 +634,11 @@ const translations: Record<Language, Record<string, string>> = {
     'weekly.noValidEntriesToCopy': 'No valid entries to copy.',
     'weekly.exportSuccessful': 'Export Successful',
     'weekly.exportSuccessfulDescription': 'Week {weekNumber} entries exported to {filename} with {dayCount} day sheets',
+    'weekly.sendWeekToEmail': 'Send Week to Email',
+    'weekly.sendingEmail': 'Sending...',
+    'weekly.emailSentSuccess': 'Week successfully sent to {email}',
+    'weekly.emailSentSuccessDescription': 'Week {weekNumber} {year} has been sent via email',
+    'weekly.emailSentError': 'Error sending email: {error}',
     'weekly.switchToOriginal': 'Switch to original view',
     'weekly.switchToSimple': 'Switch to simple view',
     'weekly.original': 'Original',
@@ -803,6 +818,8 @@ const translations: Record<Language, Record<string, string>> = {
     'admin.searchWeeks': 'Search week',
     'admin.allStatuses': 'All Statuses',
     'admin.noWeeksMatchFilters': 'No weeks match the filters.',
+    'admin.user': 'User',
+    'admin.dateRange': 'Date Range',
     
     // Auth/Login
     'auth.loginSuccessful': 'Login Successful',

@@ -361,6 +361,13 @@ const Index = () => {
     }
   }, []);
 
+  // Set activeTab to "weeks" for administratie users when they log in
+  useEffect(() => {
+    if (isLoggedIn && isAdministratie(currentUser) && activeTab === "weekly") {
+      setActiveTab("weeks");
+    }
+  }, [isLoggedIn, currentUser]);
+
   // Check if user came from invite email and redirect to invite-confirm page
   useEffect(() => {
     let token = searchParams.get("access_token");
@@ -1877,7 +1884,7 @@ const Index = () => {
           {isMobile && (
             <div className="flex justify-center mb-1">
               <button
-                onClick={() => setActiveTab('weekly')}
+                onClick={() => setActiveTab(isAdministratie(currentUser) ? 'weeks' : 'weekly')}
                 className="cursor-pointer hover:opacity-80 transition-opacity"
                 title="Go to homepage"
               >
@@ -1894,7 +1901,7 @@ const Index = () => {
           <div className="flex flex-row items-center gap-0.5 sm:gap-1 md:gap-1.5 lg:gap-2 overflow-hidden">
             {!isMobile && (
               <button
-                onClick={() => setActiveTab('weekly')}
+                onClick={() => setActiveTab(isAdministratie(currentUser) ? 'weeks' : 'weekly')}
                 className="cursor-pointer hover:opacity-80 transition-opacity shrink-0"
                 title="Go to homepage"
               >
@@ -1933,6 +1940,15 @@ const Index = () => {
                       </button>
                     )}
                   </>
+                )}
+                {/* Weken - Only for administratie users */}
+                {isAdministratie(currentUser) && (
+                  <button
+                    className={`text-[9px] sm:text-xs md:text-sm lg:text-sm xl:text-base font-medium px-1 sm:px-1.5 md:px-2 lg:px-2.5 py-1.5 sm:py-1 md:py-1.5 lg:py-2 rounded transition-colors whitespace-nowrap min-h-[32px] sm:min-h-0 flex-shrink-0 ${activeTab === 'weeks' ? 'bg-orange-600 text-white dark:bg-orange-500' : 'text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-700'}`}
+                    onClick={() => setActiveTab('weeks')}
+                  >
+                    {t('nav.weeks')}
+                  </button>
                 )}
                 {canSeeProjects(currentUser) && (
                   <button
@@ -2305,6 +2321,11 @@ const Index = () => {
         )}
         {activeTab === 'profile' && (
           <Profile currentUser={currentUser} setCurrentUser={setCurrentUser} />
+        )}
+        {activeTab === 'weeks' && isAdministratie(currentUser) && (
+          <div className="w-full">
+            <AdminPanel currentUser={currentUser} initialTab="weeks" hideTabs={true} />
+          </div>
         )}
         {activeTab === 'admin' && (currentUser?.isAdmin || isAdministratie(currentUser)) && (
           <div className="w-full">

@@ -10,7 +10,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { Trash2, Download, Plus, Check, ChevronsUpDown } from 'lucide-react';
+import { Trash2, Download, Plus, Check, ChevronsUpDown, Mail } from 'lucide-react';
 import { useIsMobile } from "@/hooks/use-mobile";
 import * as XLSX from "xlsx";
 import ExcelJS from "exceljs";
@@ -124,6 +124,10 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
   const [workTypeSearchValues, setWorkTypeSearchValues] = useState<Record<string, string>>({});
   const [availableWeeks, setAvailableWeeks] = useState<Array<{ weekStart: string; weekNumber: number; year: number; label: string }>>([]);
   const [weekReviewComment, setWeekReviewComment] = useState<string>("");
+  const [sendingEmail, setSendingEmail] = useState(false);
+  
+  // Configurable email address - change this after testing
+  const ADMINISTRATIE_EMAIL = "r.blance@bampro.nl";
   
   const weekDates = getWeekDates(weekStart);
   const weekNumber = getISOWeekNumber(weekDates[0]);
@@ -1793,6 +1797,427 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
     });
   };
 
+  // Send week to email - reuses exact same Excel generation logic as handleExportWeek
+  const handleSendWeekToEmail = async () => {
+    // You can change the export font size here
+    const EXPORT_FONT_SIZE = 14;
+    const EXPORT_FONT_NAME = 'Calibri';
+
+    const applyDefaultFont = (ws: any, maxRow: number) => {
+      for (let r = 1; r <= maxRow; r++) {
+        const row = ws.getRow(r);
+        row.eachCell({ includeEmpty: true }, (cell: any) => {
+          cell.font = { ...(cell.font || {}), name: EXPORT_FONT_NAME, size: EXPORT_FONT_SIZE };
+        });
+      }
+    };
+
+    if (!currentUser) {
+      toast({
+        title: "Error",
+        description: "User not found",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Check if email is configured
+    if (!ADMINISTRATIE_EMAIL || !ADMINISTRATIE_EMAIL.includes('@')) {
+      toast({
+        title: "Error",
+        description: "Email address not configured. Please contact administrator.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setSendingEmail(true);
+
+    try {
+      const fromDate = formatDateToYYYYMMDD(weekDates[0]);
+      const toDate = formatDateToYYYYMMDD(weekDates[6]);
+
+      const [{ data, error }, { data: overnightRows, error: overnightError }] = await Promise.all([
+        supabase
+          .from("timesheet")
+          .select("*, projects(name)")
+          .eq("user_id", currentUser.id)
+          .gte("date", fromDate)
+          .lte("date", toDate)
+          .order("date", { ascending: true })
+          .order("startTime", { ascending: true }),
+        supabase
+          .from("overnight_stays")
+          .select("date")
+          .eq("user_id", currentUser.id)
+          .gte("date", fromDate)
+          .lte("date", toDate)
+          .order("date", { ascending: true }),
+      ]);
+
+      if (error) {
+        toast({
+          title: t('weekly.exportFailed'),
+          description: error.message,
+          variant: "destructive",
+        });
+        setSendingEmail(false);
+        return;
+      }
+
+      if (overnightError) {
+        toast({
+          title: t('weekly.exportFailed'),
+          description: overnightError.message,
+          variant: "destructive",
+        });
+        setSendingEmail(false);
+        return;
+      }
+
+      if (!data || data.length === 0) {
+        toast({
+          title: t('weekly.noData'),
+          description: t('weekly.noEntriesForWeek'),
+          variant: "destructive",
+        });
+        setSendingEmail(false);
+        return;
+      }
+
+      // Filter out admin adjustments (entries without startTime/endTime are admin adjustments)
+      // Only export entries that have both startTime and endTime - these are user-created entries
+      const filteredData = data.filter(e => e.startTime && e.endTime);
+
+      if (filteredData.length === 0) {
+        toast({
+          title: t('weekly.noData'),
+          description: t('weekly.noEntriesForWeek'),
+          variant: "destructive",
+        });
+        setSendingEmail(false);
+        return;
+      }
+
+      // Group entries by day
+      const entriesByDay: Record<string, any[]> = {};
+      weekDates.forEach(date => {
+        const dateStr = formatDateToYYYYMMDD(date);
+        entriesByDay[dateStr] = filteredData.filter(entry => entry.date === dateStr);
+      });
+
+      // Load logo image
+      let logoBuffer: ArrayBuffer | null = null;
+      try {
+        const response = await fetch('/bampro-marine-logo.jpg');
+        if (response.ok) {
+          logoBuffer = await response.arrayBuffer();
+        }
+      } catch (err) {
+        console.warn('Could not load logo:', err);
+      }
+
+      // Create ExcelJS workbook (EXACT same logic as handleExportWeek)
+      const workbook = new ExcelJS.Workbook();
+      
+      const dayNamesEN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+      const overnightSet = new Set((overnightRows || []).map((r: any) => String(r.date)));
+
+      // Add week summary sheet (overtime + overnight) so it's visible immediately on open
+      const summarySheet = workbook.addWorksheet("Summary");
+      summarySheet.getColumn(1).width = 25;
+      summarySheet.getColumn(2).width = 80;
+
+      summarySheet.getCell('A1').value = t('weekly.employeeName');
+      summarySheet.getCell('B1').value = currentUser.name || currentUser.email || '';
+      summarySheet.getCell('A2').value = t('weekly.date');
+      summarySheet.getCell('B2').value = `${t('weekly.from')}: ${formatDateDDMMYY(fromDate)}  ${t('weekly.to')}: ${formatDateDDMMYY(toDate)}`;
+      summarySheet.getCell('A3').value = t('weekly.weekNumber');
+      summarySheet.getCell('B3').value = weekNumber.toString();
+      summarySheet.getCell('A4').value = t('weekly.year');
+      summarySheet.getCell('B4').value = new Date(fromDate).getFullYear().toString();
+
+      // Weekly overtime totals (same rules as overtime panel)
+      const dateHoursMap: Record<string, number> = {};
+      filteredData.forEach((entry: any) => {
+        const workType = parseInt(entry.description || "0");
+        if ((workType >= 10 && workType <= 29) || workType === 100) {
+          const h = parseFloat(entry.hours) || 0;
+          dateHoursMap[String(entry.date)] = (dateHoursMap[String(entry.date)] || 0) + h;
+        }
+      });
+      let totalOvertime = 0;
+      let total125 = 0;
+      let total150 = 0;
+      let total200 = 0;
+      Object.keys(dateHoursMap).forEach(dateStr => {
+        const totalHoursForDay = dateHoursMap[dateStr] || 0;
+        const dow = new Date(dateStr).getDay();
+        const isSat = dow === 6;
+        const isSun = dow === 0;
+        if (isSun) { totalOvertime += totalHoursForDay; total200 += totalHoursForDay; return; }
+        if (isSat) { totalOvertime += totalHoursForDay; total150 += totalHoursForDay; return; }
+        const overtimeHours = totalHoursForDay > 8 ? totalHoursForDay - 8 : 0;
+        if (overtimeHours > 0) {
+          totalOvertime += overtimeHours;
+          total125 += Math.min(overtimeHours, 2);
+          if (overtimeHours > 2) total150 += overtimeHours - 2;
+        }
+      });
+
+      const overnightDates = (overnightRows || []).map((r: any) => formatDateDDMMYY(String(r.date)));
+      // Make summary easy to read (separate cells)
+      summarySheet.getCell('A6').value = t('export.overtimeSummary');
+      summarySheet.getCell('A6').font = { bold: true };
+      summarySheet.mergeCells('A6:H6');
+
+      summarySheet.getCell('A7').value = t('export.overtimeTotal');
+      summarySheet.getCell('A7').font = { bold: true };
+      summarySheet.getCell('B7').value = totalOvertime;
+      summarySheet.getCell('B7').numFmt = '0.00';
+      summarySheet.getCell('C7').value = '125%';
+      summarySheet.getCell('C7').font = { bold: true };
+      summarySheet.getCell('D7').value = total125;
+      summarySheet.getCell('D7').numFmt = '0.00';
+      summarySheet.getCell('E7').value = '150%';
+      summarySheet.getCell('E7').font = { bold: true };
+      summarySheet.getCell('F7').value = total150;
+      summarySheet.getCell('F7').numFmt = '0.00';
+      summarySheet.getCell('G7').value = '200%';
+      summarySheet.getCell('G7').font = { bold: true };
+      summarySheet.getCell('H7').value = total200;
+      summarySheet.getCell('H7').numFmt = '0.00';
+
+      summarySheet.getCell('A9').value = t('export.overnightStays');
+      summarySheet.getCell('A9').font = { bold: true };
+      summarySheet.getCell('B9').value = overnightDates.length;
+      summarySheet.getCell('C9').value = t('export.overnightDates');
+      summarySheet.getCell('C9').font = { bold: true };
+      summarySheet.getCell('D9').value = overnightDates.join(', ');
+      summarySheet.mergeCells('D9:H9');
+
+      // Light styling band
+      ['A7','B7','C7','D7','E7','F7','G7','H7','A9','B9','C9','D9'].forEach(addr => {
+        const cell = summarySheet.getCell(addr);
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEFF6FF' } };
+      });
+
+      applyDefaultFont(summarySheet, 12);
+      
+      // Create sheets for each day
+      weekDates.forEach((date, dayIdx) => {
+        const dateStr = formatDateToYYYYMMDD(date);
+        const dayEntries = entriesByDay[dateStr] || [];
+        const locale = language === 'nl' ? 'nl-NL' : 'en-GB';
+        const dayName = dayNamesEN[dayIdx]; // sheet name (stable)
+        const dayNameDisplay = date.toLocaleDateString(locale, { weekday: 'long' });
+        const formattedDate = formatDateDDMMYY(dateStr);
+        
+        // Calculate total hours for the day (excluding breaks - work type 35)
+        const totalHours = dayEntries.reduce((sum, entry) => {
+          // Skip breaks (work type 35) - they should not count toward total hours
+          if (entry.description === "35") {
+            return sum;
+          }
+          return sum + (parseFloat(entry.hours) || 0);
+        }, 0);
+        const totalHoursHHMM = formatHoursHHMM(totalHours);
+        
+        // Create worksheet
+        const worksheet = workbook.addWorksheet(dayName);
+
+        // Add logo to cell G1 (column 7, row 1) if logo is available
+        if (logoBuffer) {
+          const logoId = workbook.addImage({
+            buffer: logoBuffer,
+            extension: 'jpeg',
+          });
+          worksheet.addImage(logoId, {
+            tl: { col: 6, row: 0 }, // Column G (0-indexed = 6), Row 1 (0-indexed = 0)
+            ext: { width: 200, height: 60 }, // Adjust size as needed
+          });
+        }
+        
+        // Set column widths
+        worksheet.getColumn(1).width = 12; // Day
+        worksheet.getColumn(2).width = 20; // Work Type
+        worksheet.getColumn(3).width = 25; // Project Work Order
+        worksheet.getColumn(4).width = 8;  // From
+        worksheet.getColumn(5).width = 8;  // To
+        worksheet.getColumn(6).width = 15; // Hours Worked
+        worksheet.getColumn(7).width = 30; // Space for logo
+
+        // Add header rows
+        worksheet.getCell('A1').value = t('weekly.employeeName');
+        worksheet.getCell('B1').value = currentUser.name || currentUser.email || '';
+        
+        worksheet.getCell('A2').value = t('weekly.date');
+        worksheet.getCell('B2').value = `${t('weekly.from')}: ${formatDateDDMMYY(fromDate)}`;
+        worksheet.getCell('D2').value = `${t('weekly.to')}: ${formatDateDDMMYY(toDate)}`;
+        
+        worksheet.getCell('A3').value = t('weekly.day');
+        worksheet.getCell('B3').value = `${formattedDate} ${dayNameDisplay}`;
+        
+        worksheet.getCell('A4').value = t('weekly.weekNumber');
+        worksheet.getCell('B4').value = weekNumber.toString();
+        
+        worksheet.getCell('A5').value = t('weekly.year');
+        worksheet.getCell('B5').value = new Date(fromDate).getFullYear().toString();
+
+        // Overtime + overnight for this day (same rules as overtime panel)
+        let dayOvertime = 0;
+        let day125 = 0;
+        let day150 = 0;
+        let day200 = 0;
+        const dow = date.getDay();
+        const isSaturday = dow === 6;
+        const isSunday = dow === 0;
+        if (isSunday) {
+          dayOvertime = totalHours;
+          day200 = totalHours;
+        } else if (isSaturday) {
+          dayOvertime = totalHours;
+          day150 = totalHours;
+        } else {
+          const overtimeHours = totalHours > 8 ? totalHours - 8 : 0;
+          if (overtimeHours > 0) {
+            dayOvertime = overtimeHours;
+            day125 = Math.min(overtimeHours, 2);
+            if (overtimeHours > 2) day150 = overtimeHours - 2;
+          }
+        }
+        // Clear, per-day summary (separate cells)
+        worksheet.getCell('A6').value = t('export.overtimeSummary');
+        worksheet.getCell('A6').font = { bold: true };
+        worksheet.mergeCells('A6:H6');
+
+        worksheet.getCell('A7').value = t('export.overtimeTotal');
+        worksheet.getCell('A7').font = { bold: true };
+        worksheet.getCell('B7').value = dayOvertime;
+        worksheet.getCell('B7').numFmt = '0.00';
+        worksheet.getCell('C7').value = '125%';
+        worksheet.getCell('C7').font = { bold: true };
+        worksheet.getCell('D7').value = day125;
+        worksheet.getCell('D7').numFmt = '0.00';
+        worksheet.getCell('E7').value = '150%';
+        worksheet.getCell('E7').font = { bold: true };
+        worksheet.getCell('F7').value = day150;
+        worksheet.getCell('F7').numFmt = '0.00';
+        worksheet.getCell('G7').value = '200%';
+        worksheet.getCell('G7').font = { bold: true };
+        worksheet.getCell('H7').value = day200;
+        worksheet.getCell('H7').numFmt = '0.00';
+
+        worksheet.getCell('A8').value = t('export.overnightStays');
+        worksheet.getCell('A8').font = { bold: true };
+        worksheet.getCell('B8').value = overnightSet.has(dateStr) ? t('admin.yes') : t('admin.no');
+
+        ['A7','B7','C7','D7','E7','F7','G7','H7','A8','B8'].forEach(addr => {
+          const cell = worksheet.getCell(addr);
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEFF6FF' } };
+        });
+
+        // Add table headers (row 7)
+        const headerRow = worksheet.getRow(9);
+        headerRow.values = [t('weekly.day'), t('weekly.workType'), t('weekly.projectWorkOrder'), t('weekly.from'), t('weekly.to'), t('weekly.hoursWorked')];
+        headerRow.font = { bold: true };
+        headerRow.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFE5E5E5' }
+        };
+
+        // Add data rows
+        dayEntries.forEach((entry, idx) => {
+          const row = worksheet.getRow(10 + idx);
+          row.values = [
+            dayNameDisplay,
+            getWorkTypeLabel(entry.description || ''),
+            entry.projects?.name || entry.project || '',
+            entry.startTime || '',
+            entry.endTime || '',
+            formatHoursHHMM(parseFloat(entry.hours) || 0),
+          ];
+        });
+
+        // Add total row
+        const totalRowIndex = 10 + dayEntries.length;
+        const totalRow = worksheet.getRow(totalRowIndex);
+        totalRow.getCell(2).value = t('daily.total');
+        totalRow.getCell(2).font = { bold: true };
+        totalRow.getCell(6).value = totalHoursHHMM;
+        totalRow.getCell(6).font = { bold: true };
+
+        // Make each sheet easier to read
+        applyDefaultFont(worksheet, totalRowIndex);
+      });
+
+      // Generate filename with user name and week number
+      const userName = (currentUser.name || currentUser.email || t('common.user')).replace(/[^a-zA-Z0-9]/g, '_');
+      const filename = `${userName}_Week${weekNumber}_${new Date(fromDate).getFullYear()}.xlsx`;
+      
+      // Write to buffer and convert to base64
+      const buffer = await workbook.xlsx.writeBuffer();
+      // Convert Uint8Array to base64 string (chunked to avoid stack overflow)
+      const uint8Array = new Uint8Array(buffer);
+      const chunkSize = 0x8000; // 32KB chunks
+      let binaryString = '';
+      for (let i = 0; i < uint8Array.length; i += chunkSize) {
+        const chunk = uint8Array.subarray(i, Math.min(i + chunkSize, uint8Array.length));
+        binaryString += String.fromCharCode.apply(null, Array.from(chunk) as any);
+      }
+      const base64 = btoa(binaryString);
+
+      // Call edge function to send email
+      const { data: edgeData, error: edgeError } = await supabase.functions.invoke('send-week-excel-email', {
+        body: {
+          userId: currentUser.id,
+          userName: currentUser.name || currentUser.email || '',
+          userEmail: currentUser.email || '',
+          weekNumber,
+          year: new Date(fromDate).getFullYear(),
+          dateFrom: fromDate,
+          dateTo: toDate,
+          excelBase64: base64,
+          recipientEmail: ADMINISTRATIE_EMAIL,
+          filename,
+        },
+      });
+
+      if (edgeError) {
+        console.error('Edge function error:', edgeError);
+        toast({
+          title: t('weekly.emailSentError', { error: edgeError.message || 'Unknown error' }),
+          variant: "destructive",
+        });
+        setSendingEmail(false);
+        return;
+      }
+
+      if (edgeData?.error) {
+        toast({
+          title: t('weekly.emailSentError', { error: edgeData.error || 'Unknown error' }),
+          variant: "destructive",
+        });
+        setSendingEmail(false);
+        return;
+      }
+
+      toast({
+        title: t('weekly.emailSentSuccess', { email: ADMINISTRATIE_EMAIL }),
+        description: t('weekly.emailSentSuccessDescription', { weekNumber, year: new Date(fromDate).getFullYear() }),
+      });
+    } catch (error: any) {
+      console.error('Error sending email:', error);
+      toast({
+        title: t('weekly.emailSentError', { error: error.message || 'Unknown error' }),
+        variant: "destructive",
+      });
+    } finally {
+      setSendingEmail(false);
+    }
+  };
+
   // Handle week confirmation
   const handleConfirmWeek = async () => {
     if (!currentUser) return;
@@ -1941,6 +2366,19 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
               <Download className="h-4 w-4 mr-2" />
               {t('weekly.exportWeek')}
             </Button>
+            {/* Email export button - only for weekly_only users */}
+            {currentUser?.userType === 'weekly_only' && (
+              <Button 
+                variant="outline" 
+                size={isMobile ? "sm" : "default"} 
+                onClick={handleSendWeekToEmail} 
+                disabled={sendingEmail}
+                className="text-xs sm:text-sm"
+              >
+                <Mail className="h-4 w-4 mr-2" />
+                {sendingEmail ? t('weekly.sendingEmail') : t('weekly.sendWeekToEmail')}
+              </Button>
+            )}
             {setUseSimpleView && (
               <Button 
                 variant="outline" 
