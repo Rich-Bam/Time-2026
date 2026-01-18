@@ -8,10 +8,13 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from "@/components/ui/sheet";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { Trash2, Download, Plus, Check, ChevronsUpDown, Mail } from 'lucide-react';
+import { Trash2, Download, Plus, Check, ChevronsUpDown, Mail, ChevronDown } from 'lucide-react';
 import { useIsMobile } from "@/hooks/use-mobile";
 import * as XLSX from "xlsx";
 import ExcelJS from "exceljs";
@@ -19,6 +22,7 @@ import { cn } from "@/lib/utils";
 import { formatDateToYYYYMMDD } from "@/utils/dateUtils";
 import OvertimeSummaryPanel from "@/components/OvertimeSummaryPanel";
 import OvernightSummaryPanel from "@/components/OvernightSummaryPanel";
+import { BarChart3, Moon } from 'lucide-react';
 
 const workTypes = [
   { value: 10, label: "Work" },
@@ -129,6 +133,25 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
   const [weekReviewComment, setWeekReviewComment] = useState<string>("");
   const [sendingEmail, setSendingEmail] = useState(false);
   const [showSendEmailDialog, setShowSendEmailDialog] = useState(false);
+  
+  // State for combined mobile panel
+  const [combinedOvertimeData, setCombinedOvertimeData] = useState<any>(null);
+  const [combinedOvertimeLoading, setCombinedOvertimeLoading] = useState(false);
+  const [combinedOvernightCount, setCombinedOvernightCount] = useState<number>(0);
+  const [combinedOvernightLoading, setCombinedOvernightLoading] = useState(false);
+  
+  // State for mobile UI improvements
+  const [expandedDays, setExpandedDays] = useState<Set<number>>(new Set());
+  const [summaryPanelOpen, setSummaryPanelOpen] = useState(false);
+  const [fabDialogOpen, setFabDialogOpen] = useState(false);
+  
+  // Quick entry form state for FAB
+  const [quickEntry, setQuickEntry] = useState({
+    workType: "",
+    project: "",
+    startTime: "",
+    endTime: "",
+  });
   
   // Configurable email address - change this after testing
   const ADMINISTRATIE_EMAIL = "r.blance@bampro.nl";
@@ -503,6 +526,190 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
     fetchOvernightStaysForWeek();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?.id, weekStart]);
+
+  // Fetch combined panel data for mobile
+  const fetchCombinedPanelData = async () => {
+    if (!currentUser || !weekStart) return;
+    
+    const from = formatDateToYYYYMMDD(weekDates[0]);
+    const to = formatDateToYYYYMMDD(weekDates[6]);
+
+    // Fetch overtime data
+    setCombinedOvertimeLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("timesheet")
+        .select("user_id, date, hours, description")
+        .eq("user_id", currentUser.id)
+        .gte("date", from)
+        .lte("date", to)
+        .order("date", { ascending: true });
+
+      if (error) {
+        console.error("Error fetching overtime data:", error);
+        setCombinedOvertimeData(null);
+        setCombinedOvertimeLoading(false);
+      } else {
+        // Group entries by date and calculate overtime
+        const dateMap: Record<string, { totalHours: number }> = {};
+        (data || []).forEach((entry: any) => {
+          const date = entry.date;
+          if (!dateMap[date]) {
+            dateMap[date] = { totalHours: 0 };
+          }
+          const workType = parseInt(entry.description || "0");
+          if ((workType >= 10 && workType <= 29) || workType === 100) {
+            const hours = parseFloat(entry.hours || 0);
+            dateMap[date].totalHours += hours;
+          }
+        });
+
+        // Calculate overtime per day with percentage breakdown
+        let totalOvertime = 0;
+        let totalHours125 = 0;
+        let totalHours150 = 0;
+        let totalHours200 = 0;
+
+        Object.keys(dateMap).forEach(date => {
+          const dayData = dateMap[date];
+          const totalHours = dayData.totalHours;
+          const dateObj = new Date(date);
+          const dayOfWeek = dateObj.getDay();
+          const isSaturday = dayOfWeek === 6;
+          const isSunday = dayOfWeek === 0;
+
+          let overtime = 0;
+          let hours125 = 0;
+          let hours150 = 0;
+          let hours200 = 0;
+
+          if (isSunday) {
+            overtime = totalHours;
+            hours200 = totalHours;
+          } else if (isSaturday) {
+            overtime = totalHours;
+            hours150 = totalHours;
+          } else {
+            const overtimeHours = totalHours > 8 ? totalHours - 8 : 0;
+            if (overtimeHours > 0) {
+              hours125 = Math.min(overtimeHours, 2);
+              if (overtimeHours > 2) {
+                hours150 = overtimeHours - 2;
+              }
+              overtime = overtimeHours;
+            }
+          }
+
+          totalOvertime += overtime;
+          totalHours125 += hours125;
+          totalHours150 += hours150;
+          totalHours200 += hours200;
+        });
+
+        setCombinedOvertimeData({
+          totalOvertime: totalOvertime.toFixed(2),
+          totalHours125: totalHours125.toFixed(2),
+          totalHours150: totalHours150.toFixed(2),
+          totalHours200: totalHours200.toFixed(2),
+        });
+        setCombinedOvertimeLoading(false);
+      }
+    } catch (error: any) {
+      console.error("Error calculating overtime:", error);
+      setCombinedOvertimeData(null);
+      setCombinedOvertimeLoading(false);
+    }
+
+    // Fetch overnight stays count
+    setCombinedOvernightLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("overnight_stays")
+        .select("date")
+        .eq("user_id", currentUser.id)
+        .gte("date", from)
+        .lte("date", to);
+
+      if (error) {
+        console.warn("Error fetching overnight stays:", error);
+        setCombinedOvernightCount(0);
+      } else {
+        setCombinedOvernightCount((data || []).length);
+      }
+    } catch (error: any) {
+      console.warn("Error fetching overnight stays:", error);
+      setCombinedOvernightCount(0);
+    } finally {
+      setCombinedOvernightLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    // Only fetch combined panel data on mobile
+    if (isMobile && currentUser && !currentUser?.isAdmin && currentUser?.userType !== 'administratie') {
+      fetchCombinedPanelData();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMobile, currentUser, weekStart?.getTime()]);
+
+  // Initialize expanded days with today's day on mobile
+  useEffect(() => {
+    if (isMobile && weekDates.length > 0) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const todayIndex = weekDates.findIndex(date => {
+        const dateOnly = new Date(date);
+        dateOnly.setHours(0, 0, 0, 0);
+        return dateOnly.getTime() === today.getTime();
+      });
+      if (todayIndex !== -1) {
+        setExpandedDays(new Set([todayIndex]));
+      } else {
+        // If today is not in current week, expand first day
+        setExpandedDays(new Set([0]));
+      }
+    } else {
+      // On desktop, expand all days (no accordion)
+      setExpandedDays(new Set(weekDates.map((_, i) => i)));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMobile, weekStart?.getTime()]);
+
+  // Helper function to calculate daily summary for accordion headers
+  const calculateDailySummary = (dayIdx: number) => {
+    const day = days[dayIdx];
+    const dateStr = formatDateToYYYYMMDD(day.date);
+    const submitted = submittedEntries[dateStr] || [];
+    
+    // Calculate total hours from submitted entries
+    let totalHours = 0;
+    submitted.forEach((entry: any) => {
+      if (entry.hours) {
+        totalHours += parseFloat(String(entry.hours || 0));
+      } else if (entry.startTime && entry.endTime) {
+        const calculated = calculateHours(entry.startTime, entry.endTime);
+        totalHours += parseFloat(calculated || "0");
+      }
+    });
+    
+    // Calculate hours from editable entries
+    day.entries.forEach(entry => {
+      if (entry.hours) {
+        totalHours += parseFloat(String(entry.hours || 0));
+      } else if (entry.startTime && entry.endTime) {
+        const calculated = calculateHours(entry.startTime, entry.endTime);
+        totalHours += parseFloat(calculated || "0");
+      }
+    });
+    
+    const entryCount = submitted.length + day.entries.filter(e => e.workType || e.project || e.hours).length;
+    
+    return {
+      totalHours: totalHours.toFixed(2),
+      entryCount,
+      hasOvernight: day.stayedOvernight,
+    };
+  };
 
   const persistOvernightStay = async (dayIdx: number, checked: boolean) => {
     if (!currentUser?.id) return;
@@ -951,6 +1158,146 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
     }
   };
   
+  // Handle quick entry from FAB
+  const handleQuickEntry = async () => {
+    if (!currentUser) return;
+    
+    const weekKeyCheck = formatDateToYYYYMMDD(weekDates[0]);
+    if (confirmedWeeks[weekKeyCheck]) {
+      toast({
+        title: "Week Locked",
+        description: "This week is confirmed and cannot be modified.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // Find today's day index
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayIndex = weekDates.findIndex(date => {
+      const dateOnly = new Date(date);
+      dateOnly.setHours(0, 0, 0, 0);
+      return dateOnly.getTime() === today.getTime();
+    });
+    
+    if (todayIndex === -1) {
+      toast({
+        title: "Error",
+        description: "Today's date is not in the current week",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // Validate required fields
+    if (!quickEntry.workType) {
+      toast({
+        title: "Error",
+        description: "Please select a work type",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    const requiresProject = workTypeRequiresProject(quickEntry.workType);
+    const isDayOff = quickEntry.workType === "31";
+    
+    if (!isDayOff) {
+      if (requiresProject && !quickEntry.project) {
+        toast({
+          title: "Error",
+          description: "Please select a project",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      if (!quickEntry.startTime || !quickEntry.endTime) {
+        toast({
+          title: "Error",
+          description: "Please enter start and end times",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+    
+    // Calculate hours
+    let hoursToSave = 0;
+    if (quickEntry.startTime && quickEntry.endTime) {
+      const calculated = calculateHours(quickEntry.startTime, quickEntry.endTime);
+      hoursToSave = parseFloat(calculated) || 0;
+    }
+    
+    if (hoursToSave <= 0 && !isDayOff) {
+      toast({
+        title: "Error",
+        description: "Please enter valid start and end times",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    try {
+      const dateStr = formatDateToYYYYMMDD(weekDates[todayIndex]);
+      
+      const insertData: any = {
+        project: (isDayOff || quickEntry.workType === "35" || quickEntry.workType === "20" || quickEntry.workType === "21") ? (quickEntry.project?.trim() || null) : quickEntry.project,
+        user_id: currentUser.id,
+        date: dateStr,
+        hours: hoursToSave || 0,
+        description: quickEntry.workType,
+        stayed_overnight: !!days[todayIndex]?.stayedOvernight,
+      };
+      
+      if (quickEntry.startTime) insertData.startTime = quickEntry.startTime;
+      if (quickEntry.endTime) insertData.endTime = quickEntry.endTime;
+      
+      const { error } = await supabase.from("timesheet").insert([insertData]).select("id").single();
+      
+      if (error) throw error;
+      
+      // Refresh submitted entries for today
+      await fetchSubmittedEntries(dateStr);
+      
+      // Auto-expand today's day in accordion on mobile
+      if (isMobile) {
+        setExpandedDays(prev => new Set([...prev, todayIndex]));
+      }
+      
+      // Refresh days off if day off entry
+      if (isDayOff) {
+        await fetchDaysOff();
+      }
+      
+      // Refresh combined panel data if mobile
+      if (isMobile) {
+        await fetchCombinedPanelData();
+      }
+      
+      // Close dialog and reset form
+      setFabDialogOpen(false);
+      setQuickEntry({
+        workType: "",
+        project: "",
+        startTime: "",
+        endTime: "",
+      });
+      
+      toast({
+        title: "Success",
+        description: "Entry added successfully",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to add entry",
+        variant: "destructive",
+      });
+    }
+  };
+
   // Edit an existing entry
   const handleEditEntry = (entry: Entry, dateStr: string) => {
     const weekKeyCheck = formatDateToYYYYMMDD(weekDates[0]);
@@ -2470,29 +2817,125 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
     isLocked 
   });
 
+  // Display data for combined panel
+  const combinedOvertimeDisplay = combinedOvertimeData || {
+    totalOvertime: "0.00",
+    totalHours125: "0.00",
+    totalHours150: "0.00",
+    totalHours200: "0.00",
+  };
+
   return (
-    <div className="flex flex-col gap-3 sm:gap-4">
+    <div className="flex flex-col gap-2 sm:gap-4">
       {/* Overtime Summary Panel - For all users (except admins/administratie) */}
       {currentUser && !currentUser?.isAdmin && currentUser?.userType !== 'administratie' && (
         <>
-          <OvertimeSummaryPanel currentUser={currentUser} weekStart={weekStart} />
-          <OvernightSummaryPanel currentUser={currentUser} weekStart={weekStart} />
+          {isMobile ? (
+            // Combined panel for mobile - Collapsible
+            <Collapsible open={summaryPanelOpen} onOpenChange={setSummaryPanelOpen}>
+              <CollapsibleTrigger className="w-full mb-2 sm:mb-4">
+                <div className="p-2 sm:p-4 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/30 dark:to-indigo-900/30 border border-blue-200 dark:border-blue-800 rounded-md sm:rounded-lg">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 sm:gap-2">
+                      <BarChart3 className="h-3.5 w-3.5 sm:h-5 sm:w-5 text-blue-600 dark:text-blue-400" />
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
+                        <h3 className="text-xs sm:text-base font-semibold text-blue-800 dark:text-blue-200">
+                          {t('overtime.title')} - {t('weekly.week')}
+                        </h3>
+                        <div className="flex items-center gap-2 text-xs">
+                          <span className="text-gray-600 dark:text-gray-400">{t('overtime.totalOvertime')}:</span>
+                          <span className="font-bold text-blue-600 dark:text-blue-400">
+                            {combinedOvertimeLoading ? "..." : `${combinedOvertimeDisplay.totalOvertime}h`}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1 text-xs">
+                        <Moon className="h-3 w-3 text-indigo-600 dark:text-indigo-400" />
+                        <span className="font-bold text-indigo-700 dark:text-indigo-300">
+                          {combinedOvernightLoading ? "..." : combinedOvernightCount}
+                        </span>
+                      </div>
+                      <ChevronDown className={`h-3.5 w-3.5 text-blue-600 dark:text-blue-400 transition-transform duration-200 ${summaryPanelOpen ? 'rotate-180' : ''}`} />
+                    </div>
+                  </div>
+                </div>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="mb-2 sm:mb-4 p-2 sm:p-4 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/30 dark:to-indigo-900/30 border border-blue-200 dark:border-blue-800 rounded-md sm:rounded-lg border-t-0 rounded-t-none">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4 mb-3 sm:mb-0">
+                    <div className="flex items-center gap-1.5 sm:gap-2">
+                      <span className="text-xs text-gray-600 dark:text-gray-400">{t('overtime.totalOvertime')}:</span>
+                      <span className="text-base sm:text-xl font-bold text-blue-600 dark:text-blue-400">
+                        {combinedOvertimeLoading ? "..." : `${combinedOvertimeDisplay.totalOvertime}h`}
+                      </span>
+                    </div>
+                    
+                    {!combinedOvertimeLoading && (
+                      <div className="flex flex-wrap gap-1.5 sm:gap-3">
+                        {parseFloat(combinedOvertimeDisplay.totalHours125 || "0") > 0 && (
+                          <div className="flex items-center gap-1 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded px-1.5 py-0.5 sm:px-2 sm:py-1">
+                            <span className="text-xs font-semibold text-orange-600 dark:text-orange-400">125%:</span>
+                            <span className="text-xs font-bold text-orange-700 dark:text-orange-300">{combinedOvertimeDisplay.totalHours125}h</span>
+                          </div>
+                        )}
+                        {parseFloat(combinedOvertimeDisplay.totalHours150 || "0") > 0 && (
+                          <div className="flex items-center gap-1 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded px-1.5 py-0.5 sm:px-2 sm:py-1">
+                            <span className="text-xs font-semibold text-yellow-600 dark:text-yellow-400">150%:</span>
+                            <span className="text-xs font-bold text-yellow-700 dark:text-yellow-300">{combinedOvertimeDisplay.totalHours150}h</span>
+                          </div>
+                        )}
+                        {parseFloat(combinedOvertimeDisplay.totalHours200 || "0") > 0 && (
+                          <div className="flex items-center gap-1 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded px-1.5 py-0.5 sm:px-2 sm:py-1">
+                            <span className="text-xs font-semibold text-red-600 dark:text-red-400">200%:</span>
+                            <span className="text-xs font-bold text-red-700 dark:text-red-300">{combinedOvertimeDisplay.totalHours200}h</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Divider */}
+                  <div className="border-t border-blue-200 dark:border-blue-700 my-2 sm:my-3"></div>
+
+                  {/* Overnight stays section */}
+                  <div className="flex items-center gap-1.5 sm:gap-2">
+                    <Moon className="h-3.5 w-3.5 sm:h-5 sm:w-5 text-indigo-600 dark:text-indigo-400" />
+                    <h3 className="text-xs sm:text-base font-semibold text-indigo-800 dark:text-indigo-200 mr-2 sm:mr-0">
+                      {t("overtime.overnightTitle")} - {t("weekly.week")}:
+                    </h3>
+                    <span className="text-xs text-gray-600 dark:text-gray-400">{t("overtime.overnightCount")}:</span>
+                    <span className="text-base sm:text-xl font-bold text-indigo-700 dark:text-indigo-300">
+                      {combinedOvernightLoading ? "..." : combinedOvernightCount}
+                    </span>
+                  </div>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+          ) : (
+            // Separate panels for desktop
+            <>
+              <OvertimeSummaryPanel currentUser={currentUser} weekStart={weekStart} />
+              <OvernightSummaryPanel currentUser={currentUser} weekStart={weekStart} />
+            </>
+          )}
         </>
       )}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
         <div className="flex-1">
-          <h2 className="text-xl sm:text-2xl font-bold pt-1 sm:pt-0">{t('weekly.title')}</h2>
-          <div className="mt-1 text-sm sm:text-base text-gray-700 dark:text-gray-300 font-medium">
+          <h2 className="text-lg sm:text-2xl font-bold pt-1 sm:pt-0">{t('weekly.title')}</h2>
+          <div className="mt-1 text-xs sm:text-base text-gray-700 dark:text-gray-300 font-medium">
             {t('weekly.week')} {weekNumber} ({weekDates[0].toLocaleDateString()} - {weekDates[6].toLocaleDateString()})
           </div>
-          <div className="flex items-center gap-2 sm:gap-4 mt-2 flex-wrap">
+          <div className="flex items-center gap-1.5 sm:gap-4 mt-2 flex-wrap">
             <Button variant="outline" size={isMobile ? "sm" : "default"} onClick={() => changeWeek(-1)} className="text-xs sm:text-sm">
               &lt; {t('weekly.prev')}
             </Button>
             <Button variant="outline" size={isMobile ? "sm" : "default"} onClick={() => changeWeek(1)} className="text-xs sm:text-sm">
               {t('weekly.next')} &gt;
             </Button>
-            {/* Week selector - Available for all users */}
+            {/* Week selector - Available for all users - Hide on mobile or make more compact */}
             {currentUser && availableWeeks.length > 0 && (
               <Select
                 value={formatDateToYYYYMMDD(weekDates[0])}
@@ -2509,7 +2952,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
                   }
                 }}
               >
-                <SelectTrigger className="w-[200px] sm:w-[250px] md:w-[300px] text-xs sm:text-sm h-8 sm:h-9">
+                <SelectTrigger className={`${isMobile ? 'w-[140px] h-7' : 'w-[250px] md:w-[300px] h-9'} text-xs sm:text-sm`}>
                   <SelectValue placeholder={t('weekly.selectWeek')} />
                 </SelectTrigger>
                 <SelectContent className="max-h-[300px]">
@@ -2522,7 +2965,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
               </Select>
             )}
             <Button variant="outline" size={isMobile ? "sm" : "default"} onClick={handleExportWeek} className="text-xs sm:text-sm">
-              <Download className="h-4 w-4 mr-2" />
+              <Download className={`${isMobile ? 'h-3 w-3' : 'h-4 w-4'} mr-1 sm:mr-2`} />
               {t('weekly.exportWeek')}
             </Button>
             {setUseSimpleView && (
@@ -2543,22 +2986,22 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
           </div>
         </div>
         <Card className={`bg-blue-50 border-blue-200 w-full sm:w-auto sm:min-w-[200px] ${hasUnreadDaysOffNotification ? 'ring-2 ring-orange-400 ring-offset-2' : ''}`}>
-          <CardHeader className="p-3 sm:p-6">
-            <CardTitle className="text-blue-900 text-sm sm:text-lg flex items-center justify-between">
+          <CardHeader className="p-2 sm:p-6">
+            <CardTitle className="text-blue-900 text-xs sm:text-lg flex items-center justify-between">
               <span>{t('weekly.daysOffRemaining')}</span>
               {hasUnreadDaysOffNotification && (
-                <div className="flex items-center gap-1 bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300 px-2 py-0.5 rounded-full text-xs font-semibold animate-pulse">
+                <div className="flex items-center gap-1 bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300 px-1.5 py-0.5 rounded-full text-xs font-semibold animate-pulse">
                   <span>⚠️</span>
                 </div>
               )}
             </CardTitle>
           </CardHeader>
-          <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
-            <div className="text-2xl sm:text-3xl font-bold text-blue-700">
-              {daysOffLeft} <span className="text-base sm:text-lg">({hoursLeftRounded} {t('weekly.hours')})</span>
+          <CardContent className="p-2 pt-0 sm:p-6 sm:pt-0">
+            <div className="text-xl sm:text-3xl font-bold text-blue-700">
+              {daysOffLeft} <span className="text-xs sm:text-lg">({hoursLeftRounded} {t('weekly.hours')})</span>
             </div>
             {hasUnreadDaysOffNotification && (
-              <div className="text-xs sm:text-sm text-orange-600 dark:text-orange-400 mt-2 font-semibold">
+              <div className="text-xs sm:text-sm text-orange-600 dark:text-orange-400 mt-1.5 sm:mt-2 font-semibold">
                 ⚠️ Updated!
               </div>
             )}
@@ -2567,188 +3010,213 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
       </div>
 
       {isLocked && (
-        <div className="p-2 sm:p-3 bg-yellow-50 border border-yellow-200 rounded text-yellow-800 text-xs sm:text-sm">
+        <div className="p-1.5 sm:p-3 bg-yellow-50 border border-yellow-200 rounded-md sm:rounded text-yellow-800 text-xs sm:text-sm">
           ⚠️ {t('weekly.confirmed')}
         </div>
       )}
       
       {/* Reminder to confirm week when entries are filled */}
       {!isLocked && hasSubmittedEntries() && (
-        <div className="p-2 sm:p-3 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded text-orange-800 dark:text-orange-200 text-xs sm:text-sm">
+        <div className="p-1.5 sm:p-3 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-md sm:rounded text-orange-800 dark:text-orange-200 text-xs sm:text-sm">
           <strong>💡 {t('weekly.confirmReminder')}</strong>
         </div>
       )}
       
       {!isLocked && weekReviewComment && (
-        <div className="p-2 sm:p-3 bg-red-50 border border-red-200 rounded text-red-800 text-xs sm:text-sm">
+        <div className="p-1.5 sm:p-3 bg-red-50 border border-red-200 rounded-md sm:rounded text-red-800 text-xs sm:text-sm">
           <strong>{t('admin.rejectedStatus')}:</strong> {weekReviewComment}
         </div>
       )}
 
       <Card>
         <CardContent className="p-2 sm:p-4">
-          <div className="space-y-3 sm:space-y-4">
-            {days.map((day, dayIdx) => {
-              const dateStr = formatDateToYYYYMMDD(day.date);
-              
-              // Check if there's a fullDayOff entry for this day (in editable or submitted entries)
-              // A fullDayOff entry is either:
-              // 1. An editable entry with workType "31" and fullDayOff checked
-              // 2. A submitted entry with workType "31" and 8 hours (which indicates full day off)
-              const hasFullDayOff = day.entries.some(e => e.workType === "31" && e.fullDayOff) ||
-                (submittedEntries[dateStr] || []).some(e => {
-                  if (e.workType === "31") {
-                    // Check if it's a full day off: either has fullDayOff property or has 8 hours
-                    return e.fullDayOff || parseFloat(e.hours || "0") === 8;
-                  }
-                  return false;
-                });
-              
-              const submitted = (submittedEntries[dateStr] || []).sort((a, b) => {
-                // Sort by startTime (ascending)
-                const timeA = (a.startTime || "").trim();
-                const timeB = (b.startTime || "").trim();
-                
-                // If both have startTime, sort by time
-                if (timeA && timeB) {
-                  // Convert time strings to comparable numbers (HH:MM -> minutes since midnight)
-                  const parseTime = (timeStr: string): number => {
-                    const parts = timeStr.split(':');
-                    if (parts.length !== 2) return 0;
-                    const hours = parseInt(parts[0], 10) || 0;
-                    const minutes = parseInt(parts[1], 10) || 0;
-                    return hours * 60 + minutes;
-                  };
-                  
-                  return parseTime(timeA) - parseTime(timeB);
-                }
-                
-                // If only one has startTime, put the one with startTime first
-                if (timeA && !timeB) return -1;
-                if (!timeA && timeB) return 1;
-                
-                // If neither has startTime, maintain original order
-                return 0;
+          {isMobile ? (
+            // Accordion for mobile
+            <Accordion type="multiple" value={Array.from(expandedDays).map(i => `day-${i}`)} onValueChange={(values) => {
+              const newExpanded = new Set<number>();
+              values.forEach(v => {
+                const idx = parseInt(v.replace('day-', ''));
+                if (!isNaN(idx)) newExpanded.add(idx);
               });
-              const isDayLocked = isLocked;
-              const locale = language === 'nl' ? 'nl-NL' : 'en-GB';
-              const dayName = day.date.toLocaleDateString(locale, { weekday: 'long', day: 'numeric', month: 'long' });
-              const dayShort = day.date.toLocaleDateString(locale, { weekday: 'short', day: 'numeric', month: 'short' });
-              const dayColors = [
-                'bg-blue-50 border-blue-200 dark:', // Monday
-                'bg-green-50 border-green-200', // Tuesday
-                'bg-yellow-50 border-yellow-200', // Wednesday
-                'bg-purple-50 border-purple-200', // Thursday
-                'bg-pink-50 border-pink-200', // Friday
-                'bg-gray-50 border-gray-200', // Saturday
-                'bg-slate-50 border-slate-200', // Sunday
-              ];
-              const dayColor = dayColors[day.date.getDay() === 0 ? 6 : day.date.getDay() - 1];
-              
-              return (
-                <div key={dayIdx} className={`border-2 rounded-lg ${dayColor} overflow-hidden`}>
-                  {/* Day Header */}
-                  <div className={`px-3 sm:px-4 py-2 sm:py-3 border-b-2 ${dayColor.replace('50', '200')} flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2`}>
-                    <div className="flex items-center gap-2 sm:gap-3">
-                      <h3 className="font-bold text-base sm:text-lg text-gray-800 dark:text-gray-900">{isMobile ? dayShort : dayName}</h3>
-                      {!isMobile && <span className="text-sm text-gray-600 dark:text-gray-900">({dayShort})</span>}
-                    </div>
-                    {!isLocked && (
-                      <div className={`flex gap-2 ${isMobile ? 'w-full' : ''}`}>
-                        {dayIdx > 0 && (
-                          <Button 
-                            variant="outline" 
-                            size={isMobile ? "sm" : "sm"}
-                            className={`${isMobile ? 'h-8 text-xs flex-1' : 'h-7 text-xs'}`}
-                            onClick={() => handleCopyFromPreviousDay(dayIdx)}
-                            disabled={hasFullDayOff}
-                          >
-                            {t('weekly.copyPrevious')}
-                          </Button>
-                        )}
-                        <Button 
-                          variant="outline" 
-                          size={isMobile ? "sm" : "sm"}
-                          className={`${isMobile ? 'h-8 text-xs flex-1' : 'h-7 text-xs'}`}
-                          onClick={() => handleAddEntry(dayIdx)}
-                          disabled={hasFullDayOff}
-                          title={hasFullDayOff ? "Je hebt deze dag als volledige vrije dag gemarkeerd. Je kunt geen extra entries toevoegen." : ""}
-                        >
-                          <Plus className="h-3 w-3 mr-1" />
-                          {t('weekly.addEntry')}
-                        </Button>
+              setExpandedDays(newExpanded);
+            }} className="space-y-2">
+              {days.map((day, dayIdx) => {
+                const dailySummary = calculateDailySummary(dayIdx);
+                const dayValue = `day-${dayIdx}`;
+                const isExpanded = expandedDays.has(dayIdx);
+                
+                return (
+                  <AccordionItem key={dayIdx} value={dayValue} className="border-none">
+                    <AccordionTrigger className="px-2 py-1.5 hover:no-underline">
+                      <div className="flex items-center justify-between w-full mr-2">
+                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                          <h3 className="font-bold text-sm text-gray-800 dark:text-gray-900 truncate">
+                            {day.date.toLocaleDateString(language === 'nl' ? 'nl-NL' : 'en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}
+                          </h3>
+                          {dailySummary.entryCount > 0 && (
+                            <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+                              <span>{dailySummary.totalHours}h</span>
+                              <span>•</span>
+                              <span>{dailySummary.entryCount} {dailySummary.entryCount === 1 ? t('weekly.entry') || 'entry' : t('weekly.entries') || 'entries'}</span>
+                              {dailySummary.hasOvernight && (
+                                <>
+                                  <span>•</span>
+                                  <Moon className="h-3 w-3 text-indigo-600 dark:text-indigo-400" />
+                                </>
+                              )}
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    )}
-                  </div>
-
-                  {/* Stayed overnight checkbox */}
-                  <div className={`px-3 sm:px-4 py-2 border-b ${dayColor.replace('50', '200')} flex items-center justify-between`}>
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        id={`stayedOvernight-simple-${dayIdx}`}
-                        checked={!!day.stayedOvernight}
-                        onCheckedChange={(checked) => {
-                          persistOvernightStay(dayIdx, checked === true);
-                        }}
-                        disabled={isDayLocked}
-                      />
-                      <Label
-                        htmlFor={`stayedOvernight-simple-${dayIdx}`}
-                        className="text-xs sm:text-sm font-medium cursor-pointer text-gray-800 dark:text-gray-900"
-                      >
-                        {t('weekly.overnightStay')}
-                      </Label>
-                    </div>
-                  </div>
-                  
-                  {/* Mobile: Card Layout, Desktop: Table Layout */}
-                  {isMobile ? (
-                    <div className="p-2 sm:p-4 space-y-3">
-                      {/* Editable entries - only show if week is not locked */}
-                      {/* If there's a fullDayOff entry, only show that entry */}
-                      {!isLocked && day.entries
-                        .filter((entry, entryIdx) => {
-                          // If there's a fullDayOff entry, only show that one
-                          if (hasFullDayOff) {
-                            return entry.workType === "31" && entry.fullDayOff;
+                    </AccordionTrigger>
+                    <AccordionContent>
+                      {(() => {
+                        const dateStr = formatDateToYYYYMMDD(day.date);
+                        
+                        // Check if there's a fullDayOff entry for this day (in editable or submitted entries)
+                        const hasFullDayOff = day.entries.some(e => e.workType === "31" && e.fullDayOff) ||
+                          (submittedEntries[dateStr] || []).some(e => {
+                            if (e.workType === "31") {
+                              return e.fullDayOff || parseFloat(e.hours || "0") === 8;
+                            }
+                            return false;
+                          });
+                        
+                        const submitted = (submittedEntries[dateStr] || []).sort((a, b) => {
+                          const timeA = (a.startTime || "").trim();
+                          const timeB = (b.startTime || "").trim();
+                          
+                          if (timeA && timeB) {
+                            const parseTime = (timeStr: string): number => {
+                              const parts = timeStr.split(':');
+                              if (parts.length !== 2) return 0;
+                              const hours = parseInt(parts[0], 10) || 0;
+                              const minutes = parseInt(parts[1], 10) || 0;
+                              return hours * 60 + minutes;
+                            };
+                            return parseTime(timeA) - parseTime(timeB);
                           }
-                          return true;
-                        })
-                        .map((entry, entryIdx) => {
-                        const isNewEntry = !entry.id;
-                        const isEditing = entry.id && editingEntry?.id === entry.id;
+                          
+                          if (timeA && !timeB) return -1;
+                          if (!timeA && timeB) return 1;
+                          return 0;
+                        });
+                        const isDayLocked = isLocked;
+                        const locale = language === 'nl' ? 'nl-NL' : 'en-GB';
+                        const dayName = day.date.toLocaleDateString(locale, { weekday: 'long', day: 'numeric', month: 'long' });
+                        const dayShort = day.date.toLocaleDateString(locale, { weekday: 'short', day: 'numeric', month: 'short' });
+                        const dayColors = [
+                          'bg-blue-50 border-blue-200',
+                          'bg-green-50 border-green-200',
+                          'bg-yellow-50 border-yellow-200',
+                          'bg-purple-50 border-purple-200',
+                          'bg-pink-50 border-pink-200',
+                          'bg-gray-50 border-gray-200',
+                          'bg-slate-50 border-slate-200',
+                        ];
+                        const dayColor = dayColors[day.date.getDay() === 0 ? 6 : day.date.getDay() - 1];
+                        
                         return (
-                        <div key={`edit-${dayIdx}-${entryIdx}`} className={`rounded-lg border border-gray-300 dark:border-gray-700 p-3 space-y-3 ${isEditing ? 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-700' : 'bg-white dark:bg-gray-800'}`}>
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              {isEditing && (
-                                <span className="text-xs bg-yellow-500 text-white px-2 py-0.5 rounded font-semibold">{t('weekly.editing')}</span>
+                          <div className={`border-2 rounded-md sm:rounded-lg ${dayColor} overflow-hidden mt-2`}>
+                            {/* Day Header */}
+                            <div className={`px-2 sm:px-4 py-1.5 sm:py-3 border-b-2 ${dayColor.replace('50', '200')} flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 sm:gap-2`}>
+                              <div className="flex items-center gap-1.5 sm:gap-3">
+                                <h3 className="font-bold text-sm sm:text-lg text-gray-800 dark:text-gray-900">{dayShort}</h3>
+                                {!isMobile && <span className="text-sm text-gray-600 dark:text-gray-900">({dayShort})</span>}
+                              </div>
+                              {!isLocked && (
+                                <div className={`flex gap-1.5 sm:gap-2 ${isMobile ? 'w-full' : ''}`}>
+                                  {dayIdx > 0 && (
+                                    <Button 
+                                      variant="outline" 
+                                      size={isMobile ? "sm" : "sm"}
+                                      className={`${isMobile ? 'h-7 text-xs flex-1' : 'h-7 text-xs'}`}
+                                      onClick={() => handleCopyFromPreviousDay(dayIdx)}
+                                      disabled={hasFullDayOff}
+                                    >
+                                      {t('weekly.copyPrevious')}
+                                    </Button>
+                                  )}
+                                  <Button 
+                                    variant="outline" 
+                                    size={isMobile ? "sm" : "sm"}
+                                    className={`${isMobile ? 'h-7 text-xs flex-1' : 'h-7 text-xs'}`}
+                                    onClick={() => handleAddEntry(dayIdx)}
+                                    disabled={hasFullDayOff}
+                                    title={hasFullDayOff ? "Je hebt deze dag als volledige vrije dag gemarkeerd. Je kunt geen extra entries toevoegen." : ""}
+                                  >
+                                    <Plus className={`${isMobile ? 'h-2.5 w-2.5' : 'h-3 w-3'} mr-1`} />
+                                    {t('weekly.addEntry')}
+                                  </Button>
+                                </div>
                               )}
-                              <Label className="text-xs font-semibold text-gray-900 dark:text-gray-100">{t('weekly.workType')}</Label>
                             </div>
-                            <div className="flex items-center gap-2">
-                              <Button 
-                                variant="default" 
-                                size="sm"
-                                className="h-7 px-3 text-xs bg-green-600 hover:bg-green-700"
-                                onClick={() => handleSaveEntry(dayIdx, entryIdx)}
-                                disabled={isLocked}
-                              >
-                                {t('common.save')}
-                              </Button>
-                              {day.entries.length > 1 && (
-                                <Button 
-                                  variant="destructive" 
-                                  size="sm"
-                                  className="h-7 w-7 text-xs"
-                                  onClick={() => handleRemoveEntry(dayIdx, entryIdx)}
-                                  disabled={isLocked}
+
+                            {/* Stayed overnight checkbox */}
+                            <div className={`px-2 sm:px-4 py-1.5 sm:py-2 border-b ${dayColor.replace('50', '200')} flex items-center justify-between`}>
+                              <div className="flex items-center space-x-1.5 sm:space-x-2">
+                                <Checkbox
+                                  id={`stayedOvernight-simple-${dayIdx}`}
+                                  checked={!!day.stayedOvernight}
+                                  onCheckedChange={(checked) => {
+                                    persistOvernightStay(dayIdx, checked === true);
+                                  }}
+                                  disabled={isDayLocked}
+                                />
+                                <Label
+                                  htmlFor={`stayedOvernight-simple-${dayIdx}`}
+                                  className="text-xs sm:text-sm font-medium cursor-pointer text-gray-800 dark:text-gray-900"
                                 >
-                                  -
-                                </Button>
-                              )}
+                                  {t('weekly.overnightStay')}
+                                </Label>
+                              </div>
                             </div>
-                          </div>
+                            
+                            {/* Mobile: Card Layout - Reuse same logic as desktop */}
+                            <div className="p-2 sm:p-4 space-y-2 sm:space-y-3">
+                              {/* Render editable entries */}
+                              {!isLocked && day.entries
+                                .filter((entry, entryIdx) => {
+                                  if (hasFullDayOff) {
+                                    return entry.workType === "31" && entry.fullDayOff;
+                                  }
+                                  return true;
+                                })
+                                .map((entry, entryIdx) => {
+                                const isNewEntry = !entry.id;
+                                const isEditing = entry.id && editingEntry?.id === entry.id;
+                                return (
+                                <div key={`edit-${dayIdx}-${entryIdx}`} className={`rounded-md sm:rounded-lg border border-gray-300 dark:border-gray-700 p-2 sm:p-3 space-y-2 sm:space-y-3 ${isEditing ? 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-700' : 'bg-white dark:bg-gray-800'}`}>
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-1.5 sm:gap-2">
+                                      {isEditing && (
+                                        <span className="text-xs bg-yellow-500 text-white px-1.5 py-0.5 rounded font-semibold">{t('weekly.editing')}</span>
+                                      )}
+                                      <Label className="text-xs font-semibold text-gray-900 dark:text-gray-100">{t('weekly.workType')}</Label>
+                                    </div>
+                                    <div className="flex items-center gap-1.5 sm:gap-2">
+                                      <Button 
+                                        variant="default" 
+                                        size="sm"
+                                        className={`${isMobile ? 'h-6 px-2' : 'h-7 px-3'} text-xs bg-green-600 hover:bg-green-700`}
+                                        onClick={() => handleSaveEntry(dayIdx, entryIdx)}
+                                        disabled={isLocked}
+                                      >
+                                        {t('common.save')}
+                                      </Button>
+                                      {day.entries.length > 1 && (
+                                        <Button 
+                                          variant="destructive" 
+                                          size="sm"
+                                          className={`${isMobile ? 'h-6 w-6' : 'h-7 w-7'} text-xs`}
+                                          onClick={() => handleRemoveEntry(dayIdx, entryIdx)}
+                                          disabled={isLocked}
+                                        >
+                                          -
+                                        </Button>
+                                      )}
+                                    </div>
+                                  </div>
                           <div>
                             <Label className="text-xs font-semibold">{t('weekly.workType')}</Label>
                             <Popover
@@ -2765,13 +3233,13 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
                                 <Button
                                   variant="outline"
                                   role="combobox"
-                                  className="w-full justify-between h-10 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 mt-1"
+                                  className={`w-full justify-between ${isMobile ? 'h-8' : 'h-10'} text-xs sm:text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 mt-1`}
                                   disabled={isLocked}
                                 >
                                   {entry.workType 
                                     ? `${entry.workType} - ${workTypes.find(t => String(t.value) === entry.workType)?.label || ""}`
                                     : t('weekly.selectWorkType')}
-                                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                  <ChevronsUpDown className={`ml-2 ${isMobile ? 'h-3 w-3' : 'h-4 w-4'} shrink-0 opacity-50`} />
                                 </Button>
                               </PopoverTrigger>
                               <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
@@ -2837,11 +3305,11 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
                                   <Button
                                     variant="outline"
                                     role="combobox"
-                                    className="w-full justify-between h-10 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                                    className={`w-full justify-between ${isMobile ? 'h-8' : 'h-10'} text-xs sm:text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100`}
                                     disabled={isLocked || entry.workType === "31" || entry.workType === "35"}
                                   >
                                     {entry.project || t('weekly.selectProject')}
-                                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                    <ChevronsUpDown className={`ml-2 ${isMobile ? 'h-3 w-3' : 'h-4 w-4'} shrink-0 opacity-50`} />
                                   </Button>
                                 </PopoverTrigger>
                                 <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
@@ -2981,7 +3449,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
                             </div>
                           )}
 
-                          <div className="grid grid-cols-3 gap-2">
+                          <div className={`grid grid-cols-3 ${isMobile ? 'gap-1.5' : 'gap-2'}`}>
                             <div>
                               <Label className="text-xs font-semibold">{t('weekly.from')}</Label>
                               <Input
@@ -2989,7 +3457,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
                                 value={entry.startTime || ""}
                                 onChange={e => handleEntryChange(dayIdx, entryIdx, "startTime", roundToQuarterHour(e.target.value))}
                                 placeholder="08:00"
-                                className="h-10 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 mt-1"
+                                className={`${isMobile ? 'h-8 text-xs' : 'h-10 text-sm'} bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 mt-1`}
                                 disabled={isLocked}
                               />
                             </div>
@@ -3000,13 +3468,553 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
                                 value={entry.endTime || ""}
                                 onChange={e => handleEntryChange(dayIdx, entryIdx, "endTime", roundToQuarterHour(e.target.value))}
                                 placeholder="17:00"
-                                className="h-10 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 mt-1"
+                                className={`${isMobile ? 'h-8 text-xs' : 'h-10 text-sm'} bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 mt-1`}
                                 disabled={isLocked}
                               />
                             </div>
                             <div>
                               <Label className="text-xs font-semibold">{t('weekly.hours')}</Label>
-                              <div className="h-10 flex items-center justify-center bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded px-2 text-sm font-medium text-gray-900 dark:text-gray-100 mt-1">
+                              <div className={`${isMobile ? 'h-8 text-xs' : 'h-10 text-sm'} flex items-center justify-center bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded px-2 font-medium text-gray-900 dark:text-gray-100 mt-1`}>
+                                {(() => {
+                                  // If full day off is checked, show 8 hours
+                                  if (entry.workType === "31" && entry.fullDayOff) {
+                                    return "8h";
+                                  }
+                                  if (entry.startTime && entry.endTime) {
+                                    const calculated = calculateHours(entry.startTime, entry.endTime);
+                                    const hours = parseFloat(calculated);
+                                    if (!isNaN(hours) && hours > 0) {
+                                      return `${hours.toFixed(2)}h`;
+                                    }
+                                  }
+                                  if (entry.hours) {
+                                    const hours = parseFloat(entry.hours);
+                                    if (!isNaN(hours) && hours > 0) {
+                                      return `${hours.toFixed(2)}h`;
+                                    }
+                                  }
+                                  return "-";
+                                })()}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Kilometers field for work types 20 and 21 */}
+                          {(entry.workType === "20" || entry.workType === "21") && (
+                            <div>
+                              <Label className="text-xs font-semibold">{t('weekly.kilometers')}</Label>
+                              <Input
+                                type="number"
+                                step="0.1"
+                                min="0"
+                                value={entry.kilometers || ""}
+                                onChange={e => handleEntryChange(dayIdx, entryIdx, "kilometers", e.target.value)}
+                                placeholder="0.0"
+                                className="h-10 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 mt-1"
+                                disabled={isLocked}
+                              />
+                            </div>
+                          )}
+                                </div>
+                              );
+                            })}
+                      
+                      {/* Submitted entries (read-only with edit option) */}
+                      {submitted.map((submittedEntry, subIdx) => (
+                        <div key={`submitted-${dayIdx}-${subIdx}`} className="bg-gray-100 dark:bg-gray-800 rounded-lg border border-gray-300 dark:border-gray-700 p-3 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">{getWorkTypeLabel(submittedEntry.workType || "")}</span>
+                            {!isLocked && (
+                              <div className="flex items-center gap-1">
+                                <Button 
+                                  size="icon" 
+                                  variant="ghost" 
+                                  className="h-7 w-7"
+                                  onClick={() => handleEditEntry(submittedEntry, dateStr)}
+                                  title={t('common.edit')}
+                                >
+                                  <svg className="h-4 w-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                  </svg>
+                                </Button>
+                                <Button 
+                                  size="icon" 
+                                  variant="ghost" 
+                                  className="h-7 w-7"
+                                  onClick={() => handleDeleteEntry(submittedEntry.id!, dateStr)}
+                                  title={t('common.delete')}
+                                >
+                                  <Trash2 className="h-4 w-4 text-red-500" />
+                                </Button>
+                              </div>
+                            )}
+                          </div>
+                          <div className="text-xs text-gray-600 dark:text-gray-400">
+                            <div><strong className="text-gray-900 dark:text-gray-200">{t('weekly.project')}:</strong> {submittedEntry.project || "-"}</div>
+                            <div><strong className="text-gray-900 dark:text-gray-200">{t('weekly.time')}:</strong> {
+                              submittedEntry.startTime && submittedEntry.endTime 
+                                ? `${submittedEntry.startTime} - ${submittedEntry.endTime}`
+                                : submittedEntry.workType === "31" && parseFloat(submittedEntry.hours || "0") >= 8
+                                  ? t('weekly.fullDayOff') || "Hele dag vrij (8 uren)"
+                                  : "-"
+                            }</div>
+                            <div><strong className="text-gray-900 dark:text-gray-200">{t('weekly.hours')}:</strong> {submittedEntry.hours || "0"}h</div>
+                            {(submittedEntry.workType === "20" || submittedEntry.workType === "21") && (
+                              <div><strong className="text-gray-900 dark:text-gray-200">{t('weekly.kilometers')}:</strong> {submittedEntry.kilometers ? `${submittedEntry.kilometers} km` : "-"}</div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                      
+                      {/* Total for mobile */}
+                      <div className="bg-gray-200 dark:bg-gray-700 rounded-lg border-2 border-gray-400 dark:border-gray-600 p-3 font-bold">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-sm sm:text-base text-gray-900 dark:text-gray-900">{t('weekly.hours')}:</span>
+                          <span className="text-sm sm:text-base text-gray-900 dark:text-gray-100">
+                            {calculateDayTotal(dayIdx, dateStr).toFixed(2)}h
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm sm:text-base text-gray-900 dark:text-gray-900">{t('weekly.kilometers')}:</span>
+                          <span className="text-sm sm:text-base text-gray-900 dark:text-gray-100">
+                            {(() => {
+                              const kmTotal = calculateDayKilometersTotal(dayIdx, dateStr);
+                              return kmTotal > 0 ? `${kmTotal.toFixed(1)} km` : "-";
+                            })()}
+                          </span>
+                        </div>
+                      </div>
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </AccordionContent>
+                  </AccordionItem>
+                );
+              })}
+            </Accordion>
+          ) : (
+            // Desktop layout - no accordion
+            <div className="space-y-2 sm:space-y-4">
+              {days.map((day, dayIdx) => {
+              const dateStr = formatDateToYYYYMMDD(day.date);
+              
+              // Check if there's a fullDayOff entry for this day (in editable or submitted entries)
+              // A fullDayOff entry is either:
+              // 1. An editable entry with workType "31" and fullDayOff checked
+              // 2. A submitted entry with workType "31" and 8 hours (which indicates full day off)
+              const hasFullDayOff = day.entries.some(e => e.workType === "31" && e.fullDayOff) ||
+                (submittedEntries[dateStr] || []).some(e => {
+                  if (e.workType === "31") {
+                    // Check if it's a full day off: either has fullDayOff property or has 8 hours
+                    return e.fullDayOff || parseFloat(e.hours || "0") === 8;
+                  }
+                  return false;
+                });
+              
+              const submitted = (submittedEntries[dateStr] || []).sort((a, b) => {
+                // Sort by startTime (ascending)
+                const timeA = (a.startTime || "").trim();
+                const timeB = (b.startTime || "").trim();
+                
+                // If both have startTime, sort by time
+                if (timeA && timeB) {
+                  // Convert time strings to comparable numbers (HH:MM -> minutes since midnight)
+                  const parseTime = (timeStr: string): number => {
+                    const parts = timeStr.split(':');
+                    if (parts.length !== 2) return 0;
+                    const hours = parseInt(parts[0], 10) || 0;
+                    const minutes = parseInt(parts[1], 10) || 0;
+                    return hours * 60 + minutes;
+                  };
+                  
+                  return parseTime(timeA) - parseTime(timeB);
+                }
+                
+                // If only one has startTime, put the one with startTime first
+                if (timeA && !timeB) return -1;
+                if (!timeA && timeB) return 1;
+                
+                // If neither has startTime, maintain original order
+                return 0;
+              });
+              const isDayLocked = isLocked;
+              const locale = language === 'nl' ? 'nl-NL' : 'en-GB';
+              const dayName = day.date.toLocaleDateString(locale, { weekday: 'long', day: 'numeric', month: 'long' });
+              const dayShort = day.date.toLocaleDateString(locale, { weekday: 'short', day: 'numeric', month: 'short' });
+              const dayColors = [
+                'bg-blue-50 border-blue-200 dark:', // Monday
+                'bg-green-50 border-green-200', // Tuesday
+                'bg-yellow-50 border-yellow-200', // Wednesday
+                'bg-purple-50 border-purple-200', // Thursday
+                'bg-pink-50 border-pink-200', // Friday
+                'bg-gray-50 border-gray-200', // Saturday
+                'bg-slate-50 border-slate-200', // Sunday
+              ];
+              const dayColor = dayColors[day.date.getDay() === 0 ? 6 : day.date.getDay() - 1];
+              
+              return (
+                <div key={dayIdx} className={`border-2 rounded-md sm:rounded-lg ${dayColor} overflow-hidden`}>
+                  {/* Day Header */}
+                  <div className={`px-2 sm:px-4 py-1.5 sm:py-3 border-b-2 ${dayColor.replace('50', '200')} flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 sm:gap-2`}>
+                    <div className="flex items-center gap-1.5 sm:gap-3">
+                      <h3 className="font-bold text-sm sm:text-lg text-gray-800 dark:text-gray-900">{isMobile ? dayShort : dayName}</h3>
+                      {!isMobile && <span className="text-sm text-gray-600 dark:text-gray-900">({dayShort})</span>}
+                    </div>
+                    {!isLocked && (
+                      <div className={`flex gap-1.5 sm:gap-2 ${isMobile ? 'w-full' : ''}`}>
+                        {dayIdx > 0 && (
+                          <Button 
+                            variant="outline" 
+                            size={isMobile ? "sm" : "sm"}
+                            className={`${isMobile ? 'h-7 text-xs flex-1' : 'h-7 text-xs'}`}
+                            onClick={() => handleCopyFromPreviousDay(dayIdx)}
+                            disabled={hasFullDayOff}
+                          >
+                            {t('weekly.copyPrevious')}
+                          </Button>
+                        )}
+                        <Button 
+                          variant="outline" 
+                          size={isMobile ? "sm" : "sm"}
+                          className={`${isMobile ? 'h-7 text-xs flex-1' : 'h-7 text-xs'}`}
+                          onClick={() => handleAddEntry(dayIdx)}
+                          disabled={hasFullDayOff}
+                          title={hasFullDayOff ? "Je hebt deze dag als volledige vrije dag gemarkeerd. Je kunt geen extra entries toevoegen." : ""}
+                        >
+                          <Plus className={`${isMobile ? 'h-2.5 w-2.5' : 'h-3 w-3'} mr-1`} />
+                          {t('weekly.addEntry')}
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Stayed overnight checkbox */}
+                  <div className={`px-2 sm:px-4 py-1.5 sm:py-2 border-b ${dayColor.replace('50', '200')} flex items-center justify-between`}>
+                    <div className="flex items-center space-x-1.5 sm:space-x-2">
+                      <Checkbox
+                        id={`stayedOvernight-simple-${dayIdx}`}
+                        checked={!!day.stayedOvernight}
+                        onCheckedChange={(checked) => {
+                          persistOvernightStay(dayIdx, checked === true);
+                        }}
+                        disabled={isDayLocked}
+                      />
+                      <Label
+                        htmlFor={`stayedOvernight-simple-${dayIdx}`}
+                        className="text-xs sm:text-sm font-medium cursor-pointer text-gray-800 dark:text-gray-900"
+                      >
+                        {t('weekly.overnightStay')}
+                      </Label>
+                    </div>
+                  </div>
+                  
+                  {/* Mobile: Card Layout, Desktop: Table Layout */}
+                  {isMobile ? (
+                    <div className="p-2 sm:p-4 space-y-2 sm:space-y-3">
+                      {/* Editable entries - only show if week is not locked */}
+                      {/* If there's a fullDayOff entry, only show that entry */}
+                      {!isLocked && day.entries
+                        .filter((entry, entryIdx) => {
+                          // If there's a fullDayOff entry, only show that one
+                          if (hasFullDayOff) {
+                            return entry.workType === "31" && entry.fullDayOff;
+                          }
+                          return true;
+                        })
+                        .map((entry, entryIdx) => {
+                        const isNewEntry = !entry.id;
+                        const isEditing = entry.id && editingEntry?.id === entry.id;
+                        return (
+                        <div key={`edit-${dayIdx}-${entryIdx}`} className={`rounded-md sm:rounded-lg border border-gray-300 dark:border-gray-700 p-2 sm:p-3 space-y-2 sm:space-y-3 ${isEditing ? 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-700' : 'bg-white dark:bg-gray-800'}`}>
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-1.5 sm:gap-2">
+                              {isEditing && (
+                                <span className="text-xs bg-yellow-500 text-white px-1.5 py-0.5 rounded font-semibold">{t('weekly.editing')}</span>
+                              )}
+                              <Label className="text-xs font-semibold text-gray-900 dark:text-gray-100">{t('weekly.workType')}</Label>
+                            </div>
+                            <div className="flex items-center gap-1.5 sm:gap-2">
+                              <Button 
+                                variant="default" 
+                                size="sm"
+                                className={`${isMobile ? 'h-6 px-2' : 'h-7 px-3'} text-xs bg-green-600 hover:bg-green-700`}
+                                onClick={() => handleSaveEntry(dayIdx, entryIdx)}
+                                disabled={isLocked}
+                              >
+                                {t('common.save')}
+                              </Button>
+                              {day.entries.length > 1 && (
+                                <Button 
+                                  variant="destructive" 
+                                  size="sm"
+                                  className={`${isMobile ? 'h-6 w-6' : 'h-7 w-7'} text-xs`}
+                                  onClick={() => handleRemoveEntry(dayIdx, entryIdx)}
+                                  disabled={isLocked}
+                                >
+                                  -
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                          <div>
+                            <Label className="text-xs font-semibold">{t('weekly.workType')}</Label>
+                            <Popover
+                              open={openWorkTypePopovers[`${dayIdx}-${entryIdx}`] || false}
+                              onOpenChange={(open) => {
+                                const key = `${dayIdx}-${entryIdx}`;
+                                setOpenWorkTypePopovers(prev => ({ ...prev, [key]: open }));
+                                if (!open) {
+                                  setWorkTypeSearchValues(prev => ({ ...prev, [key]: "" }));
+                                }
+                              }}
+                            >
+                              <PopoverTrigger asChild>
+                                <Button
+                                  variant="outline"
+                                  role="combobox"
+                                  className={`w-full justify-between ${isMobile ? 'h-8' : 'h-10'} text-xs sm:text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 mt-1`}
+                                  disabled={isLocked}
+                                >
+                                  {entry.workType 
+                                    ? `${entry.workType} - ${workTypes.find(t => String(t.value) === entry.workType)?.label || ""}`
+                                    : t('weekly.selectWorkType')}
+                                  <ChevronsUpDown className={`ml-2 ${isMobile ? 'h-3 w-3' : 'h-4 w-4'} shrink-0 opacity-50`} />
+                                </Button>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                                <Command>
+                                  <CommandInput
+                                    placeholder={t('weekly.searchWorkType')}
+                                    value={workTypeSearchValues[`${dayIdx}-${entryIdx}`] || ""}
+                                    onValueChange={(value) => {
+                                      const key = `${dayIdx}-${entryIdx}`;
+                                      setWorkTypeSearchValues(prev => ({ ...prev, [key]: value }));
+                                    }}
+                                  />
+                                  <CommandList>
+                                    <CommandEmpty>{t('weekly.noWorkTypeFound')}</CommandEmpty>
+                                    <CommandGroup>
+                                      {workTypes
+                                        .filter(type =>
+                                          !workTypeSearchValues[`${dayIdx}-${entryIdx}`] ||
+                                          String(type.value).includes(workTypeSearchValues[`${dayIdx}-${entryIdx}`]) ||
+                                          type.label.toLowerCase().includes(workTypeSearchValues[`${dayIdx}-${entryIdx}`].toLowerCase())
+                                        )
+                                        .map((type) => (
+                                          <CommandItem
+                                            key={type.value}
+                                            value={String(type.value)}
+                                            onSelect={() => {
+                                              handleEntryChange(dayIdx, entryIdx, "workType", String(type.value));
+                                              const key = `${dayIdx}-${entryIdx}`;
+                                              setOpenWorkTypePopovers(prev => ({ ...prev, [key]: false }));
+                                              setWorkTypeSearchValues(prev => ({ ...prev, [key]: "" }));
+                                            }}
+                                          >
+                                            <Check
+                                              className={cn(
+                                                "mr-2 h-4 w-4",
+                                                entry.workType === String(type.value) ? "opacity-100" : "opacity-0"
+                                              )}
+                                            />
+                                            {type.value} - {type.label}
+                                          </CommandItem>
+                                        ))}
+                                    </CommandGroup>
+                                  </CommandList>
+                                </Command>
+                              </PopoverContent>
+                            </Popover>
+                          </div>
+
+                          <div>
+                            <Label className="text-xs font-semibold">{t('weekly.project')}</Label>
+                            <div className="mt-1">
+                              <Popover
+                                open={openProjectPopovers[`${dayIdx}-${entryIdx}`] || false}
+                                onOpenChange={(open) => {
+                                  const key = `${dayIdx}-${entryIdx}`;
+                                  setOpenProjectPopovers(prev => ({ ...prev, [key]: open }));
+                                  if (!open) {
+                                    setProjectSearchValues(prev => ({ ...prev, [key]: "" }));
+                                  }
+                                }}
+                              >
+                                <PopoverTrigger asChild>
+                                  <Button
+                                    variant="outline"
+                                    role="combobox"
+                                    className={`w-full justify-between ${isMobile ? 'h-8' : 'h-10'} text-xs sm:text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100`}
+                                    disabled={isLocked || entry.workType === "31" || entry.workType === "35"}
+                                  >
+                                    {entry.project || t('weekly.selectProject')}
+                                    <ChevronsUpDown className={`ml-2 ${isMobile ? 'h-3 w-3' : 'h-4 w-4'} shrink-0 opacity-50`} />
+                                  </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                                  <Command>
+                                    <CommandInput
+                                      placeholder="Search project or type to create new..."
+                                      value={projectSearchValues[`${dayIdx}-${entryIdx}`] || ""}
+                                      onValueChange={(value) => {
+                                        const key = `${dayIdx}-${entryIdx}`;
+                                        setProjectSearchValues(prev => ({ ...prev, [key]: value }));
+                                      }}
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter" && projectSearchValues[`${dayIdx}-${entryIdx}`]) {
+                                          const searchValue = projectSearchValues[`${dayIdx}-${entryIdx}`];
+                                          if (searchValue && !projects.some(p => p.name.toLowerCase() === searchValue.toLowerCase())) {
+                                            e.preventDefault();
+                                            handleAddNewProject(searchValue, dayIdx, entryIdx);
+                                          }
+                                        }
+                                      }}
+                                    />
+                                    <CommandList>
+                                      <CommandEmpty>
+                                        {projectSearchValues[`${dayIdx}-${entryIdx}`] ? (
+                                          <div className="py-2 px-4">
+                                            <div className="text-sm text-muted-foreground mb-2">
+                                              No project found. Press Enter to create "{projectSearchValues[`${dayIdx}-${entryIdx}`]}"
+                                            </div>
+                                            <Button
+                                              size="sm"
+                                              className="w-full"
+                                              onClick={() => {
+                                                const searchValue = projectSearchValues[`${dayIdx}-${entryIdx}`];
+                                                if (searchValue) {
+                                                  handleAddNewProject(searchValue, dayIdx, entryIdx);
+                                                }
+                                              }}
+                                            >
+                                              Add "{projectSearchValues[`${dayIdx}-${entryIdx}`]}"
+                                            </Button>
+                                          </div>
+                                        ) : (
+                                          "No projects found."
+                                        )}
+                                      </CommandEmpty>
+                                      <CommandGroup>
+                                        {projects
+                                          .filter(project =>
+                                            !projectSearchValues[`${dayIdx}-${entryIdx}`] ||
+                                            project.name.toLowerCase().includes(projectSearchValues[`${dayIdx}-${entryIdx}`].toLowerCase())
+                                          )
+                                          .map((project) => (
+                                            <CommandItem
+                                              key={project.id}
+                                              value={project.name}
+                                              onSelect={() => {
+                                                handleEntryChange(dayIdx, entryIdx, "project", project.name);
+                                                const key = `${dayIdx}-${entryIdx}`;
+                                                setOpenProjectPopovers(prev => ({ ...prev, [key]: false }));
+                                                setProjectSearchValues(prev => ({ ...prev, [key]: "" }));
+                                              }}
+                                            >
+                                              <Check
+                                                className={cn(
+                                                  "mr-2 h-4 w-4",
+                                                  entry.project === project.name ? "opacity-100" : "opacity-0"
+                                                )}
+                                              />
+                                              {project.name}
+                                            </CommandItem>
+                                          ))}
+                                        {projectSearchValues[`${dayIdx}-${entryIdx}`] &&
+                                          !projects.some(p =>
+                                            p.name.toLowerCase() === projectSearchValues[`${dayIdx}-${entryIdx}`].toLowerCase()
+                                          ) && (
+                                            <CommandItem
+                                              value={projectSearchValues[`${dayIdx}-${entryIdx}`]}
+                                              onSelect={() => {
+                                                const searchValue = projectSearchValues[`${dayIdx}-${entryIdx}`];
+                                                if (searchValue) {
+                                                  handleAddNewProject(searchValue, dayIdx, entryIdx);
+                                                }
+                                              }}
+                                              className="text-blue-600 font-medium"
+                                            >
+                                              <Plus className="mr-2 h-4 w-4" />
+                                              {t('weekly.create')} "{projectSearchValues[`${dayIdx}-${entryIdx}`]}"
+                                            </CommandItem>
+                                          )}
+                                      </CommandGroup>
+                                    </CommandList>
+                                  </Command>
+                                </PopoverContent>
+                              </Popover>
+                            </div>
+                          </div>
+
+                          {/* Full Day Off checkbox for work type 31 */}
+                          {entry.workType === "31" && (
+                            <div className="flex items-center space-x-2">
+                              <Checkbox
+                                id={`fullDayOff-${dayIdx}-${entryIdx}`}
+                                checked={entry.fullDayOff || false}
+                                onCheckedChange={(checked) => {
+                                  const isFullDay = checked === true;
+                                  handleEntryChange(dayIdx, entryIdx, "fullDayOff", isFullDay);
+                                  if (isFullDay) {
+                                    // Set times to 08:00 - 16:30, but hours to 8 (minus 0.5 hour break)
+                                    handleEntryChange(dayIdx, entryIdx, "startTime", "08:00");
+                                    handleEntryChange(dayIdx, entryIdx, "endTime", "16:30");
+                                    handleEntryChange(dayIdx, entryIdx, "hours", "8");
+                                    
+                                    // Remove all other entries for this day (keep only this fullDayOff entry)
+                                    setDays(prevDays => prevDays.map((d, i) => {
+                                      if (i !== dayIdx) return d;
+                                      // Keep only the current entry (the fullDayOff one)
+                                      return {
+                                        ...d,
+                                        entries: [d.entries[entryIdx]]
+                                      };
+                                    }));
+                                  } else {
+                                    // Clear times and hours when unchecking
+                                    handleEntryChange(dayIdx, entryIdx, "startTime", "");
+                                    handleEntryChange(dayIdx, entryIdx, "endTime", "");
+                                    handleEntryChange(dayIdx, entryIdx, "hours", "");
+                                  }
+                                }}
+                                disabled={isLocked}
+                              />
+                              <Label 
+                                htmlFor={`fullDayOff-${dayIdx}-${entryIdx}`}
+                                className="text-xs font-medium cursor-pointer"
+                              >
+                                {t('weekly.fullDayOff') || 'Hele dag vrij (8 uren)'}
+                              </Label>
+                            </div>
+                          )}
+
+                          <div className={`grid grid-cols-3 ${isMobile ? 'gap-1.5' : 'gap-2'}`}>
+                            <div>
+                              <Label className="text-xs font-semibold">{t('weekly.from')}</Label>
+                              <Input
+                                type="text"
+                                value={entry.startTime || ""}
+                                onChange={e => handleEntryChange(dayIdx, entryIdx, "startTime", roundToQuarterHour(e.target.value))}
+                                placeholder="08:00"
+                                className={`${isMobile ? 'h-8 text-xs' : 'h-10 text-sm'} bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 mt-1`}
+                                disabled={isLocked}
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-xs font-semibold">{t('weekly.to')}</Label>
+                              <Input
+                                type="text"
+                                value={entry.endTime || ""}
+                                onChange={e => handleEntryChange(dayIdx, entryIdx, "endTime", roundToQuarterHour(e.target.value))}
+                                placeholder="17:00"
+                                className={`${isMobile ? 'h-8 text-xs' : 'h-10 text-sm'} bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 mt-1`}
+                                disabled={isLocked}
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-xs font-semibold">{t('weekly.hours')}</Label>
+                              <div className={`${isMobile ? 'h-8 text-xs' : 'h-10 text-sm'} flex items-center justify-center bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded px-2 font-medium text-gray-900 dark:text-gray-100 mt-1`}>
                                 {(() => {
                                   // If full day off is checked, show 8 hours
                                   if (entry.workType === "31" && entry.fullDayOff) {
@@ -3550,6 +4558,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
               );
             })}
           </div>
+          )}
         </CardContent>
       </Card>
       
@@ -3625,7 +4634,177 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
           </DialogFooter>
         </DialogContent>
       </Dialog>
-          </div>
+
+      {/* Floating Action Button for Mobile - Quick Entry */}
+      {isMobile && (
+        <>
+          <Button
+            onClick={() => setFabDialogOpen(true)}
+            className="fixed bottom-4 right-4 z-50 h-14 w-14 rounded-full bg-orange-600 hover:bg-orange-700 text-white shadow-lg"
+            size="icon"
+          >
+            <Plus className="h-6 w-6" />
+          </Button>
+
+          {/* Quick Entry Dialog/Sheet */}
+          <Sheet open={fabDialogOpen} onOpenChange={setFabDialogOpen}>
+            <SheetContent side="bottom" className="h-[80vh] overflow-y-auto">
+              <SheetHeader>
+                <SheetTitle>{t('weekly.addEntry')} - {new Date().toLocaleDateString()}</SheetTitle>
+                <SheetDescription>
+                  {t('weekly.quickEntryDescription') || 'Quickly add an entry for today'}
+                </SheetDescription>
+              </SheetHeader>
+              
+              <div className="mt-4 space-y-4">
+                {/* Work Type */}
+                <div>
+                  <Label className="text-xs font-semibold mb-1 block">{t('weekly.workType')}</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        className="w-full justify-between h-10 text-sm"
+                      >
+                        {quickEntry.workType 
+                          ? `${quickEntry.workType} - ${workTypes.find(t => String(t.value) === quickEntry.workType)?.label || ""}`
+                          : t('weekly.selectWorkType')}
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
+                      <Command>
+                        <CommandInput placeholder={t('weekly.searchWorkType')} />
+                        <CommandList>
+                          <CommandEmpty>{t('weekly.noWorkTypeFound')}</CommandEmpty>
+                          <CommandGroup>
+                            {workTypes.map((type) => (
+                              <CommandItem
+                                key={type.value}
+                                value={String(type.value)}
+                                onSelect={() => {
+                                  setQuickEntry(prev => ({ ...prev, workType: String(type.value) }));
+                                }}
+                              >
+                                <Check
+                                  className={cn(
+                                    "mr-2 h-4 w-4",
+                                    quickEntry.workType === String(type.value) ? "opacity-100" : "opacity-0"
+                                  )}
+                                />
+                                {type.value} - {type.label}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+
+                {/* Project - only show if work type requires it */}
+                {workTypeRequiresProject(quickEntry.workType) && (
+                  <div>
+                    <Label className="text-xs font-semibold mb-1 block">{t('weekly.project')}</Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          role="combobox"
+                          className="w-full justify-between h-10 text-sm"
+                          disabled={quickEntry.workType === "31" || quickEntry.workType === "35"}
+                        >
+                          {quickEntry.project || t('weekly.selectProject')}
+                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
+                        <Command>
+                          <CommandInput placeholder="Search project..." />
+                          <CommandList>
+                            <CommandEmpty>No project found.</CommandEmpty>
+                            <CommandGroup>
+                              {projects.map((project) => (
+                                <CommandItem
+                                  key={project.id}
+                                  value={project.name}
+                                  onSelect={() => {
+                                    setQuickEntry(prev => ({ ...prev, project: project.name }));
+                                  }}
+                                >
+                                  <Check
+                                    className={cn(
+                                      "mr-2 h-4 w-4",
+                                      quickEntry.project === project.name ? "opacity-100" : "opacity-0"
+                                    )}
+                                  />
+                                  {project.name}
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                )}
+
+                {/* Start Time */}
+                <div>
+                  <Label className="text-xs font-semibold mb-1 block">{t('weekly.from')}</Label>
+                  <Input
+                    type="text"
+                    value={quickEntry.startTime}
+                    onChange={e => setQuickEntry(prev => ({ ...prev, startTime: roundToQuarterHour(e.target.value) }))}
+                    placeholder="08:00"
+                    className="h-10 text-sm"
+                  />
+                </div>
+
+                {/* End Time */}
+                <div>
+                  <Label className="text-xs font-semibold mb-1 block">{t('weekly.to')}</Label>
+                  <Input
+                    type="text"
+                    value={quickEntry.endTime}
+                    onChange={e => setQuickEntry(prev => ({ ...prev, endTime: roundToQuarterHour(e.target.value) }))}
+                    placeholder="17:00"
+                    className="h-10 text-sm"
+                  />
+                </div>
+
+                {/* Calculated Hours */}
+                {quickEntry.startTime && quickEntry.endTime && (
+                  <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-md">
+                    <Label className="text-xs font-semibold mb-1 block">{t('weekly.hours')}</Label>
+                    <div className="text-lg font-bold">
+                      {(() => {
+                        const calculated = calculateHours(quickEntry.startTime, quickEntry.endTime);
+                        const hours = parseFloat(calculated);
+                        return !isNaN(hours) && hours > 0 ? `${hours.toFixed(2)}h` : "-";
+                      })()}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <SheetFooter className="mt-6">
+                <Button variant="outline" onClick={() => {
+                  setFabDialogOpen(false);
+                  setQuickEntry({ workType: "", project: "", startTime: "", endTime: "" });
+                }}>
+                  {t('common.cancel')}
+                </Button>
+                <Button onClick={handleQuickEntry} className="bg-orange-600 hover:bg-orange-700">
+                  {t('common.save')}
+                </Button>
+              </SheetFooter>
+            </SheetContent>
+          </Sheet>
+        </>
+      )}
+    </div>
   );
 };
 
