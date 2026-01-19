@@ -2068,12 +2068,12 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
         }
 
         // Set column widths
-        worksheet.getColumn(1).width = 12;
+        worksheet.getColumn(1).width = 20;
         worksheet.getColumn(2).width = 20;
-        worksheet.getColumn(3).width = 25;
+        worksheet.getColumn(3).width = 30;
         worksheet.getColumn(4).width = 8;
         worksheet.getColumn(5).width = 8;
-        worksheet.getColumn(6).width = 15;
+        worksheet.getColumn(6).width = 18;
         worksheet.getColumn(7).width = 12;
         worksheet.getColumn(8).width = 30;
 
@@ -2118,6 +2118,14 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
         totalRow.getCell(2).font = { bold: true };
         totalRow.getCell(6).value = totalHoursHHMM;
         totalRow.getCell(6).font = { bold: true };
+        
+        // Set print settings for day sheet
+        worksheet.pageSetup = {
+          orientation: 'landscape',
+          fitToPage: true,
+          fitToWidth: 1,
+          fitToHeight: 1
+        };
       });
 
       // Generate filename and convert to base64
@@ -4389,12 +4397,12 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
                     }
                     
                     // Set column widths
-                    worksheet.getColumn(1).width = 12; // Day
+                    worksheet.getColumn(1).width = 20; // Day
                     worksheet.getColumn(2).width = 20; // Work Type
-                    worksheet.getColumn(3).width = 25; // Project Work Order
+                    worksheet.getColumn(3).width = 30; // Project Work Order
                     worksheet.getColumn(4).width = 8;  // From
                     worksheet.getColumn(5).width = 8;  // To
-                    worksheet.getColumn(6).width = 15; // Hours Worked
+                    worksheet.getColumn(6).width = 18; // Hours Worked
                     worksheet.getColumn(7).width = 30; // Space for logo
 
                     // Add header rows

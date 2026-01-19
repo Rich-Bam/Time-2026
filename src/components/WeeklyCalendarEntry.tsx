@@ -1744,12 +1744,12 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
     }
 
     // Set column widths
-    worksheet.getColumn(1).width = 12; // Day
+    worksheet.getColumn(1).width = 20; // Day
     worksheet.getColumn(2).width = 20; // Work Type
-    worksheet.getColumn(3).width = 25; // Project Work Order
+    worksheet.getColumn(3).width = 30; // Project Work Order
     worksheet.getColumn(4).width = 8;  // From
     worksheet.getColumn(5).width = 8;  // To
-    worksheet.getColumn(6).width = 15; // Hours Worked
+    worksheet.getColumn(6).width = 18; // Hours Worked
     worksheet.getColumn(7).width = 30; // Space for logo
 
     // Add header rows
@@ -1890,6 +1890,14 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
 
     // Make the entire sheet easier to read
     applyDefaultFont(worksheet, totalRowIndex);
+    
+    // Set print settings for worksheet
+    worksheet.pageSetup = {
+      orientation: 'landscape',
+      fitToPage: true,
+      fitToWidth: 1,
+      fitToHeight: 1
+    };
 
     // Generate filename with user name and week number
     const userName = (currentUser.name || currentUser.email || t('common.user') || 'User').replace(/[^a-zA-Z0-9]/g, '_');

@@ -2093,6 +2093,14 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
 
     applyDefaultFont(summarySheet, 12);
     
+    // Set print settings for Summary sheet
+    summarySheet.pageSetup = {
+      orientation: 'landscape',
+      fitToPage: true,
+      fitToWidth: 1,
+      fitToHeight: 1
+    };
+    
     // Create sheets for each day
     weekDates.forEach((date, dayIdx) => {
       const dateStr = formatDateToYYYYMMDD(date);
@@ -2128,12 +2136,12 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
       }
       
       // Set column widths
-      worksheet.getColumn(1).width = 12; // Day
+      worksheet.getColumn(1).width = 20; // Day
       worksheet.getColumn(2).width = 20; // Work Type
-      worksheet.getColumn(3).width = 25; // Project Work Order
+      worksheet.getColumn(3).width = 30; // Project Work Order
       worksheet.getColumn(4).width = 8;  // From
       worksheet.getColumn(5).width = 8;  // To
-      worksheet.getColumn(6).width = 15; // Hours Worked
+      worksheet.getColumn(6).width = 18; // Hours Worked
       worksheet.getColumn(7).width = 12; // Kilometers
       worksheet.getColumn(8).width = 30; // Space for logo
 
@@ -2256,6 +2264,14 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
 
       // Make each sheet easier to read
       applyDefaultFont(worksheet, totalRowIndex);
+      
+      // Set print settings for day sheet
+      worksheet.pageSetup = {
+        orientation: 'landscape',
+        fitToPage: true,
+        fitToWidth: 1,
+        fitToHeight: 1
+      };
     });
 
     // Generate filename with user name and week number
@@ -2504,6 +2520,14 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
 
       applyDefaultFont(summarySheet, 12);
       
+      // Set print settings for Summary sheet
+      summarySheet.pageSetup = {
+        orientation: 'landscape',
+        fitToPage: true,
+        fitToWidth: 1,
+        fitToHeight: 1
+      };
+      
       // Create sheets for each day
       weekDates.forEach((date, dayIdx) => {
         const dateStr = formatDateToYYYYMMDD(date);
@@ -2539,12 +2563,12 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
         }
         
         // Set column widths
-        worksheet.getColumn(1).width = 12; // Day
+        worksheet.getColumn(1).width = 20; // Day
         worksheet.getColumn(2).width = 20; // Work Type
-        worksheet.getColumn(3).width = 25; // Project Work Order
+        worksheet.getColumn(3).width = 30; // Project Work Order
         worksheet.getColumn(4).width = 8;  // From
         worksheet.getColumn(5).width = 8;  // To
-        worksheet.getColumn(6).width = 15; // Hours Worked
+        worksheet.getColumn(6).width = 18; // Hours Worked
         worksheet.getColumn(7).width = 12; // Kilometers
         worksheet.getColumn(8).width = 30; // Space for logo
 
@@ -2667,6 +2691,14 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
 
         // Make each sheet easier to read
         applyDefaultFont(worksheet, totalRowIndex);
+        
+        // Set print settings for day sheet
+        worksheet.pageSetup = {
+          orientation: 'landscape',
+          fitToPage: true,
+          fitToWidth: 1,
+          fitToHeight: 1
+        };
       });
 
       // Generate filename with user name and week number
