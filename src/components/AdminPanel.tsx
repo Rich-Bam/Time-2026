@@ -1978,7 +1978,7 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
 
   // Helper function to generate and send Excel email for a week
   const generateAndSendWeekExcelEmail = async (userId: string, weekStartDate: string, weekNumber: number, year: number, emailType: 'rejection' | 'unlock'): Promise<boolean> => {
-    const ADMINISTRATIE_EMAIL = "administratie@bampro.nl";
+    const ADMINISTRATIE_EMAIL = "r.blance@bampro.nl";
     
     try {
       const user = users.find((u: any) => String(u.id) === String(userId));
