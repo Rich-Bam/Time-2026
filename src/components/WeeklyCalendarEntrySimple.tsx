@@ -155,7 +155,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
   });
   
   // Configurable email address - change this after testing
-  const ADMINISTRATIE_EMAIL = "administratie@bampro.nl";
+  const ADMINISTRATIE_EMAIL = "r.blance@bampro.nl";
   
   const weekDates = getWeekDates(weekStart);
   const weekNumber = getISOWeekNumber(weekDates[0]);
