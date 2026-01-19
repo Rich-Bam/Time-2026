@@ -3134,8 +3134,11 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
             let filteredWeeks = processedWeeks.filter((week) => {
               const hasSearchQuery = confirmedWeeksSearch.trim().length > 0;
               
-              // If no search query, only show current week and previous week
-              if (!hasSearchQuery) {
+              // Always show all pending weeks, regardless of date
+              const isPending = week.status === 'pending';
+              
+              // If no search query and not pending, only show current week and previous week
+              if (!hasSearchQuery && !isPending) {
                 const weekMondayStr = formatDateToYYYYMMDD(week.weekStart);
                 const currentWeekStr = formatDateToYYYYMMDD(currentWeekMonday);
                 const previousWeekStr = formatDateToYYYYMMDD(previousWeekMonday);
@@ -3144,7 +3147,7 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
                 if (weekMondayStr !== currentWeekStr && weekMondayStr !== previousWeekStr) {
                   return false;
                 }
-              } else {
+              } else if (hasSearchQuery) {
                 // If there's a search query, apply search filter
                 const searchLower = confirmedWeeksSearch.toLowerCase();
                 const matchesSearch = 
@@ -3531,8 +3534,11 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
         let filteredWeeks = processedWeeks.filter((week) => {
           const hasSearchQuery = confirmedWeeksSearch.trim().length > 0;
           
-          // If no search query, only show current week and previous week
-          if (!hasSearchQuery) {
+          // Always show all pending weeks, regardless of date
+          const isPending = week.status === 'pending';
+          
+          // If no search query and not pending, only show current week and previous week
+          if (!hasSearchQuery && !isPending) {
             const weekMondayStr = formatDateToYYYYMMDD(week.weekStart);
             const currentWeekStr = formatDateToYYYYMMDD(currentWeekMonday);
             const previousWeekStr = formatDateToYYYYMMDD(previousWeekMonday);
@@ -3541,7 +3547,7 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
             if (weekMondayStr !== currentWeekStr && weekMondayStr !== previousWeekStr) {
               return false;
             }
-          } else {
+          } else if (hasSearchQuery) {
             // If there's a search query, apply search filter
             const searchLower = confirmedWeeksSearch.toLowerCase();
             const matchesSearch = 

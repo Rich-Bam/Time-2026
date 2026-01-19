@@ -65,10 +65,31 @@ const TimeOverview = ({ currentUser }: TimeOverviewProps) => {
   // This matches the behavior of Weekly Entry, View Hours, and Export
   filteredEntries = filteredEntries.filter(e => e.startTime && e.endTime);
 
+  // Filter out break entries (work type 35) and entries without a project
+  filteredEntries = filteredEntries.filter(e => {
+    // Filter out break entries
+    if (e.description === "35" || e.description === 35) {
+      return false;
+    }
+    
+    // Get project name
+    const projectName = e.projects?.name || e.project;
+    
+    // Filter out entries with no project or "Geen project"
+    if (!projectName || projectName.trim() === "" || projectName === "Geen project") {
+      return false;
+    }
+    
+    return true;
+  });
+
   // Calculate hours per project
   const projectHoursMap: Record<string, { hours: number; entries: number }> = {};
   filteredEntries.forEach(e => {
-    const projectName = e.projects?.name || e.project || "Geen project";
+    const projectName = e.projects?.name || e.project;
+    // At this point, projectName should always exist and not be "Geen project" due to filtering above
+    if (!projectName) return; // Safety check
+    
     if (!projectHoursMap[projectName]) {
       projectHoursMap[projectName] = { hours: 0, entries: 0 };
     }
