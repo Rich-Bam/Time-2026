@@ -1976,6 +1976,191 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
     }
   };
 
+  // Helper function to generate and send Excel email for a week
+  const generateAndSendWeekExcelEmail = async (userId: string, weekStartDate: string, weekNumber: number, year: number, emailType: 'rejection' | 'unlock'): Promise<boolean> => {
+    const ADMINISTRATIE_EMAIL = "administratie@bampro.nl";
+    
+    try {
+      const user = users.find((u: any) => String(u.id) === String(userId));
+      if (!user) {
+        console.error('User not found for Excel generation');
+        return false;
+      }
+
+      // Calculate week dates
+      const weekStart = new Date(weekStartDate);
+      const weekDates = getWeekDates(weekStart);
+      const fromDate = formatDateToYYYYMMDD(weekDates[0]);
+      const toDate = formatDateToYYYYMMDD(weekDates[6]);
+
+      // Fetch timesheet data
+      const [{ data, error }, { data: overnightRows }] = await Promise.all([
+        supabase
+          .from("timesheet")
+          .select("*, projects(name)")
+          .eq("user_id", userId)
+          .gte("date", fromDate)
+          .lte("date", toDate)
+          .order("date", { ascending: true })
+          .order("startTime", { ascending: true }),
+        supabase
+          .from("overnight_stays")
+          .select("date")
+          .eq("user_id", userId)
+          .gte("date", fromDate)
+          .lte("date", toDate),
+      ]);
+
+      if (error || !data || data.length === 0) {
+        console.error('Failed to fetch timesheet data:', error);
+        return false;
+      }
+
+      // Filter out admin adjustments
+      const filteredData = data.filter((e: any) => e.startTime && e.endTime);
+      if (filteredData.length === 0) {
+        console.error('No valid entries found');
+        return false;
+      }
+
+      // Group entries by day
+      const entriesByDay: Record<string, any[]> = {};
+      weekDates.forEach(date => {
+        const dateStr = formatDateToYYYYMMDD(date);
+        entriesByDay[dateStr] = filteredData.filter((entry: any) => entry.date === dateStr);
+      });
+
+      // Load logo
+      let logoBuffer: ArrayBuffer | null = null;
+      try {
+        const response = await fetch('/bampro-marine-logo.jpg');
+        if (response.ok) logoBuffer = await response.arrayBuffer();
+      } catch (err) {
+        console.warn('Could not load logo:', err);
+      }
+
+      // Create Excel workbook (simplified version matching WeeklyCalendarEntrySimple pattern)
+      const workbook = new ExcelJS.Workbook();
+      const dayNamesEN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+      const overnightSet = new Set((overnightRows || []).map((r: any) => String(r.date)));
+
+      weekDates.forEach((date, dayIdx) => {
+        const dateStr = formatDateToYYYYMMDD(date);
+        const dayEntries = entriesByDay[dateStr] || [];
+        const dayName = dayNamesEN[dayIdx];
+        const formattedDate = formatDateDDMMYY(dateStr);
+        const locale = language === 'nl' ? 'nl-NL' : 'en-GB';
+        const dayNameDisplay = date.toLocaleDateString(locale, { weekday: 'long' });
+
+        // Calculate total hours (excluding breaks)
+        const totalHours = dayEntries.reduce((sum, entry) => {
+          if (entry.description === "35") return sum; // Skip breaks
+          return sum + (parseFloat(entry.hours) || 0);
+        }, 0);
+        const totalHoursHHMM = formatHoursHHMM(totalHours);
+
+        const worksheet = workbook.addWorksheet(dayName);
+
+        // Add logo
+        if (logoBuffer) {
+          const logoId = workbook.addImage({ buffer: logoBuffer, extension: 'jpeg' });
+          worksheet.addImage(logoId, { tl: { col: 6, row: 0 }, ext: { width: 200, height: 60 } });
+        }
+
+        // Set column widths
+        worksheet.getColumn(1).width = 12;
+        worksheet.getColumn(2).width = 20;
+        worksheet.getColumn(3).width = 25;
+        worksheet.getColumn(4).width = 8;
+        worksheet.getColumn(5).width = 8;
+        worksheet.getColumn(6).width = 15;
+        worksheet.getColumn(7).width = 12;
+        worksheet.getColumn(8).width = 30;
+
+        // Headers
+        worksheet.getCell('A1').value = 'Employee Name:';
+        worksheet.getCell('B1').value = user.name || user.email || '';
+        worksheet.getCell('A2').value = 'Date:';
+        worksheet.getCell('B2').value = `From: ${formatDateDDMMYY(fromDate)}`;
+        worksheet.getCell('D2').value = `To: ${formatDateDDMMYY(toDate)}`;
+        worksheet.getCell('A3').value = 'Day:';
+        worksheet.getCell('B3').value = `${formattedDate} ${dayNameDisplay}`;
+        worksheet.getCell('A4').value = 'Week Number:';
+        worksheet.getCell('B4').value = weekNumber.toString();
+        worksheet.getCell('A5').value = 'Year:';
+        worksheet.getCell('B5').value = year.toString();
+
+        // Table headers
+        const headerRow = worksheet.getRow(9);
+        headerRow.values = ['Day', 'Work Type', 'Project Work Order', 'From', 'To', 'Hours Worked', 'Kilometers'];
+        headerRow.font = { bold: true };
+        headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE5E5E5' } };
+
+        // Data rows
+        dayEntries.forEach((entry, idx) => {
+          const workType = parseInt(entry.description || "0");
+          const row = worksheet.getRow(10 + idx);
+          row.values = [
+            dayNameDisplay,
+            getWorkTypeLabel(entry.description || ''),
+            entry.projects?.name || entry.project || '',
+            entry.startTime || '',
+            entry.endTime || '',
+            formatHoursHHMM(parseFloat(entry.hours) || 0),
+            (workType === 20 || workType === 21) ? (entry.kilometers ? String(entry.kilometers) : '') : '',
+          ];
+        });
+
+        // Total row
+        const totalRowIndex = 10 + dayEntries.length;
+        const totalRow = worksheet.getRow(totalRowIndex);
+        totalRow.getCell(2).value = 'Total';
+        totalRow.getCell(2).font = { bold: true };
+        totalRow.getCell(6).value = totalHoursHHMM;
+        totalRow.getCell(6).font = { bold: true };
+      });
+
+      // Generate filename and convert to base64
+      const userName = (user.name || user.email || 'User').replace(/[^a-zA-Z0-9]/g, '_');
+      const filename = `${userName}_Week${weekNumber}_${year}.xlsx`;
+      const buffer = await workbook.xlsx.writeBuffer();
+      const uint8Array = new Uint8Array(buffer);
+      const chunkSize = 0x8000;
+      let binaryString = '';
+      for (let i = 0; i < uint8Array.length; i += chunkSize) {
+        const chunk = uint8Array.subarray(i, Math.min(i + chunkSize, uint8Array.length));
+        binaryString += String.fromCharCode.apply(null, Array.from(chunk) as any);
+      }
+      const base64 = btoa(binaryString);
+
+      // Send via edge function
+      const { data: edgeData, error: edgeError } = await supabase.functions.invoke('send-week-excel-email', {
+        body: {
+          userId: user.id,
+          userName: user.name || user.email || '',
+          userEmail: user.email || '',
+          weekNumber,
+          year,
+          dateFrom: fromDate,
+          dateTo: toDate,
+          excelBase64: base64,
+          recipientEmail: ADMINISTRATIE_EMAIL,
+          filename,
+        },
+      });
+
+      if (edgeError || edgeData?.error) {
+        console.error('Failed to send Excel email:', edgeError || edgeData?.error);
+        return false;
+      }
+
+      return true;
+    } catch (err) {
+      console.error('Error generating/sending Excel email:', err);
+      return false;
+    }
+  };
+
   const handleRejectWeek = async (userId: string, weekStartDate: string) => {
     const user = users.find((u: any) => String(u.id) === String(userId));
     const weekStart = new Date(weekStartDate);
@@ -2017,6 +2202,19 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
 
     toast({ title: t('admin.weekReview.rejectedToastTitle'), description: t('admin.weekReview.rejectedToastDescription') });
 
+    // Send Excel email with timesheet
+    const excelEmailSuccess = await generateAndSendWeekExcelEmail(userId, weekStartDate, weekNumber, year, 'rejection');
+    
+    // Update rejection_email_sent_at if Excel email was sent successfully
+    if (excelEmailSuccess) {
+      await supabase
+        .from('confirmed_weeks')
+        .update({ rejection_email_sent_at: new Date().toISOString() })
+        .eq('user_id', userId)
+        .eq('week_start_date', weekStartDate);
+    }
+
+    // Also send notification email (existing behavior)
     try {
       const { error: emailError } = await supabase.functions.invoke('send-week-review-email', {
         body: {
@@ -2057,9 +2255,23 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
   };
 
   const handleUnlockWeek = async (userId: string, weekStartDate: string) => {
+    // Get week number and year for email
+    const weekStart = new Date(weekStartDate);
+    const weekNum = getISOWeekNumber(weekStart);
+    const year = weekStart.getFullYear();
+
+    // Send Excel email before unlocking
+    const excelEmailSuccess = await generateAndSendWeekExcelEmail(userId, weekStartDate, weekNum, year, 'unlock');
+
     const { error } = await supabase
       .from('confirmed_weeks')
-      .update({ confirmed: false, admin_approved: false, admin_reviewed: false })
+      .update({ 
+        confirmed: false, 
+        admin_approved: false, 
+        admin_reviewed: false,
+        // Update unlock_email_sent_at if Excel email was sent successfully
+        unlock_email_sent_at: excelEmailSuccess ? new Date().toISOString() : null,
+      })
       .eq('user_id', userId)
       .eq('week_start_date', weekStartDate);
     if (error) {
@@ -2067,7 +2279,9 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
     } else {
       toast({ 
         title: "Week Teruggezet", 
-        description: "De week is teruggezet. De gebruiker kan de uren nu opnieuw aanpassen." 
+        description: excelEmailSuccess 
+          ? "De week is teruggezet en Excel is verzonden via email. De gebruiker kan de uren nu opnieuw aanpassen."
+          : "De week is teruggezet. De gebruiker kan de uren nu opnieuw aanpassen." 
       });
       // Refresh confirmed weeks
       const { data } = await supabase

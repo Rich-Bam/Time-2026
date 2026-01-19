@@ -122,6 +122,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
   const [projects, setProjects] = useState<{ id: number; name: string }[]>([]);
   const [submittedEntries, setSubmittedEntries] = useState<Record<string, Entry[]>>({});
   const [confirmedWeeks, setConfirmedWeeks] = useState<Record<string, boolean>>({});
+  const [emailStatus, setEmailStatus] = useState<Record<string, { email_sent_at: string | null; rejection_email_sent_at: string | null; unlock_email_sent_at: string | null }>>({});
   const [dbDaysOff, setDbDaysOff] = useState(0);
   const [customProjectInputs, setCustomProjectInputs] = useState<Record<string, string>>({});
   const [editingEntry, setEditingEntry] = useState<{ id: number; dateStr: string } | null>(null);
@@ -154,7 +155,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
   });
   
   // Configurable email address - change this after testing
-  const ADMINISTRATIE_EMAIL = "r.blance@bampro.nl";
+  const ADMINISTRATIE_EMAIL = "administratie@bampro.nl";
   
   const weekDates = getWeekDates(weekStart);
   const weekNumber = getISOWeekNumber(weekDates[0]);
@@ -457,7 +458,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
     const weekKey = formatDateToYYYYMMDD(weekDates[0]);
     const { data, error } = await supabase
       .from('confirmed_weeks')
-      .select('confirmed, admin_approved, admin_reviewed, admin_review_comment')
+      .select('confirmed, admin_approved, admin_reviewed, admin_review_comment, email_sent_at, rejection_email_sent_at, unlock_email_sent_at')
       .eq('user_id', currentUser.id)
       .eq('week_start_date', weekKey)
       .single();
@@ -483,6 +484,16 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
       console.log('fetchConfirmedStatus updated state:', updated);
       return updated;
     });
+
+    // Update email status
+    setEmailStatus(prev => ({
+      ...prev,
+      [weekKey]: {
+        email_sent_at: data.email_sent_at || null,
+        rejection_email_sent_at: data.rejection_email_sent_at || null,
+        unlock_email_sent_at: data.unlock_email_sent_at || null,
+      }
+    }));
 
     if (data.admin_reviewed && !data.admin_approved) {
       setWeekReviewComment(data.admin_review_comment || "");
@@ -768,6 +779,20 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
           // Week is locked if confirmed = true (regardless of admin status)
           const isLocked = !!(payload.new as any)?.confirmed;
           setConfirmedWeeks(prev => ({ ...prev, [weekKey]: isLocked }));
+          
+          // Update email status from payload
+          const newData = payload.new as any;
+          if (newData) {
+            setEmailStatus(prev => ({
+              ...prev,
+              [weekKey]: {
+                email_sent_at: newData.email_sent_at || null,
+                rejection_email_sent_at: newData.rejection_email_sent_at || null,
+                unlock_email_sent_at: newData.unlock_email_sent_at || null,
+              }
+            }));
+          }
+          
           // Also refresh from database to ensure consistency
           fetchConfirmedStatus();
         }
@@ -2254,7 +2279,8 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
   };
 
   // Send week to email - reuses exact same Excel generation logic as handleExportWeek
-  const handleSendWeekToEmail = async () => {
+  // Returns true if successful, false otherwise
+  const handleSendWeekToEmail = async (updateEmailStatus: boolean = true): Promise<boolean> => {
     // You can change the export font size here
     const EXPORT_FONT_SIZE = 14;
     const EXPORT_FONT_NAME = 'Calibri';
@@ -2274,7 +2300,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
         description: "User not found",
         variant: "destructive",
       });
-      return;
+      return false;
     }
 
     // Check if email is configured
@@ -2284,7 +2310,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
         description: "Email address not configured. Please contact administrator.",
         variant: "destructive",
       });
-      return;
+      return false;
     }
 
     setSendingEmail(true);
@@ -2318,7 +2344,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
           variant: "destructive",
         });
         setSendingEmail(false);
-        return;
+        return false;
       }
 
       if (overnightError) {
@@ -2328,7 +2354,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
           variant: "destructive",
         });
         setSendingEmail(false);
-        return;
+        return false;
       }
 
       if (!data || data.length === 0) {
@@ -2338,7 +2364,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
           variant: "destructive",
         });
         setSendingEmail(false);
-        return;
+        return false;
       }
 
       // Filter out admin adjustments (entries without startTime/endTime are admin adjustments)
@@ -2352,7 +2378,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
           variant: "destructive",
         });
         setSendingEmail(false);
-        return;
+        return false;
       }
 
       // Group entries by day
@@ -2682,7 +2708,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
           variant: "destructive",
         });
         setSendingEmail(false);
-        return;
+        return false;
       }
 
       if (edgeData?.error) {
@@ -2691,21 +2717,49 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
           variant: "destructive",
         });
         setSendingEmail(false);
-        return;
+        return false;
+      }
+
+      // Update email_sent_at in confirmed_weeks table if updateEmailStatus is true
+      if (updateEmailStatus) {
+        const weekKey = formatDateToYYYYMMDD(weekDates[0]);
+        const { error: updateError } = await supabase
+          .from('confirmed_weeks')
+          .update({
+            email_sent_at: new Date().toISOString(),
+            email_sent_by: currentUser.id,
+          })
+          .eq('user_id', currentUser.id)
+          .eq('week_start_date', weekKey);
+        
+        if (updateError) {
+          console.error('Failed to update email_sent_at:', updateError);
+        } else {
+          // Update local state
+          setEmailStatus(prev => ({
+            ...prev,
+            [weekKey]: {
+              ...prev[weekKey],
+              email_sent_at: new Date().toISOString(),
+            }
+          }));
+        }
       }
 
       toast({
         title: t('weekly.emailSentSuccess', { email: ADMINISTRATIE_EMAIL }),
         description: t('weekly.emailSentSuccessDescription', { weekNumber, year: new Date(fromDate).getFullYear() }),
       });
+      setSendingEmail(false);
+      return true;
     } catch (error: any) {
       console.error('Error sending email:', error);
       toast({
         title: t('weekly.emailSentError', { error: error.message || 'Unknown error' }),
         variant: "destructive",
       });
-    } finally {
       setSendingEmail(false);
+      return false;
     }
   };
 
@@ -2714,6 +2768,163 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
     if (!currentUser) return;
     
     const weekKey = formatDateToYYYYMMDD(weekDates[0]);
+    
+    // Validate that Monday through Friday all have entries
+    const weekdays = weekDates.slice(0, 5); // Monday-Friday (indices 0-4)
+    const missingDays: string[] = [];
+    
+    weekdays.forEach((date, idx) => {
+      const dateStr = formatDateToYYYYMMDD(date);
+      const submitted = submittedEntries[dateStr] || [];
+      // Check if day has submitted entries OR has entries in the editable days array
+      const day = days[idx];
+      const hasEditableEntries = day?.entries?.some((e: Entry) => {
+        const hasWorkType = e.workType && e.workType.trim() !== "";
+        if (!hasWorkType) return false;
+        
+        const isDayOff = e.workType === "31";
+        const requiresProject = workTypeRequiresProject(e.workType);
+        
+        // For day off with fullDayOff checkbox, only need workType
+        if (isDayOff && e.fullDayOff) {
+          return true;
+        }
+        
+        // For other entries, check time fields
+        const hasTime = (e.startTime && e.startTime.trim() !== "") || 
+                       (e.endTime && e.endTime.trim() !== "") || 
+                       (e.hours && e.hours.trim() !== "");
+        
+        if (requiresProject) {
+          return e.project && e.project.trim() !== "" && hasTime;
+        }
+        return hasTime;
+      });
+      
+      if (submitted.length === 0 && !hasEditableEntries) {
+        const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+        missingDays.push(dayNames[idx]);
+      }
+    });
+    
+    if (missingDays.length > 0) {
+      toast({
+        title: "Cannot Confirm Week",
+        description: `Please fill in entries for: ${missingDays.join(', ')}. All weekdays (Monday-Friday) must have at least one entry before confirming.`,
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // IMPORTANT: Save all unsaved entries BEFORE confirming the week
+    // This prevents data loss when the week is locked
+    const entriesToSave: any[] = [];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    for (let dayIdx = 0; dayIdx < days.length; dayIdx++) {
+      const day = days[dayIdx];
+      const entryDate = new Date(day.date);
+      entryDate.setHours(0, 0, 0, 0);
+      
+      // Skip future dates
+      if (entryDate > today) {
+        continue;
+      }
+      
+      const isWeekend = day.date.getDay() === 0 || day.date.getDay() === 6;
+      const dateStr = formatDateToYYYYMMDD(day.date);
+      
+      // Check if this day already has submitted entries - skip if it does
+      const alreadySubmitted = (submittedEntries[dateStr] || []).length > 0;
+      
+      for (let entryIdx = 0; entryIdx < day.entries.length; entryIdx++) {
+        const entry = day.entries[entryIdx];
+        
+        // Skip entries without an id that are empty
+        if (!entry.id && !entry.workType && !entry.project && !entry.startTime && !entry.endTime && !entry.hours) {
+          continue;
+        }
+        
+        // Skip if entry already has an id (already saved)
+        if (entry.id) {
+          continue;
+        }
+        
+        const isDayOff = entry.workType === "31";
+        const requiresProject = workTypeRequiresProject(entry.workType);
+        
+        // Validate entry
+        if (!isWeekend && ((!entry.project && requiresProject) || !entry.workType)) {
+          // Skip invalid entries for weekdays, but continue to save valid ones
+          continue;
+        }
+        
+        // For day off with fullDayOff checkbox, validate it's set
+        if (isDayOff && !entry.fullDayOff && !entry.startTime && !entry.endTime && !entry.hours) {
+          // Skip invalid day off entries
+          continue;
+        }
+        
+        // Calculate hours
+        let hoursToSave = 0;
+        if (isDayOff && entry.fullDayOff) {
+          hoursToSave = 8; // Full day off = 8 hours
+        } else if (entry.startTime && entry.endTime) {
+          const calculated = calculateHours(entry.startTime, entry.endTime);
+          hoursToSave = parseFloat(calculated) || 0;
+        } else if (entry.hours) {
+          hoursToSave = Number(entry.hours);
+        }
+        
+        // Skip entries with invalid hours (unless it's a day off, which can be 0)
+        if (hoursToSave <= 0 && !isDayOff) {
+          continue;
+        }
+        
+        // For day off, ensure we have at least 8 hours if fullDayOff is checked
+        if (isDayOff && entry.fullDayOff && hoursToSave < 8) {
+          hoursToSave = 8;
+        }
+        
+        entriesToSave.push({
+          project: (isDayOff || entry.workType === "35" || entry.workType === "20" || entry.workType === "21") ? (entry.project?.trim() || null) : entry.project,
+          user_id: currentUser.id,
+          date: dateStr,
+          hours: hoursToSave,
+          description: entry.workType,
+          startTime: entry.startTime || null,
+          endTime: entry.endTime || null,
+          stayed_overnight: !!day.stayedOvernight,
+          kilometers: (entry.workType === "20" || entry.workType === "21") && entry.kilometers ? parseFloat(entry.kilometers) : null,
+        });
+      }
+    }
+    
+    // Save all unsaved entries before confirming
+    if (entriesToSave.length > 0) {
+      const { error: saveError } = await supabase.from("timesheet").insert(entriesToSave);
+      
+      if (saveError) {
+        toast({
+          title: "Error Saving Entries",
+          description: `Failed to save entries before confirming: ${saveError.message}. Please try again.`,
+          variant: "destructive",
+        });
+        return; // Don't confirm if save fails
+      }
+      
+      // Refresh submitted entries and days off after saving
+      await Promise.all([
+        ...weekDates.map(d => fetchSubmittedEntries(formatDateToYYYYMMDD(d))),
+        entriesToSave.some(e => e.description === "31") ? fetchDaysOff() : Promise.resolve()
+      ]);
+      
+      toast({
+        title: "Entries Saved",
+        description: `${entriesToSave.length} entry(s) saved before confirming the week.`,
+      });
+    }
     
     // Check if week already has confirmed status
     const { data: existing } = await supabase
@@ -2776,19 +2987,16 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
         entries: [] // Clear all editable entries when week is confirmed
       })));
       
-      // If user is weekly_only, show dialog to optionally send email
-      if (currentUser?.userType === 'weekly_only') {
-        setShowSendEmailDialog(true);
-      } else {
-        // For non-weekly-only users, show existing success toast
-        toast({
-          title: "Week Confirmed",
-          description: "This week has been confirmed and locked. You can no longer make changes.",
-        });
-      }
+      // Show dialog for all users to optionally send email
+      setShowSendEmailDialog(true);
       
-      // DON'T call fetchConfirmedStatus here - it might overwrite our state
-      // The state is already set correctly above
+      toast({
+        title: "Week Confirmed",
+        description: "This week has been confirmed and locked. You can no longer make changes.",
+      });
+      
+      // Refresh confirmed status
+      await fetchConfirmedStatus();
     }
   };
 
@@ -2802,10 +3010,26 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
   // Check if week has submitted entries for all weekdays (Monday through Friday)
   const hasSubmittedEntries = () => {
     // Check that all weekdays (Monday-Friday, indices 0-4) have at least one entry
-    return weekDates.slice(0, 5).every(date => {
+    // This checks both submitted entries AND editable entries in the days array
+    return weekDates.slice(0, 5).every((date, idx) => {
       const dateStr = formatDateToYYYYMMDD(date);
-      const entries = submittedEntries[dateStr] || [];
-      return entries.length > 0;
+      const submitted = submittedEntries[dateStr] || [];
+      
+      // Also check editable entries for this day
+      const day = days[idx];
+      const hasEditableEntries = day?.entries?.some((e: Entry) => {
+        const hasWorkType = e.workType && e.workType.trim() !== "";
+        const hasTime = (e.startTime && e.startTime.trim() !== "") || 
+                       (e.endTime && e.endTime.trim() !== "") || 
+                       (e.hours && e.hours.trim() !== "");
+        const requiresProject = workTypeRequiresProject(e.workType);
+        if (requiresProject) {
+          return hasWorkType && e.project && e.project.trim() !== "" && hasTime;
+        }
+        return hasWorkType && hasTime;
+      });
+      
+      return submitted.length > 0 || hasEditableEntries;
     });
   };
   // Debug logging
@@ -3010,8 +3234,24 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
       </div>
 
       {isLocked && (
-        <div className="p-1.5 sm:p-3 bg-yellow-50 border border-yellow-200 rounded-md sm:rounded text-yellow-800 text-xs sm:text-sm">
-          ⚠️ {t('weekly.confirmed')}
+        <div className="p-1.5 sm:p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-md sm:rounded text-yellow-800 dark:text-yellow-200 text-xs sm:text-sm">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span>⚠️ {t('weekly.confirmed')}</span>
+            {emailStatus[weekKey]?.email_sent_at ? (
+              <div className="flex items-center gap-1.5 text-green-700 dark:text-green-400">
+                <Mail className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                <Check className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                <span className="text-xs">
+                  Email Sent {new Date(emailStatus[weekKey].email_sent_at).toLocaleDateString()}
+                </span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5 text-gray-500 dark:text-gray-400">
+                <Mail className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                <span className="text-xs">Email not sent</span>
+              </div>
+            )}
+          </div>
         </div>
       )}
       
@@ -3050,7 +3290,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
                     <AccordionTrigger className="px-2 py-1.5 hover:no-underline">
                       <div className="flex items-center justify-between w-full mr-2">
                         <div className="flex items-center gap-2 flex-1 min-w-0">
-                          <h3 className="font-bold text-sm text-gray-800 dark:text-gray-900 truncate">
+                          <h3 className="font-bold text-sm text-gray-800 dark:text-gray-100 truncate">
                             {day.date.toLocaleDateString(language === 'nl' ? 'nl-NL' : 'en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}
                           </h3>
                           {dailySummary.entryCount > 0 && (
@@ -3569,13 +3809,13 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
                       {/* Total for mobile */}
                       <div className="bg-gray-200 dark:bg-gray-700 rounded-lg border-2 border-gray-400 dark:border-gray-600 p-3 font-bold">
                         <div className="flex items-center justify-between mb-1">
-                          <span className="text-sm sm:text-base text-gray-900 dark:text-gray-900">{t('weekly.hours')}:</span>
+                          <span className="text-sm sm:text-base text-gray-900 dark:text-gray-100">{t('weekly.hours')}:</span>
                           <span className="text-sm sm:text-base text-gray-900 dark:text-gray-100">
                             {calculateDayTotal(dayIdx, dateStr).toFixed(2)}h
                           </span>
                         </div>
                         <div className="flex items-center justify-between">
-                          <span className="text-sm sm:text-base text-gray-900 dark:text-gray-900">{t('weekly.kilometers')}:</span>
+                          <span className="text-sm sm:text-base text-gray-900 dark:text-gray-100">{t('weekly.kilometers')}:</span>
                           <span className="text-sm sm:text-base text-gray-900 dark:text-gray-100">
                             {(() => {
                               const kmTotal = calculateDayKilometersTotal(dayIdx, dateStr);
@@ -4441,7 +4681,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
                                     value={entry.kilometers || ""}
                                     onChange={e => handleEntryChange(dayIdx, entryIdx, "kilometers", e.target.value)}
                                     placeholder="0.0"
-                                    className="h-9 text-sm w-24 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                                    className="h-9 text-sm w-24 bg-white dark:bg-gray-800 text-white-900 dark:text-gray-100"
                                     disabled={isLocked}
                                   />
                                 ) : (
@@ -4568,13 +4808,18 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
           <CardContent className="p-4">
             <div className="flex flex-col gap-3">
               <div className="text-sm text-white-800">
-              <strong>Note:</strong> {t('weekly.confirmNote') || 'Once you confirm this week, you will no longer be able to make changes. Please make sure all entries are correct before confirming.'}
-              
+                <strong>Note:</strong> {t('weekly.confirmNote') || 'Once you confirm this week, you will no longer be able to make changes. Please make sure all entries are correct before confirming.'}
               </div>
+              {!hasSubmittedEntries() && (
+                <div className="text-sm text-red-600 dark:text-red-400 font-semibold">
+                  ⚠️ Please fill in entries for all weekdays (Monday-Friday) before confirming.
+                </div>
+              )}
               <Button 
-                className="w-full bg-orange-600 hover:bg-orange-700 text-white" 
+                className="w-full bg-orange-600 hover:bg-orange-700 text-white disabled:bg-gray-400 disabled:cursor-not-allowed" 
                 variant="default" 
                 onClick={handleConfirmWeek}
+                disabled={!hasSubmittedEntries()}
               >
                 <strong>{t('weekly.confirm') || 'Confirm Week'}</strong>
               </Button>
@@ -4594,7 +4839,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
         </Card>
       )}
       
-      {/* Send Email Dialog - shown after week confirmation for weekly_only users */}
+      {/* Send Email Dialog - shown after week confirmation for all users */}
       <Dialog open={showSendEmailDialog} onOpenChange={setShowSendEmailDialog}>
         <DialogContent>
           <DialogHeader>
@@ -4615,7 +4860,11 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
               className="bg-orange-600 hover:bg-orange-700 text-white"
               onClick={async () => {
                 setShowSendEmailDialog(false);
-                await handleSendWeekToEmail();
+                const success = await handleSendWeekToEmail(true);
+                if (success) {
+                  // Refresh status to update email_sent_at in UI
+                  await fetchConfirmedStatus();
+                }
               }}
               disabled={sendingEmail}
             >
