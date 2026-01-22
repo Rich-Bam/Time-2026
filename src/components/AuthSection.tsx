@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -34,6 +34,64 @@ const AuthSection = ({ onLogin, setCurrentUser }: AuthSectionProps) => {
   const [resetLoading, setResetLoading] = useState(false);
   const [resetMessage, setResetMessage] = useState("");
 
+  // Helper functions for offline mode
+  const getOfflineUsers = (): any[] => {
+    try {
+      const stored = localStorage.getItem('bampro_offline_users');
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  };
+
+  const getOfflineUser = (email: string): any | null => {
+    const users = getOfflineUsers();
+    return users.find((u: any) => u.email.toLowerCase() === email.toLowerCase()) || null;
+  };
+
+  const setupOfflineTestUsers = () => {
+    // Create default test users for offline mode
+    const testUsers = [
+      {
+        id: 'offline-user-1',
+        email: 'test@bampro.nl',
+        name: 'Test User',
+        password: 'test123', // Plaintext for easy testing
+        isAdmin: false,
+        must_change_password: false,
+        approved: true,
+        created_at: new Date().toISOString(),
+        photo_url: null,
+        phone_number: null,
+        userType: null,
+        weekly_view_option: null,
+      },
+      {
+        id: 'offline-admin-1',
+        email: 'admin@bampro.nl',
+        name: 'Test Admin',
+        password: 'admin123', // Plaintext for easy testing
+        isAdmin: true,
+        must_change_password: false,
+        approved: true,
+        created_at: new Date().toISOString(),
+        photo_url: null,
+        phone_number: null,
+        userType: null,
+        weekly_view_option: null,
+      },
+    ];
+    localStorage.setItem('bampro_offline_users', JSON.stringify(testUsers));
+    console.log('✅ Offline test users created. Use test@bampro.nl / test123 or admin@bampro.nl / admin123');
+  };
+
+  // Initialize offline test users if they don't exist
+  useEffect(() => {
+    if (typeof window !== 'undefined' && !localStorage.getItem('bampro_offline_users')) {
+      setupOfflineTestUsers();
+    }
+  }, []);
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!loginData.email || !loginData.password) {
@@ -51,51 +109,99 @@ const AuthSection = ({ onLogin, setCurrentUser }: AuthSectionProps) => {
     let user = null;
     let error = null;
     let lastError = null;
+    let isNetworkError = false;
     
     // Retry up to 3 times with exponential backoff
     // Note: Login queries are not cached by service worker (NetworkOnly strategy)
     for (let attempt = 1; attempt <= 3; attempt++) {
-      const { data, error: queryError } = await supabase
-        .from("users")
-        .select("id, email, name, password, isAdmin, must_change_password, approved, created_at, photo_url, phone_number, userType, weekly_view_option")
-        .eq("email", loginData.email)
-        .single();
-      
-      if (!queryError && data) {
-        user = data;
-        error = null;
-        break; // Success, exit retry loop
-      }
-      
-      lastError = queryError;
-      
-      // Log error details for debugging
-      console.error(`Login attempt ${attempt} failed:`, {
-        error: queryError,
-        code: queryError?.code,
-        message: queryError?.message,
-        details: queryError?.details,
-        hint: queryError?.hint,
-        email: loginData.email,
-      });
-      
-      // Don't retry on certain errors (e.g., user doesn't exist)
-      if (queryError?.code === 'PGRST116' || queryError?.message?.includes('No rows')) {
-        // User doesn't exist, no point retrying
-        error = queryError;
-        break;
-      }
-      
-      // If not last attempt, wait before retry (exponential backoff)
-      if (attempt < 3) {
-        await new Promise(resolve => setTimeout(resolve, attempt * 500)); // 500ms, 1000ms delays
-      } else {
-        error = queryError;
+      try {
+        const { data, error: queryError } = await supabase
+          .from("users")
+          .select("id, email, name, password, isAdmin, must_change_password, approved, created_at, photo_url, phone_number, userType, weekly_view_option")
+          .eq("email", loginData.email)
+          .single();
+        
+        if (!queryError && data) {
+          user = data;
+          error = null;
+          break; // Success, exit retry loop
+        }
+        
+        lastError = queryError;
+        
+        // Log error details for debugging
+        console.error(`Login attempt ${attempt} failed:`, {
+          error: queryError,
+          code: queryError?.code,
+          message: queryError?.message,
+          details: queryError?.details,
+          hint: queryError?.hint,
+          email: loginData.email,
+        });
+        
+        // Don't retry on certain errors (e.g., user doesn't exist)
+        if (queryError?.code === 'PGRST116' || queryError?.message?.includes('No rows')) {
+          // User doesn't exist, no point retrying
+          error = queryError;
+          break;
+        }
+        
+        // Check if it's a network error
+        if (queryError?.message?.includes('network') || 
+            queryError?.message?.includes('fetch') || 
+            queryError?.message?.includes('Failed to fetch') ||
+            !navigator.onLine) {
+          isNetworkError = true;
+        }
+        
+        // If not last attempt, wait before retry (exponential backoff)
+        if (attempt < 3) {
+          await new Promise(resolve => setTimeout(resolve, attempt * 500)); // 500ms, 1000ms delays
+        } else {
+          error = queryError;
+        }
+      } catch (err: any) {
+        // Catch network errors that might not be caught by Supabase
+        if (err?.message?.includes('fetch') || err?.message?.includes('network') || !navigator.onLine) {
+          isNetworkError = true;
+          error = err;
+          break;
+        }
+        error = err;
       }
     }
     
-    // Handle errors with better error messages
-    if (error || !user) {
+    // If network error, try offline mode
+    if ((error || !user) && (isNetworkError || !navigator.onLine)) {
+      console.log('🌐 Offline mode: Trying to login with offline users...');
+      const offlineUser = getOfflineUser(loginData.email);
+      
+      if (offlineUser) {
+        // Check password (offline users use plaintext passwords)
+        if (offlineUser.password === loginData.password) {
+          user = offlineUser;
+          error = null;
+          console.log('✅ Offline login successful');
+        } else {
+          toast({
+            title: t('auth.loginFailed'),
+            description: t('auth.incorrectPassword'),
+            variant: "destructive",
+          });
+          return;
+        }
+      } else {
+        toast({
+          title: t('auth.loginFailed'),
+          description: t('auth.userNotFound'),
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+    
+    // Handle errors with better error messages (only if not using offline mode)
+    if ((error || !user) && !isNetworkError) {
       // Check for specific error types
       const errorMessage = error?.message || '';
       const errorCode = error?.code || '';
@@ -146,19 +252,26 @@ const AuthSection = ({ onLogin, setCurrentUser }: AuthSectionProps) => {
     }
     // Check password (supports both hashed and plaintext for migration)
     let passwordValid = false;
-    if (isPasswordHashed(user.password)) {
-      // Password is hashed, verify using bcrypt
-      passwordValid = await verifyPassword(loginData.password, user.password);
-    } else {
-      // Password is plaintext (legacy), compare directly and hash it for next time
-      passwordValid = user.password === loginData.password;
-      if (passwordValid) {
-        // Hash the password and update it in the database
-        const hashedPassword = await hashPassword(loginData.password);
-        await supabase
-          .from("users")
-          .update({ password: hashedPassword })
-          .eq("id", user.id);
+    if (user) {
+      if (isPasswordHashed(user.password)) {
+        // Password is hashed, verify using bcrypt
+        passwordValid = await verifyPassword(loginData.password, user.password);
+      } else {
+        // Password is plaintext (legacy or offline), compare directly
+        passwordValid = user.password === loginData.password;
+        // Only try to hash and update if we're online and it's not an offline user
+        if (passwordValid && navigator.onLine && !user.id?.startsWith('offline-')) {
+          try {
+            const hashedPassword = await hashPassword(loginData.password);
+            await supabase
+              .from("users")
+              .update({ password: hashedPassword })
+              .eq("id", user.id);
+          } catch (err) {
+            // Ignore errors when updating password (might be offline)
+            console.warn('Could not update password hash:', err);
+          }
+        }
       }
     }
     
@@ -174,7 +287,7 @@ const AuthSection = ({ onLogin, setCurrentUser }: AuthSectionProps) => {
     // Save session only if rememberMe is checked
     // If rememberMe is checked: 168 hours (7 days) in localStorage
     // If not checked: no session saved, user must login again each time
-    if (rememberMe) {
+    if (rememberMe && user) {
       const sessionData = {
         user: {
           id: user.id,
@@ -197,14 +310,16 @@ const AuthSection = ({ onLogin, setCurrentUser }: AuthSectionProps) => {
       sessionStorage.removeItem('bampro_user_session');
     }
     
-    setCurrentUser(user);
-    onLogin(true);
-    toast({
-      title: t('auth.loginSuccessful'),
-      description: rememberMe 
-        ? t('auth.welcomeRememberMe', { name: user.name || user.email })
-        : t('auth.welcome', { name: user.name || user.email }),
-    });
+    if (user) {
+      setCurrentUser(user);
+      onLogin(true);
+      toast({
+        title: t('auth.loginSuccessful'),
+        description: rememberMe 
+          ? t('auth.welcomeRememberMe', { name: user.name || user.email })
+          : t('auth.welcome', { name: user.name || user.email }),
+      });
+    }
   };
 
   // Simple create-user helper to verify Supabase connectivity
