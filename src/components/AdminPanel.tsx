@@ -9,7 +9,7 @@ import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { User, Calendar, Pencil, Check, X, Download, FileText, FileDown, Calendar as CalendarIcon, Users, Eye, AlertTriangle, Trash2, BarChart3, RefreshCw, Clock, Search, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import * as XLSX from "xlsx";
@@ -74,6 +74,11 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
   const isAdministratie = (user: any): boolean => {
     return user?.userType === 'administratie';
   };
+  
+  // Helper function to check if user is super admin
+  const isSuperAdmin = (user: any): boolean => {
+    return user?.email === SUPER_ADMIN_EMAIL;
+  };
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
@@ -120,6 +125,13 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
   const [errorLogsUserFilter, setErrorLogsUserFilter] = useState<string>('all');
   const [selectedErrorLog, setSelectedErrorLog] = useState<any | null>(null);
   const [errorLogNotes, setErrorLogNotes] = useState("");
+  
+  // Delete requests state (only for super admin)
+  const [deleteRequests, setDeleteRequests] = useState<any[]>([]);
+  const [deleteRequestsLoading, setDeleteRequestsLoading] = useState(false);
+  const [approveDeleteRequestDialogOpen, setApproveDeleteRequestDialogOpen] = useState(false);
+  const [rejectDeleteRequestDialogOpen, setRejectDeleteRequestDialogOpen] = useState(false);
+  const [selectedDeleteRequest, setSelectedDeleteRequest] = useState<any | null>(null);
   
   // Export state
   const [exporting, setExporting] = useState(false);
@@ -322,8 +334,31 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
 
   useEffect(() => {
     fetchUsers();
+    if (isSuperAdmin(currentUser)) {
+      fetchDeleteRequests();
+    }
+    // Set userType to "user" for administratie users
+    if (isAdministratie(currentUser) && !isSuperAdmin(currentUser)) {
+      setForm(f => ({ ...f, userType: "user" }));
+    }
     // eslint-disable-next-line
   }, []);
+
+  // Fetch delete requests when super admin logs in or currentUser changes
+  useEffect(() => {
+    if (isSuperAdmin(currentUser)) {
+      console.log("AdminPanel: Super admin detected, fetching delete requests");
+      fetchDeleteRequests();
+    }
+  }, [currentUser]);
+
+  // Auto-refresh delete requests when super admin opens the delete-requests tab
+  useEffect(() => {
+    if (isSuperAdmin(currentUser) && activeTab === 'delete-requests') {
+      console.log("AdminPanel: Delete requests tab opened, fetching requests");
+      fetchDeleteRequests();
+    }
+  }, [activeTab, currentUser]);
 
   // Build users map for quick lookup
   useEffect(() => {
@@ -657,6 +692,17 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
       return;
     }
     
+    // Prevent administratie users from creating non-user types
+    if (isAdministratie(currentUser) && !isSuperAdmin(currentUser) && form.userType !== 'user') {
+      toast({ 
+        title: "Actie niet toegestaan", 
+        description: "Administratie-gebruikers kunnen alleen gebruikers met type 'user' uitnodigen.", 
+        variant: "destructive" 
+      });
+      setForm(f => ({ ...f, userType: "user" }));
+      return;
+    }
+    
     // Validate password length
     if (form.password.length < 6) {
       toast({ 
@@ -719,7 +765,8 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
           title: "Uitnodiging verstuurd",
           description: `Een uitnodigingsemail is verstuurd naar ${form.email}. Check je inbox (en spam folder) voor de uitnodigingslink.`,
       });
-      setForm({ email: "", name: "", password: "", userType: "user", must_change_password: true });
+      const defaultUserType = (isAdministratie(currentUser) && !isSuperAdmin(currentUser)) ? "user" : "user";
+      setForm({ email: "", name: "", password: "", userType: defaultUserType, must_change_password: true });
       fetchUsers();
         return;
       }
@@ -823,7 +870,8 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
         description: `${form.email} is aangemaakt. Let op: er is geen email verstuurd. De gebruiker kan direct inloggen met het wachtwoord.`,
         variant: "default",
       });
-      setForm({ email: "", name: "", password: "", userType: "user", must_change_password: true });
+      const defaultUserType = (isAdministratie(currentUser) && !isSuperAdmin(currentUser)) ? "user" : "user";
+      setForm({ email: "", name: "", password: "", userType: defaultUserType, must_change_password: true });
       fetchUsers();
     }
   };
@@ -1392,6 +1440,15 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
   };
   // Change user type (super admin, admin, or user)
   const handleChangeUserType = async (userId: string, userEmail: string, newUserType: string) => {
+    // Prevent administratie users from changing user types
+    if (isAdministratie(currentUser) && !isSuperAdmin(currentUser)) {
+      toast({
+        title: "Actie niet toegestaan",
+        description: "Administratie-gebruikers kunnen geen user types wijzigen.",
+        variant: "destructive",
+      });
+      return;
+    }
     // Prevent super admin from changing their own account type
     if (currentUser?.email === SUPER_ADMIN_EMAIL && String(userId) === String(currentUser.id)) {
       toast({
@@ -1527,7 +1584,91 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
     }
   };
 
-  // Delete user
+  // Request user deletion (for administratie users)
+  const handleRequestUserDeletion = async (userId: string, userEmail: string, userName: string) => {
+    if (userEmail === SUPER_ADMIN_EMAIL) {
+      toast({ title: "Actie niet toegestaan", description: "Je kunt de super admin niet verwijderen.", variant: "destructive" });
+      return;
+    }
+    if (userId === currentUser.id) {
+      toast({ title: "Actie niet toegestaan", description: "Je kunt je eigen account niet verwijderen.", variant: "destructive" });
+      return;
+    }
+    
+    // Create delete request
+    const { data, error } = await supabase.from("delete_requests").insert([
+      {
+        requested_user_id: userId,
+        requested_user_email: userEmail,
+        requested_user_name: userName || userEmail,
+        requested_by_id: String(currentUser.id),
+        requested_by_email: currentUser.email,
+        requested_by_name: currentUser.name || currentUser.email,
+        status: 'pending',
+      },
+    ]).select();
+    
+    if (error) {
+      toast({ title: "Fout", description: error.message, variant: "destructive" });
+      return;
+    }
+    
+    // Send email to super admin via edge function
+    let emailSent = false;
+    let emailError: any = null;
+    try {
+      const { data: emailData, error: emailErr } = await supabase.functions.invoke('send-delete-request-email', {
+        body: {
+          deleteRequestId: data[0].id,
+          requestedUserEmail: userEmail,
+          requestedUserName: userName || userEmail,
+          requestedByEmail: currentUser.email,
+          requestedByName: currentUser.name || currentUser.email,
+        },
+      });
+      
+      if (emailErr) {
+        emailError = emailErr;
+        console.error('Failed to send delete request email:', emailErr);
+      } else if (emailData?.success) {
+        emailSent = true;
+        console.log('Delete request email sent successfully');
+      }
+    } catch (err) {
+      emailError = err;
+      console.error('Failed to send delete request email:', err);
+    }
+    
+    // Show appropriate toast message
+    if (emailSent) {
+      toast({ 
+        title: "Verzoek ingediend", 
+        description: `Het verzoek om ${userEmail} te verwijderen is naar de super admin gestuurd. Email is verzonden.` 
+      });
+    } else if (emailError) {
+      // Request is saved, but email failed
+      const errorMessage = emailError?.message || 'Onbekende fout';
+      toast({ 
+        title: "Verzoek ingediend", 
+        description: `Het verzoek om ${userEmail} te verwijderen is opgeslagen, maar de email kon niet worden verstuurd: ${errorMessage}. De super admin kan het verzoek zien in het admin panel.`,
+        variant: "default",
+        duration: 8000,
+      });
+    } else {
+      // Request is saved, email status unknown
+      toast({ 
+        title: "Verzoek ingediend", 
+        description: `Het verzoek om ${userEmail} te verwijderen is naar de super admin gestuurd.` 
+      });
+    }
+    
+    // Refresh delete requests if super admin
+    if (isSuperAdmin(currentUser)) {
+      fetchDeleteRequests();
+    }
+  };
+
+  // Delete user (only for super admin)
   const handleDeleteUser = async (userId: string, userEmail: string) => {
     if (userEmail === SUPER_ADMIN_EMAIL) {
       toast({ title: "Action not allowed", description: "You cannot delete the super admin.", variant: "destructive" });
@@ -1537,6 +1678,14 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
       toast({ title: "Action not allowed", description: "You cannot delete your own account.", variant: "destructive" });
       return;
     }
+    
+    // If administratie user, create a request instead
+    if (isAdministratie(currentUser) && !isSuperAdmin(currentUser)) {
+      const user = users.find(u => String(u.id) === String(userId));
+      await handleRequestUserDeletion(userId, userEmail, user?.name || userEmail);
+      return;
+    }
+    
     const confirmText = window.prompt(`Type DELETE to confirm deletion of user ${userEmail}`);
     if (confirmText !== "DELETE") {
       toast({ title: "Cancelled", description: "User was not deleted." });
@@ -1549,6 +1698,296 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
       toast({ title: "User deleted" });
       fetchUsers();
     }
+  };
+
+  // Fetch delete requests (only for super admin)
+  const fetchDeleteRequests = async () => {
+    if (!isSuperAdmin(currentUser)) return;
+    
+    setDeleteRequestsLoading(true);
+    const { data, error } = await supabase
+      .from("delete_requests")
+      .select("*")
+      .eq("status", "pending")
+      .order("created_at", { ascending: false });
+    
+    if (error) {
+      console.error("Error fetching delete requests:", error);
+      toast({ title: "Fout", description: "Kon verwijderverzoeken niet ophalen.", variant: "destructive" });
+    } else {
+      setDeleteRequests(data || []);
+    }
+    setDeleteRequestsLoading(false);
+  };
+
+  // Real-time subscription for delete requests (only for super admin)
+  useEffect(() => {
+    if (!isSuperAdmin(currentUser)) {
+      console.log("AdminPanel: Not super admin, skipping delete requests real-time subscription");
+      return;
+    }
+
+    console.log("AdminPanel: Setting up real-time subscription for delete requests");
+
+    const channel = supabase
+      .channel('delete-requests-changes', {
+        config: {
+          broadcast: { self: false },
+        },
+      })
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'delete_requests',
+        },
+        async (payload) => {
+          console.log("AdminPanel: Real-time INSERT event received for delete request:", payload);
+          const newRequest = payload.new as any;
+          // Only show notification if status is pending
+          if (newRequest.status === 'pending') {
+            console.log("AdminPanel: New pending delete request from", newRequest.requested_by_email);
+            toast({
+              title: "Nieuw Verwijderverzoek",
+              description: `${newRequest.requested_by_name || newRequest.requested_by_email} heeft een verzoek ingediend om ${newRequest.requested_user_email} te verwijderen.`,
+              duration: 10000, // Show for 10 seconds
+            });
+            // Refresh the delete requests list
+            await fetchDeleteRequests();
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'delete_requests',
+        },
+        async (payload) => {
+          console.log("AdminPanel: Real-time UPDATE event received for delete request:", payload);
+          // Refresh the delete requests list when a request is updated (e.g., approved/rejected)
+          await fetchDeleteRequests();
+        }
+      )
+      .subscribe((status) => {
+        console.log("AdminPanel: Delete requests subscription status:", status);
+        if (status === 'SUBSCRIBED') {
+          console.log("AdminPanel: Successfully subscribed to delete requests real-time updates");
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error("AdminPanel: Channel error, real-time may not be enabled");
+        }
+      });
+
+    // Cleanup subscription on unmount
+    return () => {
+      console.log("AdminPanel: Cleaning up delete requests subscription");
+      supabase.removeChannel(channel);
+    };
+  }, [currentUser]);
+
+  // Real-time subscription for delete request feedback (only for administratie users)
+  useEffect(() => {
+    if (!isAdministratie(currentUser) || isSuperAdmin(currentUser)) {
+      console.log("AdminPanel: Not administratie user, skipping delete request feedback subscription");
+      return;
+    }
+
+    console.log("AdminPanel: Setting up real-time subscription for delete request feedback");
+
+    const channel = supabase
+      .channel('delete-requests-feedback', {
+        config: {
+          broadcast: { self: false },
+        },
+      })
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'delete_requests',
+        },
+        async (payload) => {
+          console.log("AdminPanel: Real-time UPDATE event received for delete request feedback:", payload);
+          const updated = payload.new as any;
+          // Only show notification if this is the current user's request and it was just processed
+          if (updated.requested_by_id === String(currentUser.id) && 
+              (updated.status === 'approved' || updated.status === 'rejected')) {
+            console.log("AdminPanel: Delete request processed for administratie user");
+            const userEmail = updated.requested_user_email;
+            const userName = updated.requested_user_name || userEmail;
+            
+            if (updated.status === 'approved') {
+              toast({
+                title: t('admin.deleteRequest.feedbackApproved'),
+                description: t('admin.deleteRequest.feedbackApprovedDescription', { email: userName }),
+                duration: 10000, // Show for 10 seconds
+              });
+            } else {
+              toast({
+                title: t('admin.deleteRequest.feedbackRejected'),
+                description: t('admin.deleteRequest.feedbackRejectedDescription', { email: userName }),
+                duration: 10000, // Show for 10 seconds
+              });
+            }
+          }
+        }
+      )
+      .subscribe((status) => {
+        console.log("AdminPanel: Delete request feedback subscription status:", status);
+        if (status === 'SUBSCRIBED') {
+          console.log("AdminPanel: Successfully subscribed to delete request feedback real-time updates");
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error("AdminPanel: Channel error, real-time may not be enabled");
+        }
+      });
+
+    // Cleanup subscription on unmount
+    return () => {
+      console.log("AdminPanel: Cleaning up delete request feedback subscription");
+      supabase.removeChannel(channel);
+    };
+  }, [currentUser]);
+
+  // Open approve dialog
+  const handleOpenApproveDialog = (request: any) => {
+    setSelectedDeleteRequest(request);
+    setApproveDeleteRequestDialogOpen(true);
+  };
+
+  // Approve delete request and delete user (called from dialog)
+  const handleApproveDeleteRequest = async () => {
+    if (!selectedDeleteRequest || !isSuperAdmin(currentUser)) {
+      toast({ title: "Geen toegang", description: "Alleen super admin kan verzoeken goedkeuren.", variant: "destructive" });
+      return;
+    }
+    
+    const { id: requestId, requested_user_id: userId, requested_user_email: userEmail } = selectedDeleteRequest;
+    
+    // Delete the user
+    const { error: deleteError } = await supabase.from("users").delete().eq("id", userId);
+    if (deleteError) {
+      toast({ title: "Fout", description: deleteError.message, variant: "destructive" });
+      return;
+    }
+    
+    // Update request status
+    const { error: updateError } = await supabase
+      .from("delete_requests")
+      .update({
+        status: 'approved',
+        processed_at: new Date().toISOString(),
+        processed_by_id: String(currentUser.id),
+      })
+      .eq("id", requestId);
+    
+    if (updateError) {
+      console.error("Error updating delete request:", updateError);
+      // User is already deleted, so just show a warning
+      toast({ 
+        title: "Gebruiker verwijderd", 
+        description: "Gebruiker is verwijderd, maar verzoekstatus kon niet worden bijgewerkt.",
+        variant: "default"
+      });
+    } else {
+      toast({ 
+        title: "Verzoek goedgekeurd", 
+        description: `${userEmail} is verwijderd.` 
+      });
+      
+      // Send feedback email to administratie user
+      try {
+        const { error: emailErr } = await supabase.functions.invoke('send-delete-request-feedback-email', {
+          body: {
+            requestedByEmail: selectedDeleteRequest.requested_by_email,
+            requestedByName: selectedDeleteRequest.requested_by_name || selectedDeleteRequest.requested_by_email,
+            requestedUserEmail: userEmail,
+            requestedUserName: selectedDeleteRequest.requested_user_name || userEmail,
+            status: 'approved',
+            processedAt: new Date().toISOString(),
+          },
+        });
+        
+        if (emailErr) {
+          console.error('Failed to send feedback email:', emailErr);
+          // Don't show error to super admin - email failure is not critical
+        } else {
+          console.log('Feedback email sent successfully');
+        }
+      } catch (err) {
+        console.error('Failed to send feedback email:', err);
+        // Don't show error to super admin - email failure is not critical
+      }
+    }
+    
+    fetchUsers();
+    fetchDeleteRequests();
+    setApproveDeleteRequestDialogOpen(false);
+    setSelectedDeleteRequest(null);
+  };
+
+  // Open reject dialog
+  const handleOpenRejectDialog = (request: any) => {
+    setSelectedDeleteRequest(request);
+    setRejectDeleteRequestDialogOpen(true);
+  };
+
+  // Reject delete request (called from dialog)
+  const handleRejectDeleteRequest = async () => {
+    if (!selectedDeleteRequest || !isSuperAdmin(currentUser)) {
+      toast({ title: "Geen toegang", description: "Alleen super admin kan verzoeken afwijzen.", variant: "destructive" });
+      return;
+    }
+    
+    const { id: requestId, requested_user_email: userEmail } = selectedDeleteRequest;
+    
+    const { error } = await supabase
+      .from("delete_requests")
+      .update({
+        status: 'rejected',
+        processed_at: new Date().toISOString(),
+        processed_by_id: String(currentUser.id),
+      })
+      .eq("id", requestId);
+    
+    if (error) {
+      toast({ title: "Fout", description: error.message, variant: "destructive" });
+    } else {
+      toast({ 
+        title: "Verzoek afgewezen", 
+        description: `Verzoek om ${userEmail} te verwijderen is afgewezen.` 
+      });
+      
+      // Send feedback email to administratie user
+      try {
+        const { error: emailErr } = await supabase.functions.invoke('send-delete-request-feedback-email', {
+          body: {
+            requestedByEmail: selectedDeleteRequest.requested_by_email,
+            requestedByName: selectedDeleteRequest.requested_by_name || selectedDeleteRequest.requested_by_email,
+            requestedUserEmail: userEmail,
+            requestedUserName: selectedDeleteRequest.requested_user_name || userEmail,
+            status: 'rejected',
+            processedAt: new Date().toISOString(),
+          },
+        });
+        
+        if (emailErr) {
+          console.error('Failed to send feedback email:', emailErr);
+          // Don't show error to super admin - email failure is not critical
+        } else {
+          console.log('Feedback email sent successfully');
+        }
+      } catch (err) {
+        console.error('Failed to send feedback email:', err);
+        // Don't show error to super admin - email failure is not critical
+      }
+    }
+    
+    fetchDeleteRequests();
+    setRejectDeleteRequestDialogOpen(false);
+    setSelectedDeleteRequest(null);
   };
 
   const totalDaysOff = 25;
@@ -2380,6 +2819,17 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
             </TabsTrigger>
           )}
           {currentUser?.email === SUPER_ADMIN_EMAIL && (
+            <TabsTrigger value="delete-requests" className="flex items-center gap-2">
+              <Trash2 className="h-4 w-4" />
+              <span className="hidden sm:inline">Verwijderverzoeken</span>
+              {deleteRequests.length > 0 && (
+                <span className="ml-1 px-2 py-0.5 text-xs font-semibold bg-red-600 text-white rounded-full">
+                  {deleteRequests.length}
+                </span>
+              )}
+            </TabsTrigger>
+          )}
+          {currentUser?.email === SUPER_ADMIN_EMAIL && (
             <TabsTrigger value="errors" className="flex items-center gap-2">
               <AlertTriangle className="h-4 w-4" />
               <span className="hidden sm:inline">{t('admin.errors')}</span>
@@ -2390,8 +2840,8 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
 
         {/* Users Tab */}
         <TabsContent value="users" className="space-y-6">
-          {/* Add User Section - Only for admins, not for administratie */}
-          {currentUser?.isAdmin && !isAdministratie(currentUser) && (
+          {/* Add User Section - For admins and administratie users */}
+          {(currentUser?.isAdmin || isAdministratie(currentUser)) && (
       <div className="mb-6 sm:mb-8">
         <h3 className="text-base sm:text-lg font-semibold mb-2 text-gray-900 dark:text-gray-100">{t('admin.addUser')}</h3>
         <form onSubmit={handleAddUser} className={`flex ${isMobile ? 'flex-col' : 'flex-row flex-wrap'} gap-3 sm:gap-4 ${isMobile ? '' : 'items-end'} w-full`}>
@@ -2420,18 +2870,26 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
           </div>
           <div className={isMobile ? 'w-full' : ''}>
             <Label className="text-sm">{t('admin.userType')}</Label>
-            <Select value={form.userType} onValueChange={(value) => setForm(f => ({ ...f, userType: value }))}>
+            <Select 
+              value={form.userType} 
+              onValueChange={(value) => setForm(f => ({ ...f, userType: value }))}
+              disabled={isAdministratie(currentUser) && !isSuperAdmin(currentUser)}
+            >
               <SelectTrigger className="h-10 sm:h-9">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="user">{t('admin.userType.user')}</SelectItem>
-                <SelectItem value="administratie">{t('admin.userType.administratie')}</SelectItem>
-                <SelectItem value="admin">{t('admin.userType.admin')}</SelectItem>
-                <SelectItem value="weekly_only">{t('admin.userType.weeklyOnly')}</SelectItem>
-                {currentUser?.email === SUPER_ADMIN_EMAIL && (
-                  <SelectItem value="super_admin">{t('admin.userType.superAdmin')}</SelectItem>
-                )}
+                {!isAdministratie(currentUser) || isSuperAdmin(currentUser) ? (
+                  <>
+                    <SelectItem value="administratie">{t('admin.userType.administratie')}</SelectItem>
+                    <SelectItem value="admin">{t('admin.userType.admin')}</SelectItem>
+                    <SelectItem value="weekly_only">{t('admin.userType.weeklyOnly')}</SelectItem>
+                    {currentUser?.email === SUPER_ADMIN_EMAIL && (
+                      <SelectItem value="super_admin">{t('admin.userType.superAdmin')}</SelectItem>
+                    )}
+                  </>
+                ) : null}
               </SelectContent>
             </Select>
           </div>
@@ -2631,6 +3089,7 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
                       value={getUserType(user)} 
                       onValueChange={(value) => handleChangeUserType(user.id, user.email, value)}
                       disabled={
+                        isAdministratie(currentUser) ||
                         (user.email === SUPER_ADMIN_EMAIL && currentUser.email !== SUPER_ADMIN_EMAIL) ||
                         (currentUser?.email === SUPER_ADMIN_EMAIL && String(user.id) === String(currentUser.id))
                       }
@@ -2890,6 +3349,7 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
                         value={getUserType(user)} 
                         onValueChange={(value) => handleChangeUserType(user.id, user.email, value)}
                         disabled={
+                          isAdministratie(currentUser) ||
                           (user.email === SUPER_ADMIN_EMAIL && currentUser.email !== SUPER_ADMIN_EMAIL) ||
                           (currentUser?.email === SUPER_ADMIN_EMAIL && String(user.id) === String(currentUser.id))
                         }
@@ -3884,7 +4344,7 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
         })()}
       
       {/* Below user table: User Weekly Entries Accordion - Only for admins, not for administratie */}
-      {currentUser?.isAdmin && !isAdministratie(currentUser) && (
+      {currentUser?.isAdmin && !isAdministratie(currentUser) && (activeTab === 'users' || activeTab === 'weeks') && (
       <div className="mt-8 sm:mt-12">
         <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4">{t('admin.viewUserWeeklyEntries')}</h3>
         <Accordion type="multiple" className="w-full">
@@ -3972,7 +4432,7 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
       )}
 
       {/* Export Section - Available for admin and administratie */}
-      {isAdminOrAdministratie(currentUser) && (
+      {isAdminOrAdministratie(currentUser) && (activeTab === 'users' || activeTab === 'weeks') && (
       <div className="mt-8 sm:mt-12 mb-6 sm:mb-8 p-4 bg-orange-50 dark:bg-orange-900/30 border border-orange-200 dark:border-orange-800 rounded-lg">
         <h3 className="text-base sm:text-lg font-semibold mb-3 text-orange-800 dark:text-orange-200 flex items-center gap-2">
           <Download className="h-5 w-5" />
@@ -6851,9 +7311,193 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
         </TabsContent>
         )}
 
-        {/* Error Logs Tab - Only for super admin */}
+        {/* Delete Requests Tab - Only for super admin */}
         {currentUser?.email === SUPER_ADMIN_EMAIL && (
-        <TabsContent value="errors" className="space-y-6">
+          <TabsContent value="delete-requests" className="space-y-6">
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base sm:text-lg font-semibold flex items-center gap-2">
+                <Trash2 className="h-5 w-5 text-red-600" />
+                {t('admin.deleteRequestTitle')}
+                {deleteRequests.length > 0 && (
+                  <span className="ml-2 px-3 py-1 text-sm font-semibold bg-red-600 text-white rounded-full">
+                    {deleteRequests.length} {deleteRequests.length === 1 ? t('admin.deleteRequest.pendingRequest') : t('admin.deleteRequest.pendingRequests')}
+                  </span>
+                )}
+              </h3>
+              <Button onClick={fetchDeleteRequests} variant="outline" size="sm">
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Verversen
+              </Button>
+            </div>
+
+            {deleteRequestsLoading ? (
+              <div className="text-center p-8">{t('admin.deleteRequestLoading')}</div>
+            ) : deleteRequests.length === 0 ? (
+              <div className="text-center p-8 text-gray-500">{t('admin.noDeleteRequests')}</div>
+            ) : (
+              <div className="space-y-4">
+                {deleteRequests.map((request) => (
+                  <Card key={request.id} className="bg-orange-50 dark:bg-orange-900/20 border-2 border-orange-300 dark:border-orange-700">
+                    <CardHeader>
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <CardTitle className="text-sm flex items-center gap-2">
+                            <span className="px-2 py-1 rounded text-xs font-semibold bg-orange-600 text-white">
+                              PENDING
+                            </span>
+                          </CardTitle>
+                          <div className="mt-2 text-xs text-gray-600 dark:text-gray-400">
+                            {new Date(request.created_at).toLocaleString('nl-NL')}
+                          </div>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-3">
+                        <div>
+                          <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-1">
+                            {t('admin.deleteRequestUserToDelete')}
+                          </p>
+                          <p className="text-sm text-gray-700 dark:text-gray-300">
+                            <strong>{t('admin.name')}:</strong> {request.requested_user_name || request.requested_user_email}
+                          </p>
+                          <p className="text-sm text-gray-700 dark:text-gray-300">
+                            <strong>{t('admin.email')}:</strong> {request.requested_user_email}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-1">
+                            {t('admin.deleteRequestRequestedBy')}
+                          </p>
+                          <p className="text-sm text-gray-700 dark:text-gray-300">
+                            <strong>{t('admin.name')}:</strong> {request.requested_by_name || request.requested_by_email}
+                          </p>
+                          <p className="text-sm text-gray-700 dark:text-gray-300">
+                            <strong>{t('admin.email')}:</strong> {request.requested_by_email}
+                          </p>
+                        </div>
+                        <div className="flex gap-2 pt-2">
+                          <Button
+                            onClick={() => handleOpenApproveDialog(request)}
+                            variant="destructive"
+                            size="sm"
+                          >
+                            <Check className="h-4 w-4 mr-2" />
+                            {t('admin.deleteRequestApprove')}
+                          </Button>
+                          <Button
+                            onClick={() => handleOpenRejectDialog(request)}
+                            variant="outline"
+                            size="sm"
+                          >
+                            <X className="h-4 w-4 mr-2" />
+                            {t('admin.deleteRequestReject')}
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
+          
+          {/* Approve Delete Request Confirmation Dialog */}
+          <Dialog open={approveDeleteRequestDialogOpen} onOpenChange={setApproveDeleteRequestDialogOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>{t('admin.deleteRequest.approveConfirmTitle')}</DialogTitle>
+                <DialogDescription>
+                  {t('admin.deleteRequest.approveConfirmDescription')}
+                </DialogDescription>
+              </DialogHeader>
+              {selectedDeleteRequest && (
+                <div className="py-4 space-y-2">
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    <strong>{t('admin.deleteRequestUserToDelete')}</strong>
+                  </p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    <strong>{t('admin.name')}:</strong> {selectedDeleteRequest.requested_user_name || selectedDeleteRequest.requested_user_email}
+                  </p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    <strong>{t('admin.email')}:</strong> {selectedDeleteRequest.requested_user_email}
+                  </p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
+                    <strong>{t('admin.deleteRequestRequestedBy')}</strong>
+                  </p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    <strong>{t('admin.name')}:</strong> {selectedDeleteRequest.requested_by_name || selectedDeleteRequest.requested_by_email}
+                  </p>
+                </div>
+              )}
+              <DialogFooter>
+                <Button variant="outline" onClick={() => {
+                  setApproveDeleteRequestDialogOpen(false);
+                  setSelectedDeleteRequest(null);
+                }}>
+                  {t('common.cancel')}
+                </Button>
+                <Button 
+                  variant="destructive" 
+                  onClick={handleApproveDeleteRequest}
+                >
+                  <Check className="h-4 w-4 mr-2" />
+                  {t('admin.deleteRequestApprove')}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* Reject Delete Request Confirmation Dialog */}
+          <Dialog open={rejectDeleteRequestDialogOpen} onOpenChange={setRejectDeleteRequestDialogOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>{t('admin.deleteRequest.rejectConfirmTitle')}</DialogTitle>
+                <DialogDescription>
+                  {t('admin.deleteRequest.rejectConfirmDescription')}
+                </DialogDescription>
+              </DialogHeader>
+              {selectedDeleteRequest && (
+                <div className="py-4 space-y-2">
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    <strong>{t('admin.deleteRequestUserToDelete')}</strong>
+                  </p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    <strong>{t('admin.name')}:</strong> {selectedDeleteRequest.requested_user_name || selectedDeleteRequest.requested_user_email}
+                  </p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    <strong>{t('admin.email')}:</strong> {selectedDeleteRequest.requested_user_email}
+                  </p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
+                    <strong>{t('admin.deleteRequestRequestedBy')}</strong>
+                  </p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    <strong>{t('admin.name')}:</strong> {selectedDeleteRequest.requested_by_name || selectedDeleteRequest.requested_by_email}
+                  </p>
+                </div>
+              )}
+              <DialogFooter>
+                <Button variant="outline" onClick={() => {
+                  setRejectDeleteRequestDialogOpen(false);
+                  setSelectedDeleteRequest(null);
+                }}>
+                  {t('common.cancel')}
+                </Button>
+                <Button 
+                  variant="outline" 
+                  onClick={handleRejectDeleteRequest}
+                >
+                  <X className="h-4 w-4 mr-2" />
+                  {t('admin.deleteRequestReject')}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+          </TabsContent>
+        )}
+        {currentUser?.email === SUPER_ADMIN_EMAIL && (
+          <TabsContent value="errors" className="space-y-6">
           <div>
           <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4 flex items-center gap-2">
             <AlertTriangle className="h-5 w-5 text-red-600" />

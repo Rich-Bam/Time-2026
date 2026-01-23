@@ -24,31 +24,32 @@ import OvertimeSummaryPanel from "@/components/OvertimeSummaryPanel";
 import OvernightSummaryPanel from "@/components/OvernightSummaryPanel";
 import { BarChart3, Moon } from 'lucide-react';
 
-const workTypes = [
-  { value: 10, label: "Work" },
-  { value: 11, label: "Production" },
-  { value: 12, label: "Administration" },
-  { value: 13, label: "Drawing" },
-  { value: 14, label: "Trade Fair" },
-  { value: 15, label: "Commercial" },
-  { value: 16, label: "Telephone Support" },
-  { value: 17, label: "Internal BAMPRO" },
-  { value: 20, label: "Commute: Home - Work" },
-  { value: 21, label: "Commute: Work - Work" },
-  { value: 22, label: "Loading / Unloading" },
-  { value: 23, label: "Waiting" },
-  { value: 30, label: "Sick" },
-  { value: 31, label: "Day Off / Vacation" },
-  { value: 32, label: "Doctor/Dentist/Hospital" },
-  { value: 33, label: "Funeral/Wedding" },
-  { value: 34, label: "Warehouse" },
-  { value: 35, label: "Break" },
-  { value: 36, label: "Course/Training" },
-  { value: 37, label: "Meeting" },
-  { value: 38, label: "Public Holiday" },
-  { value: 39, label: "Time Off in Lieu (ADV)" },
-  { value: 40, label: "Taken Time-for-Time (TFT)" },
-  { value: 100, label: "Remote" },
+// Helper function to get work types with translations
+const getWorkTypes = (t: (key: string) => string) => [
+  { value: 10, label: t('workType.10') },
+  { value: 11, label: t('workType.11') },
+  { value: 12, label: t('workType.12') },
+  { value: 13, label: t('workType.13') },
+  { value: 14, label: t('workType.14') },
+  { value: 15, label: t('workType.15') },
+  { value: 16, label: t('workType.16') },
+  { value: 17, label: t('workType.17') },
+  { value: 20, label: t('workType.20') },
+  { value: 21, label: t('workType.21') },
+  { value: 22, label: t('workType.22') },
+  { value: 23, label: t('workType.23') },
+  { value: 30, label: t('workType.30') },
+  { value: 31, label: t('workType.31') },
+  { value: 32, label: t('workType.32') },
+  { value: 33, label: t('workType.33') },
+  { value: 34, label: t('workType.34') },
+  { value: 35, label: t('workType.35') },
+  { value: 36, label: t('workType.36') },
+  { value: 37, label: t('workType.37') },
+  { value: 38, label: t('workType.38') },
+  { value: 39, label: t('workType.39') },
+  { value: 40, label: t('workType.40') },
+  { value: 100, label: t('workType.100') },
 ];
 
 // Helper function to check if a work type doesn't require a project
@@ -107,6 +108,9 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
   const { t, language } = useLanguage();
   const { toast } = useToast();
   const isMobile = useIsMobile();
+  
+  // Get translated work types
+  const workTypes = getWorkTypes(t);
   const [weekStart, setWeekStart] = useState(() => {
     const now = new Date();
     now.setHours(0, 0, 0, 0);
@@ -2842,7 +2846,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
     if (missingDays.length > 0) {
       toast({
         title: "Cannot Confirm Week",
-        description: `Please fill in entries for: ${missingDays.join(', ')}. All weekdays (Monday-Friday) must have at least one entry before confirming.`,
+        description: t('weekly.fill.missing.entries'),
         variant: "destructive",
       });
       return;
@@ -4844,7 +4848,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
               </div>
               {!hasSubmittedEntries() && (
                 <div className="text-sm text-red-600 dark:text-red-400 font-semibold">
-                  ⚠️ Please fill in entries for all weekdays (Monday-Friday) before confirming.
+                  ⚠️ {t('weekly.fill.all.entries')}
                 </div>
               )}
               <Button 
