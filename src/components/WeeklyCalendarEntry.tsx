@@ -9,7 +9,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { Trash2, Download, Plus, Check, ChevronsUpDown } from 'lucide-react';
+import { Trash2, Download, Plus, Check, ChevronsUpDown, BarChart3, Moon, ChevronDown } from 'lucide-react';
 import { Checkbox } from "@/components/ui/checkbox";
 import * as XLSX from "xlsx";
 import ExcelJS from "exceljs";
@@ -17,6 +17,8 @@ import { cn } from "@/lib/utils";
 import { formatDateToYYYYMMDD } from "@/utils/dateUtils";
 import OvertimeSummaryPanel from "@/components/OvertimeSummaryPanel";
 import OvernightSummaryPanel from "@/components/OvernightSummaryPanel";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 const workTypes = [
   { value: 10, label: "Work" },
@@ -103,6 +105,7 @@ type WeeklyDayState = {
 
 const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false, useSimpleView, setUseSimpleView }: { currentUser: any; hasUnreadDaysOffNotification?: boolean; useSimpleView?: boolean; setUseSimpleView?: (value: boolean) => void }) => {
   const { t } = useLanguage();
+  const isMobile = useIsMobile();
   const [weekStart, setWeekStart] = useState(() => {
     const now = new Date();
     now.setHours(0, 0, 0, 0);
@@ -120,6 +123,11 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
   const [projects, setProjects] = useState<{ id: number; name: string }[]>([]);
   const { toast } = useToast();
   const [dbDaysOff, setDbDaysOff] = useState(0);
+  const [summaryPanelOpen, setSummaryPanelOpen] = useState(false);
+  const [combinedOvertimeData, setCombinedOvertimeData] = useState<any>(null);
+  const [combinedOvertimeLoading, setCombinedOvertimeLoading] = useState(false);
+  const [combinedOvernightCount, setCombinedOvernightCount] = useState<number>(0);
+  const [combinedOvernightLoading, setCombinedOvernightLoading] = useState(false);
   const [customProjects, setCustomProjects] = useState<Record<string, string>>({});
   const [submittedEntries, setSubmittedEntries] = useState<Record<string, any[]>>({});
   const [confirmedWeeks, setConfirmedWeeks] = useState<Record<string, boolean>>({});
@@ -130,6 +138,132 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
 
   const weekDates = getWeekDates(weekStart);
   const weekNumber = getISOWeekNumber(weekDates[0]);
+  const combinedOvertimeDisplay = combinedOvertimeData || {
+    totalOvertime: "0.00",
+    totalHours125: "0.00",
+    totalHours150: "0.00",
+    totalHours200: "0.00",
+  };
+
+  const fetchCombinedPanelData = async () => {
+    if (!currentUser || !weekStart) return;
+
+    const from = formatDateToYYYYMMDD(weekDates[0]);
+    const to = formatDateToYYYYMMDD(weekDates[6]);
+
+    // Fetch overtime data
+    setCombinedOvertimeLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("timesheet")
+        .select("user_id, date, hours, description")
+        .eq("user_id", currentUser.id)
+        .gte("date", from)
+        .lte("date", to)
+        .order("date", { ascending: true });
+
+      if (error) {
+        console.error("Error fetching overtime data:", error);
+        setCombinedOvertimeData(null);
+        setCombinedOvertimeLoading(false);
+      } else {
+        const dateMap: Record<string, { totalHours: number }> = {};
+        (data || []).forEach((entry: any) => {
+          const date = entry.date;
+          if (!dateMap[date]) {
+            dateMap[date] = { totalHours: 0 };
+          }
+          const workType = parseInt(entry.description || "0", 10);
+          if ((workType >= 10 && workType <= 29) || workType === 100) {
+            const hours = parseFloat(entry.hours || 0);
+            dateMap[date].totalHours += hours;
+          }
+        });
+
+        let totalOvertime = 0;
+        let totalHours125 = 0;
+        let totalHours150 = 0;
+        let totalHours200 = 0;
+
+        Object.keys(dateMap).forEach(date => {
+          const totalHours = dateMap[date].totalHours;
+          const dateObj = new Date(date);
+          const dayOfWeek = dateObj.getDay();
+          const isSaturday = dayOfWeek === 6;
+          const isSunday = dayOfWeek === 0;
+
+          let overtime = 0;
+          let hours125 = 0;
+          let hours150 = 0;
+          let hours200 = 0;
+
+          if (isSunday) {
+            overtime = totalHours;
+            hours200 = totalHours;
+          } else if (isSaturday) {
+            overtime = totalHours;
+            hours150 = totalHours;
+          } else {
+            const overtimeHours = totalHours > 8 ? totalHours - 8 : 0;
+            if (overtimeHours > 0) {
+              hours125 = Math.min(overtimeHours, 2);
+              if (overtimeHours > 2) {
+                hours150 = overtimeHours - 2;
+              }
+              overtime = overtimeHours;
+            }
+          }
+
+          totalOvertime += overtime;
+          totalHours125 += hours125;
+          totalHours150 += hours150;
+          totalHours200 += hours200;
+        });
+
+        setCombinedOvertimeData({
+          totalOvertime: totalOvertime.toFixed(2),
+          totalHours125: totalHours125.toFixed(2),
+          totalHours150: totalHours150.toFixed(2),
+          totalHours200: totalHours200.toFixed(2),
+        });
+        setCombinedOvertimeLoading(false);
+      }
+    } catch (error: any) {
+      console.error("Error calculating overtime:", error);
+      setCombinedOvertimeData(null);
+      setCombinedOvertimeLoading(false);
+    }
+
+    // Fetch overnight stays count
+    setCombinedOvernightLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("overnight_stays")
+        .select("date")
+        .eq("user_id", currentUser.id)
+        .gte("date", from)
+        .lte("date", to);
+
+      if (error) {
+        console.warn("Error fetching overnight stays:", error);
+        setCombinedOvernightCount(0);
+      } else {
+        setCombinedOvernightCount((data || []).length);
+      }
+    } catch (error: any) {
+      console.warn("Error fetching overnight stays:", error);
+      setCombinedOvernightCount(0);
+    } finally {
+      setCombinedOvernightLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isMobile && currentUser && !currentUser?.isAdmin && currentUser?.userType !== 'administratie') {
+      fetchCombinedPanelData();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMobile, currentUser, weekStart?.getTime()]);
 
   // Store projects with status for validation - ALWAYS fetch ALL projects (including closed) for validation
   const [projectsWithStatus, setProjectsWithStatus] = useState<{ id: number; name: string; status: string | null }[]>([]);
@@ -1921,8 +2055,123 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
 
   return (
     <div className="flex flex-col gap-3 sm:gap-4">
-      {/* Overtime Summary Panel - For all users (except admins/administratie) */}
-      {currentUser && !currentUser?.isAdmin && currentUser?.userType !== 'administratie' && (
+      {/* Mobile: unified Days Off + Overtime/Overnight panel */}
+      {isMobile && (
+        <Card className={`bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/30 dark:to-indigo-900/30 border-blue-200 dark:border-blue-800 ${hasUnreadDaysOffNotification ? 'ring-2 ring-orange-400 ring-offset-2' : ''}`}>
+          {currentUser && !currentUser?.isAdmin && currentUser?.userType !== 'administratie' ? (
+            <Collapsible open={summaryPanelOpen} onOpenChange={setSummaryPanelOpen}>
+              <CollapsibleTrigger asChild>
+                <button type="button" className="w-full text-left">
+                  <CardHeader className="p-3">
+                    <CardTitle className="text-blue-900 dark:text-blue-100 text-sm flex items-center justify-between">
+                      <span className="flex items-center gap-2">
+                        <BarChart3 className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                        {t('weekly.daysOffRemaining')}
+                      </span>
+                      <ChevronDown className={`h-4 w-4 text-blue-600 dark:text-blue-400 transition-transform duration-200 ${summaryPanelOpen ? 'rotate-180' : ''}`} />
+                    </CardTitle>
+                    <div className="mt-1 flex items-center justify-between gap-3 text-xs text-gray-700 dark:text-gray-300">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-blue-700 dark:text-blue-200">
+                          {daysOffLeft}
+                        </span>
+                        <span className="opacity-80">({hoursLeftRounded} {t('weekly.hours')})</span>
+                        {hasUnreadDaysOffNotification && (
+                          <span className="ml-1 inline-flex items-center gap-1 bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300 px-1.5 py-0.5 rounded-full text-[10px] font-semibold animate-pulse">
+                            ⚠️
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-1">
+                          <span className="text-gray-600 dark:text-gray-400">{t('overtime.totalOvertime')}:</span>
+                          <span className="font-bold text-blue-700 dark:text-blue-200">
+                            {combinedOvertimeLoading ? "..." : `${combinedOvertimeDisplay.totalOvertime}h`}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Moon className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+                          <span className="font-bold text-indigo-700 dark:text-indigo-200">
+                            {combinedOvernightLoading ? "..." : combinedOvernightCount}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </CardHeader>
+                </button>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <CardContent className="p-3 pt-0">
+                  {/* Divider */}
+                  <div className="border-t border-blue-200 dark:border-blue-700 my-3"></div>
+
+                  {/* Overtime breakdown */}
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-xs text-gray-600 dark:text-gray-400">{t('overtime.totalOvertime')}:</span>
+                    <span className="text-base font-bold text-blue-600 dark:text-blue-300">
+                      {combinedOvertimeLoading ? "..." : `${combinedOvertimeDisplay.totalOvertime}h`}
+                    </span>
+                  </div>
+                  {!combinedOvertimeLoading && (
+                    <div className="flex flex-wrap gap-2">
+                      {parseFloat(combinedOvertimeDisplay.totalHours125 || "0") > 0 && (
+                        <div className="flex items-center gap-1 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded px-2 py-1">
+                          <span className="text-xs font-semibold text-orange-600 dark:text-orange-400">125%:</span>
+                          <span className="text-xs font-bold text-orange-700 dark:text-orange-300">{combinedOvertimeDisplay.totalHours125}h</span>
+                        </div>
+                      )}
+                      {parseFloat(combinedOvertimeDisplay.totalHours150 || "0") > 0 && (
+                        <div className="flex items-center gap-1 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded px-2 py-1">
+                          <span className="text-xs font-semibold text-yellow-600 dark:text-yellow-400">150%:</span>
+                          <span className="text-xs font-bold text-yellow-700 dark:text-yellow-300">{combinedOvertimeDisplay.totalHours150}h</span>
+                        </div>
+                      )}
+                      {parseFloat(combinedOvertimeDisplay.totalHours200 || "0") > 0 && (
+                        <div className="flex items-center gap-1 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded px-2 py-1">
+                          <span className="text-xs font-semibold text-red-600 dark:text-red-400">200%:</span>
+                          <span className="text-xs font-bold text-red-700 dark:text-red-300">{combinedOvertimeDisplay.totalHours200}h</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Divider */}
+                  <div className="border-t border-blue-200 dark:border-blue-700 my-3"></div>
+
+                  {/* Overnight stays */}
+                  <div className="flex items-center gap-2">
+                    <Moon className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+                    <span className="text-xs text-gray-600 dark:text-gray-400">{t("overtime.overnightCount")}:</span>
+                    <span className="text-base font-bold text-indigo-700 dark:text-indigo-200">
+                      {combinedOvernightLoading ? "..." : combinedOvernightCount}
+                    </span>
+                  </div>
+                </CardContent>
+              </CollapsibleContent>
+            </Collapsible>
+          ) : (
+            <CardContent className="p-3">
+              <div className="flex items-center justify-between">
+                <div className="text-sm font-semibold text-blue-900 dark:text-blue-100 flex items-center gap-2">
+                  <BarChart3 className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                  {t('weekly.daysOffRemaining')}
+                </div>
+                {hasUnreadDaysOffNotification && (
+                  <span className="inline-flex items-center gap-1 bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300 px-1.5 py-0.5 rounded-full text-[10px] font-semibold animate-pulse">
+                    ⚠️
+                  </span>
+                )}
+              </div>
+              <div className="mt-1 text-sm font-bold text-blue-700 dark:text-blue-200">
+                {daysOffLeft} <span className="text-xs font-medium opacity-80">({hoursLeftRounded} {t('weekly.hours')})</span>
+              </div>
+            </CardContent>
+          )}
+        </Card>
+      )}
+
+      {/* Desktop: Overtime Summary Panels - For all users (except admins/administratie) */}
+      {!isMobile && currentUser && !currentUser?.isAdmin && currentUser?.userType !== 'administratie' && (
         <>
           <OvertimeSummaryPanel currentUser={currentUser} weekStart={weekStart} />
           <OvernightSummaryPanel currentUser={currentUser} weekStart={weekStart} />
@@ -1942,7 +2191,7 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
               {t('weekly.next')} &gt;
             </Button>
             {/* Week selector - Available for all users */}
-            {currentUser && availableWeeks.length > 0 && (
+            {!isMobile && currentUser && availableWeeks.length > 0 && (
               <Select
                 value={formatDateToYYYYMMDD(weekDates[0])}
                 onValueChange={(value) => {
@@ -1971,10 +2220,12 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
                 </SelectContent>
               </Select>
             )}
-            <Button variant="outline" onClick={handleExportWeek} size="sm" className="text-xs sm:text-sm">
-              <Download className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
-              {t('weekly.exportWeek')}
-            </Button>
+            {!isMobile && (
+              <Button variant="outline" onClick={handleExportWeek} size="sm" className="text-xs sm:text-sm">
+                <Download className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                {t('weekly.exportWeek')}
+              </Button>
+            )}
             {setUseSimpleView && (
               <Button 
                 variant="outline" 
@@ -1992,29 +2243,31 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
             )}
           </div>
         </div>
-        <Card className={`bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-800 w-full md:min-w-[260px] ${hasUnreadDaysOffNotification ? 'ring-2 ring-orange-400 ring-offset-2' : ''}`}>
-          <CardHeader className="p-3 sm:p-6">
-            <CardTitle className="text-blue-900 dark:text-blue-100 text-base sm:text-lg flex items-center justify-between">
-              <span>{t('weekly.daysOffRemaining')}</span>
-              {hasUnreadDaysOffNotification && (
-                <div className="flex items-center gap-1 bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300 px-2 py-0.5 rounded-full text-xs font-semibold animate-pulse">
-                  <span>⚠️</span>
-                </div>
-              )}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-3 sm:p-6 pt-0">
-            <div className="text-2xl sm:text-3xl font-bold text-blue-700 dark:text-blue-300">
-              {daysOffLeft} <span className="text-base sm:text-lg">({hoursLeftRounded} {t('weekly.hours')})</span>
-            </div>
-            <div className="text-xs sm:text-sm text-blue-600 dark:text-blue-400 mt-2">
-              {t('weekly.daysOffLeft', { days: daysOffLeft })}
-              {hasUnreadDaysOffNotification && (
-                <span className="block mt-1 text-orange-600 dark:text-orange-400 font-semibold">⚠️ {t('weekly.updated')}</span>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+        {!isMobile && (
+          <Card className={`bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-800 w-full md:min-w-[260px] ${hasUnreadDaysOffNotification ? 'ring-2 ring-orange-400 ring-offset-2' : ''}`}>
+            <CardHeader className="p-3 sm:p-6">
+              <CardTitle className="text-blue-900 dark:text-blue-100 text-base sm:text-lg flex items-center justify-between">
+                <span>{t('weekly.daysOffRemaining')}</span>
+                {hasUnreadDaysOffNotification && (
+                  <div className="flex items-center gap-1 bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300 px-2 py-0.5 rounded-full text-xs font-semibold animate-pulse">
+                    <span>⚠️</span>
+                  </div>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-3 sm:p-6 pt-0">
+              <div className="text-2xl sm:text-3xl font-bold text-blue-700 dark:text-blue-300">
+                {daysOffLeft} <span className="text-base sm:text-lg">({hoursLeftRounded} {t('weekly.hours')})</span>
+              </div>
+              <div className="text-xs sm:text-sm text-blue-600 dark:text-blue-400 mt-2">
+                {t('weekly.daysOffLeft', { days: daysOffLeft })}
+                {hasUnreadDaysOffNotification && (
+                  <span className="block mt-1 text-orange-600 dark:text-orange-400 font-semibold">⚠️ {t('weekly.updated')}</span>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
       <Card>
         <CardContent className="p-3 sm:p-6">
