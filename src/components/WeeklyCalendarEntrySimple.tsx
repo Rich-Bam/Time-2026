@@ -108,6 +108,17 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
   const { t, language } = useLanguage();
   const { toast } = useToast();
   const isMobile = useIsMobile();
+
+  const getTodayIndexInWeek = (dates: Date[]) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const idx = dates.findIndex((d) => {
+      const dateOnly = new Date(d);
+      dateOnly.setHours(0, 0, 0, 0);
+      return dateOnly.getTime() === today.getTime();
+    });
+    return idx !== -1 ? idx : 0;
+  };
   
   // Get translated work types
   const workTypes = getWorkTypes(t);
@@ -146,9 +157,10 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
   const [combinedOvernightLoading, setCombinedOvernightLoading] = useState(false);
   
   // State for mobile UI improvements
-  const [expandedDays, setExpandedDays] = useState<Set<number>>(new Set());
+  const [activeDayIdx, setActiveDayIdx] = useState(() => getTodayIndexInWeek(getWeekDates(weekStart)));
   const [summaryPanelOpen, setSummaryPanelOpen] = useState(false);
   const [fabDialogOpen, setFabDialogOpen] = useState(false);
+  const [quickEntryDayIdx, setQuickEntryDayIdx] = useState(() => getTodayIndexInWeek(getWeekDates(weekStart)));
   
   // Quick entry form state for FAB
   const [quickEntry, setQuickEntry] = useState({
@@ -667,30 +679,16 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isMobile, currentUser, weekStart?.getTime()]);
 
-  // Initialize expanded days with today's day on mobile
+  // Initialize selected day (mobile) and quick-entry day when week changes
   useEffect(() => {
-    if (isMobile && weekDates.length > 0) {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const todayIndex = weekDates.findIndex(date => {
-        const dateOnly = new Date(date);
-        dateOnly.setHours(0, 0, 0, 0);
-        return dateOnly.getTime() === today.getTime();
-      });
-      if (todayIndex !== -1) {
-        setExpandedDays(new Set([todayIndex]));
-      } else {
-        // If today is not in current week, expand first day
-        setExpandedDays(new Set([0]));
-      }
-    } else {
-      // On desktop, expand all days (no accordion)
-      setExpandedDays(new Set(weekDates.map((_, i) => i)));
-    }
+    if (weekDates.length === 0) return;
+    const idx = getTodayIndexInWeek(weekDates);
+    setActiveDayIdx(idx);
+    setQuickEntryDayIdx(idx);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isMobile, weekStart?.getTime()]);
+  }, [weekStart?.getTime()]);
 
-  // Helper function to calculate daily summary for accordion headers
+  // Helper function to calculate daily summary (used by mobile day navigator)
   const calculateDailySummary = (dayIdx: number) => {
     const day = days[dayIdx];
     const dateStr = formatDateToYYYYMMDD(day.date);
@@ -1201,19 +1199,11 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
       return;
     }
     
-    // Find today's day index
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const todayIndex = weekDates.findIndex(date => {
-      const dateOnly = new Date(date);
-      dateOnly.setHours(0, 0, 0, 0);
-      return dateOnly.getTime() === today.getTime();
-    });
-    
-    if (todayIndex === -1) {
+    const targetDayIdx = quickEntryDayIdx;
+    if (targetDayIdx < 0 || targetDayIdx >= weekDates.length) {
       toast({
         title: "Error",
-        description: "Today's date is not in the current week",
+        description: "Selected day is not in the current week",
         variant: "destructive",
       });
       return;
@@ -1269,7 +1259,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
     }
     
     try {
-      const dateStr = formatDateToYYYYMMDD(weekDates[todayIndex]);
+      const dateStr = formatDateToYYYYMMDD(weekDates[targetDayIdx]);
       
       const insertData: any = {
         project: (isDayOff || quickEntry.workType === "35" || quickEntry.workType === "20" || quickEntry.workType === "21") ? (quickEntry.project?.trim() || null) : quickEntry.project,
@@ -1277,7 +1267,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
         date: dateStr,
         hours: hoursToSave || 0,
         description: quickEntry.workType,
-        stayed_overnight: !!days[todayIndex]?.stayedOvernight,
+        stayed_overnight: !!days[targetDayIdx]?.stayedOvernight,
       };
       
       if (quickEntry.startTime) insertData.startTime = quickEntry.startTime;
@@ -1290,9 +1280,9 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
       // Refresh submitted entries for today
       await fetchSubmittedEntries(dateStr);
       
-      // Auto-expand today's day in accordion on mobile
+      // After saving on mobile, jump to that day
       if (isMobile) {
-        setExpandedDays(prev => new Set([...prev, todayIndex]));
+        setActiveDayIdx(targetDayIdx);
       }
       
       // Refresh days off if day off entry
@@ -3307,47 +3297,106 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
       <Card>
         <CardContent className="p-2 sm:p-4">
           {isMobile ? (
-            // Accordion for mobile
-            <Accordion type="multiple" value={Array.from(expandedDays).map(i => `day-${i}`)} onValueChange={(values) => {
-              const newExpanded = new Set<number>();
-              values.forEach(v => {
-                const idx = parseInt(v.replace('day-', ''));
-                if (!isNaN(idx)) newExpanded.add(idx);
-              });
-              setExpandedDays(newExpanded);
-            }} className="space-y-2">
-              {days.map((day, dayIdx) => {
-                const dailySummary = calculateDailySummary(dayIdx);
-                const dayValue = `day-${dayIdx}`;
-                const isExpanded = expandedDays.has(dayIdx);
-                
+            // One-day view for mobile
+            <div className="space-y-3">
+              {(() => {
+                const locale = language === 'nl' ? 'nl-NL' : 'en-GB';
+                const safeDayIdx = Math.max(0, Math.min(activeDayIdx, weekDates.length - 1));
+                const todayIdx = getTodayIndexInWeek(weekDates);
+                const activeSummary = calculateDailySummary(safeDayIdx);
+
                 return (
-                  <AccordionItem key={dayIdx} value={dayValue} className="border-none">
-                    <AccordionTrigger className="px-2 py-1.5 hover:no-underline">
-                      <div className="flex items-center justify-between w-full mr-2">
-                        <div className="flex items-center gap-2 flex-1 min-w-0">
-                          <h3 className="font-bold text-sm text-gray-800 dark:text-gray-100 truncate">
-                            {day.date.toLocaleDateString(language === 'nl' ? 'nl-NL' : 'en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}
-                          </h3>
-                          {dailySummary.entryCount > 0 && (
-                            <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
-                              <span>{dailySummary.totalHours}h</span>
-                              <span>•</span>
-                              <span>{dailySummary.entryCount} {dailySummary.entryCount === 1 ? t('weekly.entry') || 'entry' : t('weekly.entries') || 'entries'}</span>
-                              {dailySummary.hasOvernight && (
-                                <>
-                                  <span>•</span>
-                                  <Moon className="h-3 w-3 text-indigo-600 dark:text-indigo-400" />
-                                </>
-                              )}
-                            </div>
-                          )}
+                  <>
+                    <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-2">
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-9 px-2"
+                          onClick={() => setActiveDayIdx((i) => Math.max(0, i - 1))}
+                          disabled={safeDayIdx === 0}
+                        >
+                          ‹
+                        </Button>
+                        <div className="flex-1 min-w-0">
+                          <Select
+                            value={String(safeDayIdx)}
+                            onValueChange={(v) => setActiveDayIdx(parseInt(v, 10) || 0)}
+                          >
+                            <SelectTrigger className="h-9 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100">
+                              <SelectValue placeholder="Select day" />
+                            </SelectTrigger>
+                            <SelectContent className="max-h-[300px]">
+                              {weekDates.map((d, idx) => (
+                                <SelectItem key={formatDateToYYYYMMDD(d)} value={String(idx)}>
+                                  {d.toLocaleDateString(locale, { weekday: 'short', day: 'numeric', month: 'short' })}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <div className="mt-1 flex items-center justify-between gap-2 text-xs text-gray-600 dark:text-gray-400">
+                            <span className="truncate">
+                              {activeSummary.totalHours}h • {activeSummary.entryCount}{" "}
+                              {activeSummary.entryCount === 1 ? (t('weekly.entry') || 'entry') : (t('weekly.entries') || 'entries')}
+                            </span>
+                            {activeSummary.hasOvernight && (
+                              <span className="flex items-center gap-1 shrink-0">
+                                <Moon className="h-3 w-3 text-indigo-600 dark:text-indigo-400" />
+                                <span>{t('weekly.overnightStay')}</span>
+                              </span>
+                            )}
+                          </div>
                         </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-9 px-2"
+                          onClick={() => setActiveDayIdx((i) => Math.min(weekDates.length - 1, i + 1))}
+                          disabled={safeDayIdx >= weekDates.length - 1}
+                        >
+                          ›
+                        </Button>
                       </div>
-                    </AccordionTrigger>
-                    <AccordionContent>
+
+                      <div className="mt-2 flex gap-1 overflow-x-auto pb-1">
+                        {weekDates.map((d, idx) => {
+                          const chipSummary = calculateDailySummary(idx);
+                          const isSelected = idx === safeDayIdx;
+                          const isToday = idx === todayIdx;
+                          return (
+                            <Button
+                              key={formatDateToYYYYMMDD(d)}
+                              type="button"
+                              variant={isSelected ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => setActiveDayIdx(idx)}
+                              className={`h-8 px-2 text-xs ${isToday ? 'ring-2 ring-orange-400 ring-offset-1' : ''}`}
+                            >
+                              <span className="flex items-center gap-1">
+                                <span>{d.toLocaleDateString(locale, { weekday: 'short' })} {d.getDate()}</span>
+                                {chipSummary.entryCount > 0 && <span className="opacity-70">•</span>}
+                                {chipSummary.hasOvernight && <Moon className="h-3 w-3" />}
+                              </span>
+                            </Button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <Accordion type="single" value={`day-${safeDayIdx}`} className="space-y-2">
                       {(() => {
-                        const dateStr = formatDateToYYYYMMDD(day.date);
+                        const dayIdx = safeDayIdx;
+                        const day = days[dayIdx];
+                        const dayValue = `day-${dayIdx}`;
+
+                        return (
+                          <AccordionItem key={dayIdx} value={dayValue} className="border-none">
+                            <AccordionTrigger className="hidden"></AccordionTrigger>
+                            <AccordionContent>
+                              {(() => {
+                                const dateStr = formatDateToYYYYMMDD(day.date);
                         
                         // Check if there's a fullDayOff entry for this day (in editable or submitted entries)
                         const hasFullDayOff = day.entries.some(e => e.workType === "31" && e.fullDayOff) ||
@@ -3864,11 +3913,15 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
                           </div>
                         );
                       })()}
-                    </AccordionContent>
-                  </AccordionItem>
+                            </AccordionContent>
+                          </AccordionItem>
+                        );
+                      })()}
+                    </Accordion>
+                  </>
                 );
-              })}
-            </Accordion>
+              })()}
+            </div>
           ) : (
             // Desktop layout - no accordion
             <div className="space-y-2 sm:space-y-4">
@@ -4924,7 +4977,10 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
       {isMobile && (
         <>
           <Button
-            onClick={() => setFabDialogOpen(true)}
+            onClick={() => {
+              setQuickEntryDayIdx(activeDayIdx);
+              setFabDialogOpen(true);
+            }}
             className="fixed bottom-4 right-4 z-50 h-14 w-14 rounded-full bg-orange-600 hover:bg-orange-700 text-white shadow-lg"
             size="icon"
           >
@@ -4935,13 +4991,40 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
           <Sheet open={fabDialogOpen} onOpenChange={setFabDialogOpen}>
             <SheetContent side="bottom" className="h-[80vh] overflow-y-auto">
               <SheetHeader>
-                <SheetTitle>{t('weekly.addEntry')} - {new Date().toLocaleDateString()}</SheetTitle>
+                <SheetTitle>
+                  {t('weekly.addEntry')} -{" "}
+                  {(weekDates[quickEntryDayIdx] || new Date()).toLocaleDateString(language === 'nl' ? 'nl-NL' : 'en-GB', {
+                    weekday: 'short',
+                    day: 'numeric',
+                    month: 'short',
+                  })}
+                </SheetTitle>
                 <SheetDescription>
-                  {t('weekly.quickEntryDescription') || 'Quickly add an entry for today'}
+                  {t('weekly.quickEntryDescription') || 'Quickly add an entry for a day in this week'}
                 </SheetDescription>
               </SheetHeader>
               
               <div className="mt-4 space-y-4">
+                {/* Day */}
+                <div>
+                  <Label className="text-xs font-semibold mb-1 block">{t('weekly.date') || 'Date'}</Label>
+                  <Select
+                    value={String(quickEntryDayIdx)}
+                    onValueChange={(v) => setQuickEntryDayIdx(parseInt(v, 10) || 0)}
+                  >
+                    <SelectTrigger className="h-10 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100">
+                      <SelectValue placeholder="Select day" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-[300px]">
+                      {weekDates.map((d, idx) => (
+                        <SelectItem key={formatDateToYYYYMMDD(d)} value={String(idx)}>
+                          {d.toLocaleDateString(language === 'nl' ? 'nl-NL' : 'en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
                 {/* Work Type */}
                 <div>
                   <Label className="text-xs font-semibold mb-1 block">{t('weekly.workType')}</Label>
