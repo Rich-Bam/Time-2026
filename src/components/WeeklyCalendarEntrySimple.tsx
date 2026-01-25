@@ -2843,7 +2843,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
       }
     });
     
-    if (missingDays.length > 0) {
+    if (missingDays.length > 0) { 
       toast({
         title: "Cannot Confirm Week",
         description: t('weekly.fill.missing.entries'),
