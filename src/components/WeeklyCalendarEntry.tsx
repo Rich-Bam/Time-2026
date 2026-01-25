@@ -2272,7 +2272,7 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
       <Card>
         <CardContent className="p-3 sm:p-6">
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 sm:gap-4 mb-4">
-            <div className="grid grid-cols-7 gap-1 sm:gap-2 flex-1">
+            <div className="grid grid-cols-4 sm:grid-cols-7 gap-1 sm:gap-2 flex-1">
               {days.map((day, dayIdx) => {
                 const dateStr = formatDateToYYYYMMDD(day.date);
                 const submittedCount = (submittedEntries[dateStr] || []).length;
@@ -2280,12 +2280,12 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
                 return (
                   <div 
                     key={dayIdx} 
-                    className={`border rounded-lg p-1.5 sm:p-2 cursor-pointer transition-colors ${day.open ? 'bg-orange-100 dark:bg-orange-900/30 border-orange-300 dark:border-orange-700' : 'bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700'}`} 
+                    className={`border rounded-lg p-1.5 sm:p-2 cursor-pointer transition-colors min-w-0 ${day.open ? 'bg-orange-100 dark:bg-orange-900/30 border-orange-300 dark:border-orange-700' : 'bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700'}`} 
                     onClick={() => handleOpenDay(dayIdx)}
                   >
-                    <div className="font-semibold text-center text-xs sm:text-sm">{day.date.toLocaleDateString(undefined, { weekday: 'short' })}</div>
-                    <div className="font-medium text-center text-[10px] sm:text-xs">{day.date.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}</div>
-                    <div className="text-[10px] sm:text-xs text-center text-gray-500 dark:text-gray-400 mt-0.5 sm:mt-1">{totalEntries} {totalEntries === 1 ? t('weekly.entry') : t('weekly.entries')}</div>
+                    <div className="font-semibold text-center text-xs sm:text-sm truncate">{day.date.toLocaleDateString(undefined, { weekday: 'short' })}</div>
+                    <div className="font-medium text-center text-[10px] sm:text-xs truncate">{day.date.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}</div>
+                    <div className="text-[10px] sm:text-xs text-center text-gray-500 dark:text-gray-400 mt-0.5 sm:mt-1 truncate">{totalEntries} {totalEntries === 1 ? t('weekly.entry') : t('weekly.entries')}</div>
                   </div>
                 );
               })}
@@ -2315,7 +2315,7 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
 
           {viewMode === "overview" ? (
             // Week Overview - All days in one table
-            <div className="overflow-x-auto -mx-3 sm:mx-0">
+            <div className="overflow-x-auto">
               <table className="min-w-full border-collapse text-xs sm:text-sm">
                 <thead>
                   <tr className="bg-gray-100 dark:bg-gray-800">

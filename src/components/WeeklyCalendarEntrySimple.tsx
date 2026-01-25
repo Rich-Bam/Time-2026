@@ -3391,7 +3391,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
                         </Button>
                       </div>
 
-                      <div className="mt-2 flex gap-1 overflow-x-auto pb-1">
+                      <div className="mt-2 grid grid-cols-4 gap-1">
                         {weekDates.map((d, idx) => {
                           const chipSummary = calculateDailySummary(idx);
                           const isSelected = idx === safeDayIdx;
@@ -3403,12 +3403,14 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
                               variant={isSelected ? "default" : "outline"}
                               size="sm"
                               onClick={() => setActiveDayIdx(idx)}
-                              className={`h-8 px-2 text-xs ${isToday ? 'ring-2 ring-orange-400 ring-offset-1' : ''}`}
+                              className={`h-8 w-full px-1 text-[11px] justify-center min-w-0 ${isToday ? 'ring-2 ring-orange-400 ring-offset-1' : ''}`}
                             >
-                              <span className="flex items-center gap-1">
-                                <span>{d.toLocaleDateString(locale, { weekday: 'short' })} {d.getDate()}</span>
+                              <span className="flex items-center gap-1 min-w-0">
+                                <span className="truncate">
+                                  {d.toLocaleDateString(locale, { weekday: 'short' })} {d.getDate()}
+                                </span>
                                 {chipSummary.entryCount > 0 && <span className="opacity-70">•</span>}
-                                {chipSummary.hasOvernight && <Moon className="h-3 w-3" />}
+                                {chipSummary.hasOvernight && <Moon className="h-3 w-3 shrink-0" />}
                               </span>
                             </Button>
                           );
