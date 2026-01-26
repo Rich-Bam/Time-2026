@@ -1,4 +1,4 @@
-﻿import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 
 type Language = 'nl' | 'en';
 
@@ -303,6 +303,14 @@ const translations: Record<Language, Record<string, string>> = {
     'admin.noUsers': 'Geen gebruikers beschikbaar',
     'admin.viewUserEntries': 'Bekijk Gebruiker Wekelijkse Entries',
     'admin.allConfirmedWeeks': 'Alle Bevestigde Weken',
+    'admin.currentWeekSimpleUsers': 'Huidige Week',
+    'admin.users': 'gebruikers',
+    'admin.weeks': 'weken',
+    'admin.withEntries': 'met entries',
+    'admin.noSimpleEntryUsersCurrentWeek': 'Geen simple entry gebruikers hebben deze week ingevuld.',
+    'admin.notConfirmed': 'Niet Bevestigd',
+    'admin.weekOvernightStays': 'Overnachtingen',
+    'admin.weekOvertimeHours': 'Overuren',
     'admin.timebuzzerIntegration': 'Timebuzzer Integratie',
     'admin.timebuzzerDescription': 'Sync tijd entries van Timebuzzer naar je timesheet. Zorg ervoor dat gebruikers en projecten eerst gemapped zijn in de database.',
     'admin.testAPI': 'Test API',
@@ -406,7 +414,7 @@ const translations: Record<Language, Record<string, string>> = {
     'admin.missingInformation': 'Ontbrekende Informatie',
     'admin.selectWeekAndYear': 'Selecteer een week en jaar.',
     'admin.existingUsers': 'Bestaande Gebruikers',
-    'admin.searchWeeks': 'Zoek week',
+    'admin.searchWeeks': 'Zoek week, naam of email',
     'admin.allStatuses': 'Status',
     'admin.noWeeksMatchFilters': 'Geen weken komen overeen met de filters.',
     'admin.user': 'Gebruiker',
@@ -455,6 +463,21 @@ const translations: Record<Language, Record<string, string>> = {
     'auth.checkConsole': 'Check de browser console (F12) voor meer details.',
     'auth.loggedOut': 'Uitgelogd',
     'auth.loggedOutText': 'Je bent succesvol uitgelogd.',
+    
+    // Maintenance Mode
+    'maintenance.mode': 'Onderhoudsmodus',
+    'maintenance.enabled': 'Onderhoudsmodus is ingeschakeld',
+    'maintenance.disabled': 'Onderhoudsmodus is uitgeschakeld',
+    'maintenance.message': 'De website is momenteel in onderhoud. Probeer het later opnieuw.',
+    'maintenance.description': 'Wanneer ingeschakeld, kan alleen de super admin inloggen. Alle andere gebruikers zien een onderhoudsbericht.',
+    'maintenance.enabledDescription': 'Alleen de super admin kan inloggen. Alle andere gebruikers zien een onderhoudsbericht.',
+    'maintenance.disabledDescription': 'Alle gebruikers kunnen normaal inloggen.',
+    'maintenance.toggle': 'Onderhoudsmodus Inschakelen',
+    'maintenance.toggleError': 'Kon onderhoudsmodus niet wijzigen. Probeer het opnieuw.',
+    'maintenance.dialogTitle': 'Website in Onderhoud',
+    'maintenance.dialogClose': 'OK',
+    'maintenance.tableMissing': 'De app_settings tabel bestaat niet in de database.',
+    'maintenance.runSQLScript': 'Voer create_app_settings_table.sql uit in Supabase SQL Editor.',
     
     // Weekly Entry Export
     'weekly.exportFailed': 'Export Mislukt',
@@ -832,6 +855,14 @@ const translations: Record<Language, Record<string, string>> = {
     'admin.noUsers': 'No users available',
     'admin.viewUserEntries': 'View User Weekly Entries',
     'admin.allConfirmedWeeks': 'All Confirmed Weeks',
+    'admin.currentWeekSimpleUsers': 'Current Week',
+    'admin.users': 'users',
+    'admin.weeks': 'weeks',
+    'admin.withEntries': 'with entries',
+    'admin.noSimpleEntryUsersCurrentWeek': 'No simple entry users have filled in this week.',
+    'admin.notConfirmed': 'Not Confirmed',
+    'admin.weekOvernightStays': 'Overnight Stays',
+    'admin.weekOvertimeHours': 'Overtime Hours',
     'admin.timebuzzerIntegration': 'Timebuzzer Integration',
     'admin.timebuzzerDescription': 'Sync time entries from Timebuzzer to your timesheet. Make sure users and projects are mapped first in the database.',
     'admin.testAPI': 'Test API',
@@ -936,7 +967,7 @@ const translations: Record<Language, Record<string, string>> = {
     'admin.weekLockedText': 'This week is confirmed and cannot be modified.',
     'admin.missingInformation': 'Missing Information',
     'admin.selectWeekAndYear': 'Please select a week and year.',
-    'admin.searchWeeks': 'Search week',
+    'admin.searchWeeks': 'Search week, name, or email',
     'admin.allStatuses': 'All Statuses',
     'admin.noWeeksMatchFilters': 'No weeks match the filters.',
     'admin.user': 'User',
@@ -986,6 +1017,21 @@ const translations: Record<Language, Record<string, string>> = {
     'auth.loggedOut': 'Logged Out',
     'auth.loggedOutText': 'You have been successfully logged out.',
     'admin.existingUsers': 'Existing Users',
+    
+    // Maintenance Mode
+    'maintenance.mode': 'Maintenance Mode',
+    'maintenance.enabled': 'Maintenance mode is enabled',
+    'maintenance.disabled': 'Maintenance mode is disabled',
+    'maintenance.message': 'The website is currently under construction. Please try again later.',
+    'maintenance.description': 'When enabled, only the super admin can login. All other users will see a maintenance message.',
+    'maintenance.enabledDescription': 'Only the super admin can login. All other users will see a maintenance message.',
+    'maintenance.disabledDescription': 'All users can login normally.',
+    'maintenance.toggle': 'Enable Maintenance Mode',
+    'maintenance.toggleError': 'Could not update maintenance mode. Please try again.',
+    'maintenance.dialogTitle': 'Website Under Maintenance',
+    'maintenance.dialogClose': 'OK',
+    'maintenance.tableMissing': 'The app_settings table does not exist in the database.',
+    'maintenance.runSQLScript': 'Please run create_app_settings_table.sql in Supabase SQL Editor.',
     
     // Weekly Entry Export
     'weekly.exportFailed': 'Export Failed',

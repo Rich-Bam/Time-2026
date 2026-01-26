@@ -1892,7 +1892,7 @@ const Index = () => {
       </Dialog>
 
       {/* Header */}
-      <header className="bg-white dark:bg-gray-800 shadow-lg border-b border-orange-100 dark:border-gray-700 fixed top-0 left-0 right-0 z-50">
+      <header className={`bg-white dark:bg-gray-800 shadow-lg border-b border-orange-100 dark:border-gray-700 ${isMobile ? '' : 'fixed top-0 left-0 right-0'} z-50`}>
         <div className="container mx-auto px-2 sm:px-3 md:px-4 lg:px-5 xl:px-6 py-1.5 sm:py-1.5 md:py-2 lg:py-3 max-w-full">
           {/* Logo Row - Only on mobile */}
           {isMobile && (
@@ -2047,7 +2047,7 @@ const Index = () => {
       </header>
 
       {/* Main Content */}
-      <div className="container mx-auto px-2 sm:px-4 md:px-6 py-2 sm:py-4 md:py-6 lg:py-8" style={{ marginTop: isMobile ? '95px' : '100px' }}>
+      <div className="container mx-auto px-2 sm:px-4 md:px-6 py-2 sm:py-4 md:py-6 lg:py-8" style={{ marginTop: isMobile ? '0' : '100px' }}>
         {activeTab === 'timesheet' && (
           <TimesheetEntry currentUser={currentUser} hasUnreadDaysOffNotification={hasUnreadDaysOffNotification} />
         )}

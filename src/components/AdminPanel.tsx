@@ -11,12 +11,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { User, Calendar, Pencil, Check, X, Download, FileText, FileDown, Calendar as CalendarIcon, Users, Eye, AlertTriangle, Trash2, BarChart3, RefreshCw, Clock, Search, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import * as XLSX from "xlsx";
 import ExcelJS from "exceljs";
 import { createPDF } from "@/utils/pdfExport";
 import { hashPassword } from "@/utils/password";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { formatDateToYYYYMMDD } from "@/utils/dateUtils";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -111,6 +112,7 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
   const [allEntries, setAllEntries] = useState<any[]>([]);
   const [projectsMap, setProjectsMap] = useState<Record<string, string>>({});
   const [confirmedWeeks, setConfirmedWeeks] = useState<any[]>([]);
+  const [currentWeekSimpleEntryData, setCurrentWeekSimpleEntryData] = useState<any[]>([]);
   const [usersMap, setUsersMap] = useState<Record<string, any>>({});
   const [reminderUserIds, setReminderUserIds] = useState<string[]>([]);
   const [reminderWeekNumber, setReminderWeekNumber] = useState<string>("");
@@ -133,6 +135,10 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
   const [rejectDeleteRequestDialogOpen, setRejectDeleteRequestDialogOpen] = useState(false);
   const [selectedDeleteRequest, setSelectedDeleteRequest] = useState<any | null>(null);
   
+  // Maintenance mode state (only for super admin)
+  const [maintenanceMode, setMaintenanceMode] = useState<boolean>(false);
+  const [maintenanceModeLoading, setMaintenanceModeLoading] = useState<boolean>(false);
+  
   // Export state
   const [exporting, setExporting] = useState(false);
   const [dateRange, setDateRange] = useState({ from: "", to: "" });
@@ -151,6 +157,8 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
   
   // State for viewing week details
   const [selectedWeekForView, setSelectedWeekForView] = useState<{userId: string, weekStartDate: string} | null>(null);
+  const [selectedWeekOvertime, setSelectedWeekOvertime] = useState<number>(0);
+  const [selectedWeekOvernightCount, setSelectedWeekOvernightCount] = useState<number>(0);
   
   // Active tab state
   const [activeTab, setActiveTab] = useState<string>(initialTab || "users");
@@ -201,6 +209,72 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
     const monday = new Date(tempDate);
     monday.setDate(tempDate.getDate() - 3);
     return monday;
+  };
+
+  // Helper to get the Monday of an ISO week from week number and year
+  const getWeekDateFromWeekNumber = (weekNumber: number, year: number): Date => {
+    // Calculate the date of the first Thursday of the year (ISO week standard)
+    const jan4 = new Date(year, 0, 4);
+    const jan4Day = jan4.getDay() || 7; // Convert Sunday (0) to 7
+    const daysToMonday = jan4Day === 1 ? 0 : 1 - jan4Day;
+    
+    // Get the Monday of week 1
+    const week1Monday = new Date(year, 0, 4 + daysToMonday);
+    
+    // Calculate the Monday of the requested week
+    const weekMonday = new Date(week1Monday);
+    weekMonday.setDate(week1Monday.getDate() + (weekNumber - 1) * 7);
+    
+    return weekMonday;
+  };
+
+  // Helper function to calculate overtime for a week's entries
+  const calculateWeekOvertime = (entries: any[], weekStart: Date): number => {
+    // Group entries by date
+    const entriesByDate: Record<string, any[]> = {};
+    entries.forEach(entry => {
+      if (!entriesByDate[entry.date]) {
+        entriesByDate[entry.date] = [];
+      }
+      entriesByDate[entry.date].push(entry);
+    });
+
+    let totalOvertime = 0;
+
+    // Calculate overtime for each day
+    Object.keys(entriesByDate).forEach(dateStr => {
+      const dayEntries = entriesByDate[dateStr];
+      
+      // Calculate total hours for the day (excluding breaks and non-work types)
+      const totalHours = dayEntries.reduce((sum, e) => {
+        // Only count work hours (work types 10-29 and 100)
+        const workType = parseInt(e.description || "0");
+        if ((workType >= 10 && workType <= 29) || workType === 100) {
+          return sum + (isBreakEntry(e) ? 0 : Number(e.hours || 0));
+        }
+        return sum;
+      }, 0);
+
+      // Get day of week (0 = Sunday, 6 = Saturday)
+      const dateObj = new Date(dateStr);
+      const dayOfWeek = dateObj.getDay();
+      const isSaturday = dayOfWeek === 6;
+      const isSunday = dayOfWeek === 0;
+
+      if (isSunday) {
+        // Sunday: ALL hours are 200% (count as overtime)
+        totalOvertime += totalHours;
+      } else if (isSaturday) {
+        // Saturday: ALL hours are 150% (count as overtime)
+        totalOvertime += totalHours;
+      } else {
+        // Weekday (Monday-Friday): hours > 8 = overtime
+        const overtimeHours = totalHours > 8 ? totalHours - 8 : 0;
+        totalOvertime += overtimeHours;
+      }
+    });
+
+    return totalOvertime;
   };
 
 
@@ -352,6 +426,167 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
     }
   }, [currentUser]);
 
+  // Fetch maintenance mode status (only for super admin)
+  const fetchMaintenanceMode = async () => {
+    if (!isSuperAdmin(currentUser)) return;
+    
+    setMaintenanceModeLoading(true);
+    console.log('Fetching maintenance mode status...');
+    try {
+      const { data, error } = await supabase
+        .from("app_settings")
+        .select("value")
+        .eq("key", "maintenance_mode")
+        .single();
+      
+      console.log('Maintenance mode fetch result:', { data, error, value: data?.value });
+      
+      if (!error && data) {
+        const isEnabled = data.value === 'true';
+        console.log('Setting maintenance mode state to:', isEnabled);
+        setMaintenanceMode(isEnabled);
+      } else {
+        // Handle case where table doesn't exist (404 error)
+        if (error?.code === 'PGRST116' || error?.code === '42P01' || error?.message?.includes('does not exist') || error?.message?.includes('relation') || error?.code === '404') {
+          console.warn('app_settings table does not exist. Please run create_app_settings_table.sql in Supabase SQL Editor.');
+          setMaintenanceMode(false); // Default to false if table doesn't exist
+        } else {
+          console.warn('Could not fetch maintenance mode:', error);
+          setMaintenanceMode(false); // Default to false on error
+        }
+      }
+    } catch (err: any) {
+      console.error('Error fetching maintenance mode:', err);
+      setMaintenanceMode(false); // Default to false on error
+    } finally {
+      setMaintenanceModeLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchMaintenanceMode();
+  }, [currentUser]);
+
+  // Toggle maintenance mode
+  const handleToggleMaintenanceMode = async (enabled: boolean) => {
+    if (!isSuperAdmin(currentUser)) return;
+    
+    setMaintenanceModeLoading(true);
+    console.log('Maintenance mode toggle:', { enabled, currentUser: currentUser?.email });
+    
+    try {
+      // Use UPSERT to handle both insert (if row doesn't exist) and update (if it does)
+      const { data, error, count } = await supabase
+        .from("app_settings")
+        .upsert(
+          { 
+            key: 'maintenance_mode', 
+            value: enabled ? 'true' : 'false', 
+            updated_at: new Date().toISOString() 
+          },
+          { 
+            onConflict: 'key',
+            ignoreDuplicates: false
+          }
+        )
+        .select();
+      
+      console.log('UPSERT response:', { data, error, count, enabled });
+      
+      if (error) {
+        // Handle case where table doesn't exist (404 error)
+        if (error?.code === 'PGRST116' || error?.code === '42P01' || error?.message?.includes('does not exist') || error?.message?.includes('relation') || error?.code === '404') {
+          console.error('Table does not exist:', error);
+          toast({
+            title: t('common.error'),
+            description: t('maintenance.tableMissing') + ' ' + t('maintenance.runSQLScript'),
+            variant: "destructive",
+            duration: 10000,
+          });
+        } else {
+          console.error('UPSERT error:', error);
+          toast({
+            title: t('common.error'),
+            description: error.message || t('maintenance.toggleError'),
+            variant: "destructive",
+          });
+        }
+      } else {
+        // Verify that the operation succeeded
+        if (!data || data.length === 0) {
+          console.warn('UPSERT returned no data - operation may have failed silently');
+          toast({
+            title: t('common.error'),
+            description: t('maintenance.toggleError') + ' (No rows affected)',
+            variant: "destructive",
+          });
+        } else {
+          console.log('Maintenance mode updated successfully:', data[0]);
+          // Update local state
+          setMaintenanceMode(enabled);
+          
+          // Re-fetch from database to verify persistence and update state
+          console.log('Re-fetching maintenance mode to verify persistence...');
+          const { data: verifyData, error: verifyError } = await supabase
+            .from("app_settings")
+            .select("value")
+            .eq("key", "maintenance_mode")
+            .single();
+          
+          if (!verifyError && verifyData) {
+            const actualValue = verifyData.value === 'true';
+            console.log('Verified maintenance mode value from database:', actualValue);
+            
+            // Update state to match database
+            setMaintenanceMode(actualValue);
+            
+            if (actualValue !== enabled) {
+              console.warn('Value mismatch! Expected:', enabled, 'Got:', actualValue);
+              toast({
+                title: t('common.error'),
+                description: t('maintenance.toggleError') + ' (Value mismatch)',
+                variant: "destructive",
+              });
+            } else {
+              console.log('Maintenance mode state verified successfully:', enabled);
+              toast({
+                title: t('common.success'),
+                description: enabled ? t('maintenance.enabled') : t('maintenance.disabled'),
+              });
+            }
+          } else {
+            console.warn('Could not verify maintenance mode:', verifyError);
+            // Still show success since UPSERT succeeded, but refresh state
+            await fetchMaintenanceMode();
+            toast({
+              title: t('common.success'),
+              description: enabled ? t('maintenance.enabled') : t('maintenance.disabled'),
+            });
+          }
+        }
+      }
+    } catch (err: any) {
+      console.error('Error toggling maintenance mode:', err);
+      // Check if it's a 404 or table missing error
+      if (err?.code === 'PGRST116' || err?.code === '42P01' || err?.message?.includes('does not exist') || err?.message?.includes('relation') || err?.code === '404') {
+        toast({
+          title: t('common.error'),
+          description: t('maintenance.tableMissing') + ' ' + t('maintenance.runSQLScript'),
+          variant: "destructive",
+          duration: 10000,
+        });
+      } else {
+        toast({
+          title: t('common.error'),
+          description: err.message || t('maintenance.toggleError'),
+          variant: "destructive",
+        });
+      }
+    } finally {
+      setMaintenanceModeLoading(false);
+    }
+  };
+
   // Auto-refresh delete requests when super admin opens the delete-requests tab
   useEffect(() => {
     if (isSuperAdmin(currentUser) && activeTab === 'delete-requests') {
@@ -382,6 +617,282 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
     const interval = setInterval(fetchConfirmedWeeks, 30000);
     return () => clearInterval(interval);
   }, []);
+
+  // Fetch simple entry users data with flexible options (for administratie users)
+  const fetchSimpleEntryData = async (options: {
+    weekStartDate?: Date;
+    userId?: string | string[];
+    weekNumber?: number;
+    year?: number;
+    dateRange?: { from: Date; to: Date };
+  }) => {
+    try {
+      let weekStart: Date;
+      let weekEnd: Date;
+      let weekStartStr: string;
+      let weekEndStr: string;
+      let targetUserIds: string[] | null = null;
+
+      // Determine which users to fetch
+      let simpleUsersQuery = supabase
+        .from('users')
+        .select('id, name, email, weekly_view_option')
+        .eq('weekly_view_option', 'simple');
+
+      if (options.userId) {
+        const userIds = Array.isArray(options.userId) ? options.userId : [options.userId];
+        simpleUsersQuery = simpleUsersQuery.in('id', userIds);
+      }
+
+      const { data: simpleUsers, error: usersError } = await simpleUsersQuery;
+
+      if (usersError) {
+        console.error('Error fetching simple entry users:', usersError);
+        return;
+      }
+
+      if (!simpleUsers || simpleUsers.length === 0) {
+        setCurrentWeekSimpleEntryData([]);
+        return;
+      }
+
+      targetUserIds = simpleUsers.map(u => u.id);
+
+      // Determine date range
+      if (options.weekNumber && options.year) {
+        // Fetch specific week by week number
+        weekStart = getWeekDateFromWeekNumber(options.weekNumber, options.year);
+        weekEnd = new Date(weekStart);
+        weekEnd.setDate(weekEnd.getDate() + 6);
+        weekStartStr = formatDateToYYYYMMDD(weekStart);
+        weekEndStr = formatDateToYYYYMMDD(weekEnd);
+      } else if (options.dateRange) {
+        // Fetch date range - we'll process this differently to group by weeks
+        weekStartStr = formatDateToYYYYMMDD(options.dateRange.from);
+        weekEndStr = formatDateToYYYYMMDD(options.dateRange.to);
+        weekStart = options.dateRange.from;
+        weekEnd = options.dateRange.to;
+      } else {
+        // Default: current week or provided weekStartDate
+        const targetDate = options.weekStartDate || new Date();
+        targetDate.setHours(0, 0, 0, 0);
+        weekStart = getISOWeekMonday(targetDate);
+        weekEnd = new Date(weekStart);
+        weekEnd.setDate(weekEnd.getDate() + 6);
+        weekStartStr = formatDateToYYYYMMDD(weekStart);
+        weekEndStr = formatDateToYYYYMMDD(weekEnd);
+      }
+
+      // Fetch timesheet entries
+      let entriesQuery = supabase
+        .from('timesheet')
+        .select('*')
+        .gte('date', weekStartStr)
+        .lte('date', weekEndStr)
+        .in('user_id', targetUserIds);
+
+      const { data: entries, error: entriesError } = await entriesQuery;
+
+      if (entriesError) {
+        console.error('Error fetching timesheet entries:', entriesError);
+        return;
+      }
+
+      // Fetch overnight stays for the date range
+      let overnightQuery = supabase
+        .from('overnight_stays')
+        .select('user_id, date')
+        .gte('date', weekStartStr)
+        .lte('date', weekEndStr)
+        .in('user_id', targetUserIds);
+
+      const { data: overnightData, error: overnightError } = await overnightQuery;
+      if (overnightError) {
+        console.error('Error fetching overnight stays:', overnightError);
+      }
+
+      // Group overnight stays by user and week
+      const overnightByUserWeek: Record<string, Record<string, Set<string>>> = {};
+      (overnightData || []).forEach((r: any) => {
+        const userId = String(r.user_id);
+        const date = new Date(r.date);
+        const weekStart = getISOWeekMonday(date);
+        const weekKey = formatDateToYYYYMMDD(weekStart);
+        
+        if (!overnightByUserWeek[userId]) {
+          overnightByUserWeek[userId] = {};
+        }
+        if (!overnightByUserWeek[userId][weekKey]) {
+          overnightByUserWeek[userId][weekKey] = new Set<string>();
+        }
+        overnightByUserWeek[userId][weekKey].add(String(r.date));
+      });
+
+      // If dateRange, group entries by user and week
+      // Otherwise, group by user only
+      const userWeekMap: Record<string, Record<string, any[]>> = {};
+      
+      // Filter out admin adjustments (entries without startTime/endTime are admin adjustments)
+      // Only include entries that have both startTime and endTime - these are user-created entries
+      entries?.filter(e => e.startTime && e.endTime && e.startTime !== null && e.endTime !== null).forEach(entry => {
+        const userId = String(entry.user_id);
+        const entryDate = new Date(entry.date);
+        const entryWeekStart = getISOWeekMonday(entryDate);
+        const entryWeekKey = formatDateToYYYYMMDD(entryWeekStart);
+        
+        if (!userWeekMap[userId]) {
+          userWeekMap[userId] = {};
+        }
+        if (!userWeekMap[userId][entryWeekKey]) {
+          userWeekMap[userId][entryWeekKey] = [];
+        }
+        userWeekMap[userId][entryWeekKey].push(entry);
+      });
+
+      // Build data structure for each user-week combination
+      const weekData: any[] = [];
+      
+      Object.keys(userWeekMap).forEach(userId => {
+        const user = simpleUsers.find(u => u.id === userId);
+        if (!user) return;
+
+        Object.keys(userWeekMap[userId]).forEach(weekKey => {
+          const userEntries = userWeekMap[userId][weekKey];
+          
+          // Only add week if there's at least one valid entry (user-created entries with startTime/endTime)
+          // This ensures weeks show up as soon as someone fills in at least one day
+          if (!userEntries || userEntries.length === 0) {
+            return;
+          }
+          
+          const weekStartDate = new Date(weekKey);
+          const weekEndDate = new Date(weekStartDate);
+          weekEndDate.setDate(weekEndDate.getDate() + 6);
+          const weekNum = getISOWeekNumber(weekStartDate);
+
+          // Calculate total hours (excluding breaks)
+          const totalHours = userEntries.reduce((sum, e) => {
+            return sum + (isBreakEntry(e) ? 0 : Number(e.hours || 0));
+          }, 0);
+
+          // Calculate overtime hours
+          const overtimeHours = calculateWeekOvertime(userEntries, weekStartDate);
+
+          // Count overnight stays for this week
+          const weekOvernightSet = overnightByUserWeek[userId]?.[weekKey] || new Set<string>();
+          const overnightCount = weekOvernightSet.size;
+
+          // Check if week is confirmed
+          const confirmedWeek = confirmedWeeks.find(
+            cw => cw.user_id === userId && cw.week_start_date === weekKey
+          );
+
+          const status = confirmedWeek?.admin_approved ? 'approved' :
+                        confirmedWeek?.admin_reviewed ? 'rejected' :
+                        confirmedWeek?.confirmed ? 'pending' : 'not_confirmed';
+
+          weekData.push({
+            user_id: userId,
+            week_start_date: weekKey,
+            weekStart: weekStartDate,
+            weekEnd: weekEndDate,
+            weekNum,
+            totalHours,
+            overtimeHours,
+            overnightCount,
+            entryCount: userEntries.length,
+            userName: user?.name || user?.email || 'Unknown',
+            status,
+            confirmed: confirmedWeek?.confirmed || false,
+            admin_approved: confirmedWeek?.admin_approved || false,
+            admin_reviewed: confirmedWeek?.admin_reviewed || false,
+            entries: userEntries
+          });
+        });
+      });
+
+      setCurrentWeekSimpleEntryData(weekData);
+    } catch (error) {
+      console.error('Error in fetchSimpleEntryData:', error);
+    }
+  };
+
+  // Fetch simple entry data when administratie user is viewing weeks tab
+  useEffect(() => {
+    if (!isAdministratie(currentUser) || !hideTabs || activeTab !== 'weeks') {
+      return;
+    }
+
+    // Debounce search
+    const timeoutId = setTimeout(() => {
+      const searchQuery = confirmedWeeksSearch.trim();
+      const isNumeric = /^\d+$/.test(searchQuery);
+      const isWeekNumber = isNumeric && parseInt(searchQuery) >= 1 && parseInt(searchQuery) <= 53;
+
+      if (isWeekNumber) {
+        // Search by week number
+        const weekNum = parseInt(searchQuery);
+        const year = new Date().getFullYear();
+        fetchSimpleEntryData({ weekNumber: weekNum, year });
+      } else if (searchQuery.length > 0) {
+        // Search by user name - find matching users
+        const matchingUsers = users.filter(u =>
+          u.weekly_view_option === 'simple' &&
+          (u.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+           u.email?.toLowerCase().includes(searchQuery.toLowerCase()))
+        );
+        if (matchingUsers.length > 0) {
+          // Fetch last 3 months of data for matching users - ALL weeks, not just confirmed
+          const threeMonthsAgo = new Date();
+          threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+          fetchSimpleEntryData({
+            userId: matchingUsers.map(u => u.id),
+            dateRange: { from: threeMonthsAgo, to: new Date() }
+          });
+        } else {
+          // No matching users found
+          setCurrentWeekSimpleEntryData([]);
+        }
+      } else {
+        // No search - show current week
+        fetchSimpleEntryData({ weekStartDate: new Date() });
+      }
+    }, 300); // 300ms debounce
+
+    // Refresh every 30 seconds to catch new entries
+    const interval = setInterval(() => {
+      const searchQuery = confirmedWeeksSearch.trim();
+      const isNumeric = /^\d+$/.test(searchQuery);
+      const isWeekNumber = isNumeric && parseInt(searchQuery) >= 1 && parseInt(searchQuery) <= 53;
+
+      if (isWeekNumber) {
+        const weekNum = parseInt(searchQuery);
+        const year = new Date().getFullYear();
+        fetchSimpleEntryData({ weekNumber: weekNum, year });
+      } else if (searchQuery.length > 0) {
+        const matchingUsers = users.filter(u =>
+          u.weekly_view_option === 'simple' &&
+          (u.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+           u.email?.toLowerCase().includes(searchQuery.toLowerCase()))
+        );
+        if (matchingUsers.length > 0) {
+          const threeMonthsAgo = new Date();
+          threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+          fetchSimpleEntryData({
+            userId: matchingUsers.map(u => u.id),
+            dateRange: { from: threeMonthsAgo, to: new Date() }
+          });
+        }
+      } else {
+        fetchSimpleEntryData({ weekStartDate: new Date() });
+      }
+    }, 10000); // Refresh every 10 seconds instead of 30
+
+    return () => {
+      clearTimeout(timeoutId);
+      clearInterval(interval);
+    };
+  }, [currentUser, hideTabs, activeTab, confirmedWeeks, allEntries, confirmedWeeksSearch, users]);
 
   // Fetch days off for all users
   useEffect(() => {
@@ -424,6 +935,52 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
     };
     fetchAllEntries();
   }, [users]);
+
+  // Calculate overtime and fetch overnight stays for selected week view
+  useEffect(() => {
+    if (!selectedWeekForView) {
+      setSelectedWeekOvertime(0);
+      setSelectedWeekOvernightCount(0);
+      return;
+    }
+
+    const calculateAndFetch = async () => {
+      // Calculate week dates
+      const storedDate = new Date(selectedWeekForView.weekStartDate);
+      const isoWeekMonday = getISOWeekMonday(storedDate);
+      const weekStart = isoWeekMonday;
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekEnd.getDate() + 6);
+      const weekStartStr = formatDateToYYYYMMDD(weekStart);
+      const weekEndStr = formatDateToYYYYMMDD(weekEnd);
+
+      // Filter entries for this week
+      const weekEntries = allEntries.filter(
+        e => e.user_id === selectedWeekForView.userId && 
+        e.date >= weekStartStr && 
+        e.date <= weekEndStr &&
+        e.startTime && e.endTime
+      );
+
+      // Calculate overtime
+      const overtime = calculateWeekOvertime(weekEntries, weekStart);
+      setSelectedWeekOvertime(overtime);
+
+      // Fetch overnight stays
+      const { data: overnightData } = await supabase
+        .from('overnight_stays')
+        .select('date')
+        .eq('user_id', selectedWeekForView.userId)
+        .gte('date', weekStartStr)
+        .lte('date', weekEndStr);
+
+      // Count unique dates
+      const uniqueDates = new Set((overnightData || []).map((r: any) => String(r.date)));
+      setSelectedWeekOvernightCount(uniqueDates.size);
+    };
+
+    calculateAndFetch();
+  }, [selectedWeekForView, allEntries]);
 
   // Calculate overtime hours
   const calculateOvertime = async () => {
@@ -2412,6 +2969,10 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
         .eq('confirmed', true)
         .order('week_start_date', { ascending: false });
       setConfirmedWeeks(data || []);
+      // Refresh current week simple entry data if administratie user
+      if (isAdministratie(currentUser) && hideTabs && activeTab === 'weeks') {
+        fetchSimpleEntryData({ weekStartDate: new Date() });
+      }
     }
   };
 
@@ -2698,7 +3259,11 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
       .select('*')
       .eq('confirmed', true)
       .order('week_start_date', { ascending: false });
-    setConfirmedWeeks(data || []);
+      setConfirmedWeeks(data || []);
+      // Refresh current week simple entry data if administratie user
+      if (isAdministratie(currentUser) && hideTabs && activeTab === 'weeks') {
+        fetchSimpleEntryData({ weekStartDate: new Date() });
+      }
   };
 
   const handleUnlockWeek = async (userId: string, weekStartDate: string) => {
@@ -2737,6 +3302,10 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
         .eq('confirmed', true)
         .order('week_start_date', { ascending: false });
       setConfirmedWeeks(data || []);
+      // Refresh current week simple entry data if administratie user
+      if (isAdministratie(currentUser) && hideTabs && activeTab === 'weeks') {
+        fetchSimpleEntryData({ weekStartDate: new Date() });
+      }
     }
   };
 
@@ -2840,6 +3409,43 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
 
         {/* Users Tab */}
         <TabsContent value="users" className="space-y-6">
+          {/* Maintenance Mode Section - Only for super admin */}
+          {isSuperAdmin(currentUser) && (
+            <Card className="mb-6">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <AlertTriangle className="h-5 w-5 text-orange-500" />
+                  {t('maintenance.mode')}
+                </CardTitle>
+                <CardDescription>
+                  {t('maintenance.description')}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <Label htmlFor="maintenance-mode" className="text-sm font-medium">
+                      {maintenanceMode ? t('maintenance.enabled') : t('maintenance.disabled')}
+                    </Label>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {maintenanceMode 
+                        ? t('maintenance.enabledDescription')
+                        : t('maintenance.disabledDescription')
+                      }
+                    </p>
+                  </div>
+                  <Switch
+                    id="maintenance-mode"
+                    checked={maintenanceMode}
+                    onCheckedChange={handleToggleMaintenanceMode}
+                    disabled={maintenanceModeLoading}
+                    className="ml-4"
+                  />
+                </div>
+              </CardContent>
+            </Card>
+          )}
+          
           {/* Add User Section - For admins and administratie users */}
           {(currentUser?.isAdmin || isAdministratie(currentUser)) && (
       <div className="mb-6 sm:mb-8">
@@ -3694,7 +4300,7 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
                       <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                       <Input
                         type="text"
-                        placeholder={t('admin.searchWeeks') || "Search by user, week number, or date..."}
+                        placeholder={t('admin.searchWeeks') || "Search week, user name, or email..."}
                         value={confirmedWeeksSearch}
                         onChange={(e) => {
                           setConfirmedWeeksSearch(e.target.value);
@@ -3947,68 +4553,31 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
       
       {/* Weeks Content for administratie users when accessed via header (hideTabs=true, initialTab="weeks") */}
       {isAdministratie(currentUser) && hideTabs && activeTab === 'weeks' && (() => {
-        // Process all confirmed weeks into a flat array with computed data
-        const processedWeeks = confirmedWeeks
-          .filter(cw => cw.confirmed)
-          .map((cw) => {
-                const storedDate = new Date(cw.week_start_date);
-                const isoWeekMonday = getISOWeekMonday(storedDate);
-                const weekStart = isoWeekMonday;
-                const weekEnd = new Date(weekStart);
-                weekEnd.setDate(weekEnd.getDate() + 6);
-                const weekNum = getISOWeekNumber(weekStart);
-                const weekStartStr = formatDateToYYYYMMDD(weekStart);
-                const weekEndStr = formatDateToYYYYMMDD(weekEnd);
-                const weekEntries = allEntries.filter(
-                  e => e.user_id === cw.user_id && 
-                  e.date >= weekStartStr && 
-                  e.date <= weekEndStr &&
-                  e.startTime && e.endTime
-                );
-                const totalHours = weekEntries.reduce((sum, e) => sum + (isBreakEntry(e) ? 0 : Number(e.hours || 0)), 0);
-            const user = usersMap[cw.user_id];
-            const userName = user?.name || user?.email || 'Unknown';
-            const status = cw.admin_approved ? 'approved' : cw.admin_reviewed ? 'rejected' : 'pending';
-            
-            return {
-              ...cw,
-              weekStart,
-              weekEnd,
-              weekNum,
-              totalHours,
-              entryCount: weekEntries.length,
-              userName,
-              status,
-              weekStartDateStr: weekStartStr
-            };
-          });
+        // Use current week simple entry data instead of confirmed weeks
+        const processedWeeks = currentWeekSimpleEntryData.map((weekData) => ({
+          ...weekData,
+          weekStartDateStr: formatDateToYYYYMMDD(weekData.weekStart)
+        }));
 
-        // Calculate current week and previous week for default filtering
+        // Calculate current week for default filtering
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         const currentWeekMonday = getISOWeekMonday(today);
-        const previousWeekMonday = new Date(currentWeekMonday);
-        previousWeekMonday.setDate(previousWeekMonday.getDate() - 7);
+        const currentWeekStr = formatDateToYYYYMMDD(currentWeekMonday);
         
         // Apply filters
         let filteredWeeks = processedWeeks.filter((week) => {
           const hasSearchQuery = confirmedWeeksSearch.trim().length > 0;
           
-          // Always show all pending weeks, regardless of date
-          const isPending = week.status === 'pending';
-          
-          // If no search query and not pending, only show current week and previous week
-          if (!hasSearchQuery && !isPending) {
+          // If no search query, only show current week
+          if (!hasSearchQuery) {
             const weekMondayStr = formatDateToYYYYMMDD(week.weekStart);
-            const currentWeekStr = formatDateToYYYYMMDD(currentWeekMonday);
-            const previousWeekStr = formatDateToYYYYMMDD(previousWeekMonday);
-            
-            // Only show if it's the current week or previous week
-            if (weekMondayStr !== currentWeekStr && weekMondayStr !== previousWeekStr) {
+            // Only show if it's the current week
+            if (weekMondayStr !== currentWeekStr) {
               return false;
             }
           } else if (hasSearchQuery) {
-            // If there's a search query, apply search filter
+            // If there's a search query, apply search filter (allows searching other weeks)
             const searchLower = confirmedWeeksSearch.toLowerCase();
             const matchesSearch = 
               week.userName.toLowerCase().includes(searchLower) ||
@@ -4018,12 +4587,13 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
             if (!matchesSearch) return false;
           }
           
-          // Status filter
-          if (confirmedWeeksStatusFilter !== 'all' && week.status !== confirmedWeeksStatusFilter) {
+          // Status filter (map not_confirmed to pending for display)
+          const displayStatus = week.status === 'not_confirmed' ? 'pending' : week.status;
+          if (confirmedWeeksStatusFilter !== 'all' && displayStatus !== confirmedWeeksStatusFilter) {
             return false;
           }
           
-          // User filter
+          // User filter - only show simple entry users
           if (confirmedWeeksUserFilter !== 'all' && week.user_id !== confirmedWeeksUserFilter) {
             return false;
           }
@@ -4084,7 +4654,9 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
                 
                 return (
           <div className="space-y-6">
-            <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4 text-green-600 dark:text-green-400">{t('admin.allConfirmedWeeks')}</h3>
+            <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4 text-green-600 dark:text-green-400">
+              {t('admin.currentWeekSimpleUsers') || "Huidige Week - Simple Entry Gebruikers"}
+            </h3>
             
             {/* Filters and Search */}
             <div className="mb-4 space-y-3">
@@ -4094,7 +4666,7 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                   <Input
                     type="text"
-                    placeholder={t('admin.searchWeeks') || "Search by user, week number, or date..."}
+                    placeholder={t('admin.searchWeeks') || "Search week, user name, or email..."}
                     value={confirmedWeeksSearch}
                     onChange={(e) => {
                       setConfirmedWeeksSearch(e.target.value);
@@ -4136,11 +4708,13 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">{t('admin.allUsers') || "All Users"}</SelectItem>
-                    {users.map((user) => (
-                      <SelectItem key={user.id} value={user.id}>
-                        {user.name || user.email}
-                      </SelectItem>
-                    ))}
+                    {users
+                      .filter((user) => user.weekly_view_option === 'simple')
+                      .map((user) => (
+                        <SelectItem key={user.id} value={user.id}>
+                          {user.name || user.email}
+                        </SelectItem>
+                      ))}
                   </SelectContent>
                 </Select>
                         </div>
@@ -4149,10 +4723,11 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
               <div className="text-sm text-gray-600 dark:text-gray-400">
                 {confirmedWeeksSearch.trim() ? (
                   <>
-                    {filteredWeeks.length} {filteredWeeks.length === 1 ? t('admin.week') || 'week' : t('admin.weeks') || 'weeks'} {filteredWeeks.length !== confirmedWeeks.filter(cw => cw.confirmed).length && `(${confirmedWeeks.filter(cw => cw.confirmed).length} total)`}
+                    {filteredWeeks.length} {filteredWeeks.length === 1 ? t('admin.week') || 'week' : t('admin.weeks') || 'weeks'} {filteredWeeks.length !== currentWeekSimpleEntryData.length && `(${currentWeekSimpleEntryData.length} total)`}
                   </>
                 ) : (
                   <>
+                    {filteredWeeks.length} {filteredWeeks.length === 1 ? t('admin.user') || 'gebruiker' : t('admin.users') || 'gebruikers'} {t('admin.withEntries') || 'met entries'} {filteredWeeks.length !== currentWeekSimpleEntryData.length && `(${currentWeekSimpleEntryData.length} total)`}
                   </>
                 )}
                         </div>
@@ -4201,6 +4776,16 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
                             <SortIcon column="hours" />
                           </div>
                         </TableHead>
+                        <TableHead>
+                          <div className="flex items-center">
+                            {t('admin.weekOvernightStays') || t('export.overnightStays') || "Overnight Stays"}
+                          </div>
+                        </TableHead>
+                        <TableHead>
+                          <div className="flex items-center">
+                            {t('admin.weekOvertimeHours') || t('overtime.totalOvertime') || "Overtime Hours"}
+                          </div>
+                        </TableHead>
                         <TableHead 
                           className="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800"
                           onClick={() => handleSort('status')}
@@ -4229,10 +4814,18 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
                             {week.totalHours.toFixed(2)} ({week.entryCount} {t('admin.entries') || 'entries'})
                           </TableCell>
                           <TableCell>
+                            {week.overnightCount || 0}
+                          </TableCell>
+                          <TableCell>
+                            {week.overtimeHours ? week.overtimeHours.toFixed(2) : '0.00'}
+                          </TableCell>
+                          <TableCell>
                             {week.status === 'approved' ? (
                             <span className="text-green-600 dark:text-green-400 font-semibold">{t('admin.approvedStatus')}</span>
                             ) : week.status === 'rejected' ? (
                             <span className="text-orange-600 dark:text-orange-400 font-semibold">{t('admin.rejectedStatus')}</span>
+                          ) : week.status === 'not_confirmed' ? (
+                            <span className="text-blue-600 dark:text-blue-400 font-semibold">{t('admin.notConfirmed') || "Not Confirmed"}</span>
                           ) : (
                             <span className="text-orange-600 dark:text-orange-400 font-semibold">{t('admin.pendingReviewStatus')}</span>
                           )}
@@ -4334,9 +4927,11 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
               </>
             ) : (
         <div className="text-gray-400 dark:text-gray-500 text-center italic p-6 border rounded-lg bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700">
-                {confirmedWeeks.filter(cw => cw.confirmed).length === 0 
-                  ? t('admin.noConfirmedWeeks')
-                  : t('admin.noWeeksMatchFilters') || "No weeks match your filters"}
+                {currentWeekSimpleEntryData.length === 0 
+                  ? (confirmedWeeksSearch.trim() 
+                      ? (t('admin.noWeeksMatchFilters') || "Geen weken komen overeen met de filters.")
+                      : (t('admin.noSimpleEntryUsersCurrentWeek') || "Geen simple entry gebruikers hebben deze week ingevuld."))
+                  : t('admin.noWeeksMatchFilters') || "Geen weken komen overeen met de filters."}
         </div>
       )}
     </div>
@@ -7803,25 +8398,25 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
       
       {/* Week Details Dialog - Available for both admins and administratie users */}
       {selectedWeekForView && (() => {
+        // Check if week is confirmed (optional - for status display only)
         const cw = confirmedWeeks.find(
           c => c.user_id === selectedWeekForView.userId && c.week_start_date === selectedWeekForView.weekStartDate
         );
-        if (!cw) return null;
         
         // Calculate the correct ISO week Monday based on the stored week_start_date
         // This ensures we get the correct week number even if week_start_date was stored incorrectly
-        const storedDate = new Date(cw.week_start_date);
+        const storedDate = new Date(selectedWeekForView.weekStartDate);
         const isoWeekMonday = getISOWeekMonday(storedDate);
         const weekStart = isoWeekMonday;
         const weekEnd = new Date(weekStart);
         weekEnd.setDate(weekEnd.getDate() + 6);
         const weekNum = getISOWeekNumber(weekStart);
-        const user = usersMap[cw.user_id];
+        const user = usersMap[selectedWeekForView.userId];
         // Use the ISO week date range for filtering entries, not the stored week_start_date
         const weekStartStr = formatDateToYYYYMMDD(weekStart);
         const weekEndStr = formatDateToYYYYMMDD(weekEnd);
         let weekEntries = allEntries.filter(
-          e => e.user_id === cw.user_id && 
+          e => e.user_id === selectedWeekForView.userId && 
           e.date >= weekStartStr && 
           e.date <= weekEndStr &&
           // Filter out admin adjustments (entries without startTime/endTime are admin adjustments)
@@ -7881,37 +8476,47 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
                     <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
                       {t('admin.total')}: {totalHours.toFixed(2)} ({weekEntries.length} {t('admin.entries')})
                     </div>
+                    <div className="text-sm font-medium text-gray-900 dark:text-gray-100 mt-1">
+                      {t('admin.weekOvertimeHours') || t('overtime.totalOvertime') || "Overtime Hours"}: {selectedWeekOvertime.toFixed(2)}
+                    </div>
+                    <div className="text-sm font-medium text-gray-900 dark:text-gray-100 mt-1">
+                      {t('admin.weekOvernightStays') || t('export.overnightStays') || "Overnight Stays"}: {selectedWeekOvernightCount}
+                    </div>
                     <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                      {t('admin.status')}: {cw.admin_approved ? (
-                        <span className="text-green-600 dark:text-green-400 font-semibold">{t('admin.approvedStatus')}</span>
-                      ) : cw.admin_reviewed ? (
-                        <span className="text-red-600 dark:text-red-400 font-semibold">{t('admin.rejectedStatus')}</span>
+                      {t('admin.status')}: {cw ? (
+                        cw.admin_approved ? (
+                          <span className="text-green-600 dark:text-green-400 font-semibold">{t('admin.approvedStatus')}</span>
+                        ) : cw.admin_reviewed ? (
+                          <span className="text-red-600 dark:text-red-400 font-semibold">{t('admin.rejectedStatus')}</span>
+                        ) : (
+                          <span className="text-orange-600 dark:text-orange-400 font-semibold">{t('admin.pendingReviewStatus')}</span>
+                        )
                       ) : (
-                        <span className="text-orange-600 dark:text-orange-400 font-semibold">{t('admin.pendingReviewStatus')}</span>
+                        <span className="text-blue-600 dark:text-blue-400 font-semibold">{t('admin.notConfirmed') || "Not Confirmed"}</span>
                       )}
                     </div>
                   </div>
                   <div className="flex gap-2">
-                    {!cw.admin_reviewed && (
+                    {(!cw || !cw.admin_reviewed) && (
                       <Button
                         size="sm"
                         variant="default"
                         className="bg-green-600 hover:bg-green-700"
                         onClick={() => {
-                          handleApproveWeek(cw.user_id, cw.week_start_date);
+                          handleApproveWeek(selectedWeekForView.userId, selectedWeekForView.weekStartDate);
                           setSelectedWeekForView(null);
                         }}
                       >
                         {t('admin.approveButton')}
                       </Button>
                     )}
-                    {!cw.admin_reviewed && (
+                    {(!cw || !cw.admin_reviewed) && (
                       <Button
                         size="sm"
                         variant="outline"
                         className="border-red-600 dark:border-red-500 text-red-600 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/40"
                         onClick={() => {
-                          handleRejectWeek(cw.user_id, cw.week_start_date);
+                          handleRejectWeek(selectedWeekForView.userId, selectedWeekForView.weekStartDate);
                           setSelectedWeekForView(null);
                         }}
                       >
@@ -7923,7 +8528,7 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
                       variant="outline"
                       className="border-orange-600 dark:border-orange-500 text-orange-600 dark:text-orange-400 hover:bg-orange-100 dark:hover:bg-orange-900/40"
                       onClick={() => {
-                        handleUnlockWeek(cw.user_id, cw.week_start_date);
+                        handleUnlockWeek(selectedWeekForView.userId, selectedWeekForView.weekStartDate);
                         setSelectedWeekForView(null);
                       }}
                     >

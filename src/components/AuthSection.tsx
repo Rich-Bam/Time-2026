@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { User, Eye } from "lucide-react";
+import { User, Eye, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -20,6 +20,8 @@ interface AuthSectionProps {
 // TODO: Enable this in the future when account creation should be available
 const ENABLE_ACCOUNT_CREATION = false;
 
+const SUPER_ADMIN_EMAIL = "r.blance@bampro.nl";
+
 const AuthSection = ({ onLogin, setCurrentUser }: AuthSectionProps) => {
   const { t } = useLanguage();
   const [loginData, setLoginData] = useState({ email: "", password: "" });
@@ -33,6 +35,8 @@ const AuthSection = ({ onLogin, setCurrentUser }: AuthSectionProps) => {
   const [resetEmail, setResetEmail] = useState("");
   const [resetLoading, setResetLoading] = useState(false);
   const [resetMessage, setResetMessage] = useState("");
+  // Maintenance mode dialog state
+  const [showMaintenanceDialog, setShowMaintenanceDialog] = useState(false);
 
   // Helper functions for offline mode
   const getOfflineUsers = (): any[] => {
@@ -101,6 +105,51 @@ const AuthSection = ({ onLogin, setCurrentUser }: AuthSectionProps) => {
         variant: "destructive",
       });
       return;
+    }
+    
+    // Check maintenance mode (before user lookup to prevent information leakage)
+    // Super admin can always login, even during maintenance
+    const isSuperAdminAttempt = loginData.email.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase();
+    
+    console.log('Login attempt:', { email: loginData.email, isSuperAdmin: isSuperAdminAttempt });
+    
+    if (!isSuperAdminAttempt) {
+      console.log('Checking maintenance mode for non-super-admin user...');
+      try {
+        const { data: maintenanceSetting, error: maintenanceError } = await supabase
+          .from("app_settings")
+          .select("value")
+          .eq("key", "maintenance_mode")
+          .single();
+        
+        console.log('Maintenance mode check result:', { 
+          data: maintenanceSetting, 
+          error: maintenanceError,
+          value: maintenanceSetting?.value,
+          isEnabled: maintenanceSetting?.value === 'true'
+        });
+        
+        // Handle case where table doesn't exist (404 error) - allow login (fail-open)
+        if (maintenanceError && (maintenanceError.code === 'PGRST116' || maintenanceError.code === '42P01' || maintenanceError.message?.includes('does not exist') || maintenanceError.message?.includes('relation') || maintenanceError.code === '404')) {
+          // Table doesn't exist yet - allow login (fail-open for availability)
+          console.warn('app_settings table does not exist. Allowing login. Please run create_app_settings_table.sql in Supabase SQL Editor.');
+        } else if (!maintenanceError && maintenanceSetting?.value === 'true') {
+          // Maintenance mode is enabled - show blocking dialog
+          console.log('Maintenance mode is ENABLED - blocking login and showing dialog');
+          setShowMaintenanceDialog(true);
+          return;
+        } else if (!maintenanceError && maintenanceSetting?.value === 'false') {
+          console.log('Maintenance mode is disabled - allowing login');
+        } else if (maintenanceError) {
+          console.warn('Error checking maintenance mode (allowing login as fail-open):', maintenanceError);
+        }
+        // If other error, allow login (fail-open for availability)
+      } catch (err) {
+        // If maintenance check fails, allow login (fail open for availability)
+        console.error('Exception checking maintenance mode (allowing login as fail-open):', err);
+      }
+    } else {
+      console.log('Super admin login - skipping maintenance mode check');
     }
     
     // Query Supabase users table for a user with this email
@@ -664,6 +713,30 @@ const AuthSection = ({ onLogin, setCurrentUser }: AuthSectionProps) => {
                 {resetMessage}
               </div>
             )}
+          </div>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Maintenance Mode Dialog */}
+      <Dialog open={showMaintenanceDialog} onOpenChange={() => {}}>
+        <DialogContent 
+          className="sm:max-w-md [&>button]:hidden" 
+          onInteractOutside={(e) => e.preventDefault()} 
+          onEscapeKeyDown={(e) => e.preventDefault()}
+        >
+          <DialogHeader>
+            <div className="flex items-center gap-3 mb-2">
+              <AlertTriangle className="h-6 w-6 text-orange-500" />
+              <DialogTitle className="text-xl">{t('maintenance.dialogTitle')}</DialogTitle>
+            </div>
+            <DialogDescription className="text-base pt-2">
+              {t('maintenance.message')}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end pt-4">
+            <Button onClick={() => setShowMaintenanceDialog(false)}>
+              {t('maintenance.dialogClose')}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
