@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -27,10 +27,35 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { Check, ChevronsUpDown } from 'lucide-react';
+import { Check, ChevronsUpDown, ChevronLeft } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Checkbox } from '@/components/ui/checkbox';
 import { formatDateToYYYYMMDD } from '@/utils/dateUtils';
+
+// Helper function to get week dates (Monday to Sunday)
+function getWeekDates(date: Date): Date[] {
+  const start = new Date(date);
+  start.setDate(date.getDate() - ((date.getDay() + 6) % 7)); // Monday as first day
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(start);
+    d.setDate(start.getDate() + i);
+    return d;
+  });
+}
+
+// Helper function to get ISO week number
+function getISOWeekNumber(date: Date): number {
+  const tempDate = new Date(date.getTime());
+  tempDate.setHours(0, 0, 0, 0);
+  tempDate.setDate(tempDate.getDate() + 3 - ((tempDate.getDay() + 6) % 7));
+  const week1 = new Date(tempDate.getFullYear(), 0, 4);
+  return (
+    1 +
+    Math.round(
+      ((tempDate.getTime() - week1.getTime()) / 86400000 - 3 + ((week1.getDay() + 6) % 7)) / 7
+    )
+  );
+}
 
 interface ShareEntryDialogProps {
   open: boolean;
@@ -71,28 +96,147 @@ const ShareEntryDialog: React.FC<ShareEntryDialogProps> = ({
   const [loading, setLoading] = useState(false);
   const [fetchingUsers, setFetchingUsers] = useState(false);
   const [selectedDays, setSelectedDays] = useState<Date[]>([]);
+  const [currentWeekStart, setCurrentWeekStart] = useState<Date | null>(null);
+  const [currentWeekDates, setCurrentWeekDates] = useState<Date[]>([]);
+  const [currentDayEntryCounts, setCurrentDayEntryCounts] = useState<Record<string, number>>({});
+  const [loadingEntries, setLoadingEntries] = useState(false);
+  const prevWeekStartRef = useRef<Date | null>(null);
 
+  // Initialize week navigation when dialog opens
   useEffect(() => {
-    if (open) {
-      fetchUsers();
-      // Initialize selected days when dialog opens for week sharing
-      if (shareType === 'week' && weekDates) {
-        // Default: select all days that have entries
-        const daysWithEntries = weekDates.filter(day => {
-          const dateStr = formatDateToYYYYMMDD(day);
-          return (dayEntryCounts[dateStr] || 0) > 0;
-        });
-        setSelectedDays(daysWithEntries);
-      } else {
-        setSelectedDays([]);
-      }
+    if (open && shareType === 'week') {
+      // Get Monday of the week from shareDate
+      const shareDateCopy = new Date(shareDate);
+      shareDateCopy.setHours(0, 0, 0, 0);
+      const dayOfWeek = shareDateCopy.getDay();
+      const monday = new Date(shareDateCopy);
+      monday.setDate(shareDateCopy.getDate() - ((dayOfWeek + 6) % 7));
+      setCurrentWeekStart(monday);
+      setSelectedDays([]); // Ensure empty selection on open
+      prevWeekStartRef.current = null; // Reset ref
+    } else if (open) {
+      setCurrentWeekStart(null);
+      setCurrentWeekDates([]);
+      setCurrentDayEntryCounts({});
+      setSelectedDays([]); // Ensure empty for non-week shares
     } else {
       // Reset when dialog closes
       setSelectedDays([]);
       setSelectedUser(null);
       setMessage('');
+      setCurrentWeekStart(null);
+      setCurrentWeekDates([]);
+      setCurrentDayEntryCounts({});
+      prevWeekStartRef.current = null; // Reset ref
     }
-  }, [open, currentUserId, shareType, weekDates, dayEntryCounts]);
+  }, [open, shareType, shareDate]);
+
+  // Update week dates and fetch entries when currentWeekStart changes
+  useEffect(() => {
+    if (currentWeekStart && shareType === 'week') {
+      const weekDates = getWeekDates(currentWeekStart);
+      setCurrentWeekDates(weekDates);
+      
+      // Reset selection when week actually changes (not just when loading)
+      const weekChanged = prevWeekStartRef.current === null || 
+        prevWeekStartRef.current.getTime() !== currentWeekStart.getTime();
+      
+      if (weekChanged) {
+        setSelectedDays([]); // Reset to empty selection when week changes
+        prevWeekStartRef.current = currentWeekStart;
+      }
+      
+      fetchWeekEntryCounts(weekDates);
+    }
+  }, [currentWeekStart, shareType, currentUserId]);
+
+
+  useEffect(() => {
+    if (open) {
+      fetchUsers();
+    }
+  }, [open, currentUserId]);
+
+  const fetchWeekEntryCounts = async (weekDates: Date[]) => {
+    if (!currentUserId) return;
+    
+    setLoadingEntries(true);
+    try {
+      const fromDate = formatDateToYYYYMMDD(weekDates[0]);
+      const toDate = formatDateToYYYYMMDD(weekDates[6]);
+
+      // Fetch all entries for the week
+      const { data, error } = await supabase
+        .from('timesheet')
+        .select('id, date, startTime, endTime')
+        .eq('user_id', currentUserId)
+        .gte('date', fromDate)
+        .lte('date', toDate);
+
+      if (error) throw error;
+
+      // Count entries per day (filter out admin adjustments - entries without startTime/endTime)
+      const counts: Record<string, number> = {};
+      weekDates.forEach(day => {
+        const dateStr = formatDateToYYYYMMDD(day);
+        counts[dateStr] = 0;
+      });
+
+      // Count only user-created entries (those with startTime and endTime)
+      if (data) {
+        data.forEach(entry => {
+          if (entry.startTime && entry.endTime) {
+            const dateStr = entry.date;
+            if (counts[dateStr] !== undefined) {
+              counts[dateStr] = (counts[dateStr] || 0) + 1;
+            }
+          }
+        });
+      }
+
+      setCurrentDayEntryCounts(counts);
+    } catch (error: any) {
+      console.error('Error fetching week entry counts:', error);
+      toast({
+        title: t('common.error'),
+        description: error.message || 'Failed to load entry counts',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoadingEntries(false);
+    }
+  };
+
+  const getWeeksBack = (): number => {
+    if (!currentWeekStart) return 0;
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const currentDayOfWeek = today.getDay();
+    const currentMonday = new Date(today);
+    currentMonday.setDate(today.getDate() - ((currentDayOfWeek + 6) % 7));
+    
+    const diffTime = currentMonday.getTime() - currentWeekStart.getTime();
+    const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+    const diffWeeks = Math.floor(diffDays / 7);
+    
+    return diffWeeks;
+  };
+
+  const canGoBack = (): boolean => {
+    if (!currentWeekStart) return false;
+    const weeksBack = getWeeksBack();
+    return weeksBack < 6; // Can go back up to 6 weeks
+  };
+
+  const goToPreviousWeek = () => {
+    if (!currentWeekStart || !canGoBack()) return;
+    
+    const previousWeek = new Date(currentWeekStart);
+    previousWeek.setDate(previousWeek.getDate() - 7);
+    setCurrentWeekStart(previousWeek);
+    setSelectedDays([]); // Reset selection when changing weeks
+  };
 
   const fetchUsers = async () => {
     setFetchingUsers(true);
@@ -128,7 +272,8 @@ const ShareEntryDialog: React.FC<ShareEntryDialogProps> = ({
       return shareDateOnly <= today;
     } else {
       // For week shares, check if the Monday of the week is <= current week's Monday
-      const shareDateOnly = new Date(shareDate);
+      const weekStartToCheck = currentWeekStart || shareDate;
+      const shareDateOnly = new Date(weekStartToCheck);
       shareDateOnly.setHours(0, 0, 0, 0);
       const dayOfWeek = shareDateOnly.getDay();
       const monday = new Date(shareDateOnly);
@@ -376,33 +521,80 @@ const ShareEntryDialog: React.FC<ShareEntryDialogProps> = ({
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">
-          {shareType === 'week' && weekDates && (
+          {shareType === 'week' && currentWeekDates.length > 0 && (
             <div className="space-y-2">
+              {/* Week Navigation */}
+              <div className="flex items-center justify-between gap-2 pb-2 border-b">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={goToPreviousWeek}
+                  disabled={!canGoBack() || loadingEntries}
+                  className="flex items-center gap-1"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  {t('share.previousWeek')}
+                </Button>
+                <div className="flex-1 text-center text-sm">
+                  {loadingEntries ? (
+                    <span className="text-gray-500">{t('share.loadingEntries')}</span>
+                  ) : (
+                    <>
+                      <div className="font-medium">
+                        {t('share.weekOf', {
+                          startDate: currentWeekDates[0].toLocaleDateString(undefined, { day: 'numeric', month: 'short' }),
+                          endDate: currentWeekDates[6].toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
+                        })}
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        {t('share.weekNumber', {
+                          weekNumber: getISOWeekNumber(currentWeekDates[0]),
+                          year: currentWeekDates[0].getFullYear()
+                        })}
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+              
               <Label>{t('share.selectDays')}</Label>
               <p className="text-sm text-gray-500">{t('share.selectDaysDescription')}</p>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-[200px] overflow-y-auto border rounded-md p-2">
-                {weekDates.map((day, idx) => {
+                {currentWeekDates.map((day, idx) => {
                   const dateStr = formatDateToYYYYMMDD(day);
-                  const dayEntryCount = dayEntryCounts[dateStr] || 0;
+                  const dayEntryCount = currentDayEntryCounts[dateStr] || 0;
                   const isSelected = selectedDays.some(d => 
                     formatDateToYYYYMMDD(d) === dateStr
                   );
                   return (
-                    <div key={idx} className="flex items-start space-x-2 p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-800">
+                    <div
+                      key={idx}
+                      onClick={() => {
+                        if (dayEntryCount === 0) return; // Don't allow selection of days with no entries
+                        
+                        if (isSelected) {
+                          setSelectedDays(selectedDays.filter(d => 
+                            formatDateToYYYYMMDD(d) !== dateStr
+                          ));
+                        } else {
+                          setSelectedDays([...selectedDays, day]);
+                        }
+                      }}
+                      className={cn(
+                        "flex items-start space-x-2 p-2 rounded transition-colors",
+                        isSelected 
+                          ? "bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 cursor-pointer" 
+                          : "hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer",
+                        dayEntryCount === 0 && "opacity-50 cursor-not-allowed"
+                      )}
+                    >
                       <Checkbox
                         checked={isSelected}
-                        onCheckedChange={(checked) => {
-                          if (checked) {
-                            setSelectedDays([...selectedDays, day]);
-                          } else {
-                            setSelectedDays(selectedDays.filter(d => 
-                              formatDateToYYYYMMDD(d) !== dateStr
-                            ));
-                          }
-                        }}
                         disabled={dayEntryCount === 0}
+                        readOnly
+                        className="pointer-events-none"
                       />
-                      <Label className="flex-1 cursor-pointer text-sm">
+                      <Label className="flex-1 text-sm pointer-events-none">
                         <div className="font-medium">
                           {day.toLocaleDateString(undefined, { weekday: 'short' })}
                         </div>
@@ -423,9 +615,9 @@ const ShareEntryDialog: React.FC<ShareEntryDialogProps> = ({
                   size="sm"
                   onClick={() => {
                     // Select all days with entries
-                    const daysWithEntries = weekDates.filter(day => {
+                    const daysWithEntries = currentWeekDates.filter(day => {
                       const dateStr = formatDateToYYYYMMDD(day);
-                      return (dayEntryCounts[dateStr] || 0) > 0;
+                      return (currentDayEntryCounts[dateStr] || 0) > 0;
                     });
                     setSelectedDays(daysWithEntries);
                   }}

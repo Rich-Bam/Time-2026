@@ -612,6 +612,10 @@ const translations: Record<Language, Record<string, string>> = {
     'share.selectAllWithEntries': 'Selecteer Alle Dagen met Invoeren',
     'share.clearSelection': 'Wis Selectie',
     'share.noDaysSelected': 'Selecteer minimaal één dag om te delen',
+    'share.previousWeek': 'Vorige Week',
+    'share.weekOf': 'Week van {startDate} - {endDate}',
+    'share.weekNumber': 'Week {weekNumber}, {year}',
+    'share.loadingEntries': 'Invoeren laden...',
 
 
 
@@ -1218,6 +1222,10 @@ const translations: Record<Language, Record<string, string>> = {
     'share.selectAllWithEntries': 'Select All Days with Entries',
     'share.clearSelection': 'Clear Selection',
     'share.noDaysSelected': 'Please select at least one day to share',
+    'share.previousWeek': 'Previous Week',
+    'share.weekOf': 'Week of {startDate} - {endDate}',
+    'share.weekNumber': 'Week {weekNumber}, {year}',
+    'share.loadingEntries': 'Loading entries...',
   },
 };
 
