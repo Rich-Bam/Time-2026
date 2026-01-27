@@ -23,6 +23,7 @@ import InstallPWA from "@/components/InstallPWA";
 import Profile from "@/components/Profile";
 import LanguageSelector from "@/components/LanguageSelector";
 import ThemeToggle from "@/components/ThemeToggle";
+import SharedEntriesPanel from "@/components/SharedEntriesPanel";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -71,6 +72,7 @@ const Index = () => {
   const [showDaysOffDialog, setShowDaysOffDialog] = useState(false);
   const [daysOffNotification, setDaysOffNotification] = useState<any>(null);
   const [hasUnreadDaysOffNotification, setHasUnreadDaysOffNotification] = useState(false);
+  const [pendingSharesCount, setPendingSharesCount] = useState(0);
   const [dateRange, setDateRange] = useState({ from: "", to: "" });
   const [exporting, setExporting] = useState(false);
   const [activeTab, setActiveTab] = useState("weekly");
@@ -117,6 +119,36 @@ const Index = () => {
     }
   }, [currentUser?.weekly_view_option, currentUser?.id]);
   
+  // Fetch pending shares count
+  const fetchPendingSharesCount = async () => {
+    if (!currentUser?.id) return;
+    try {
+      const { count, error } = await supabase
+        .from('shared_entries')
+        .select('*', { count: 'exact', head: true })
+        .eq('recipient_id', currentUser.id)
+        .eq('status', 'pending');
+      
+      if (!error && count !== null) {
+        setPendingSharesCount(count);
+      } else if (error) {
+        console.error('Error fetching pending shares count:', error);
+      }
+    } catch (error) {
+      console.error('Error fetching pending shares count:', error);
+    }
+  };
+
+  // Fetch pending shares count when user logs in
+  useEffect(() => {
+    if (isLoggedIn && currentUser) {
+      fetchPendingSharesCount();
+      // Refresh every 30 seconds
+      const interval = setInterval(fetchPendingSharesCount, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [isLoggedIn, currentUser]);
+
   // Periodically refetch user data to get updated weekly_view_option (when admin changes it)
   useEffect(() => {
     if (!isLoggedIn || !currentUser) return;
@@ -1930,10 +1962,15 @@ const Index = () => {
                 {!isAdministratie(currentUser) && (
                   <>
                     <button
-                      className={`text-xs sm:text-xs md:text-sm lg:text-sm xl:text-base font-medium px-2.5 sm:px-1.5 md:px-2 lg:px-2.5 py-1.5 sm:py-1 md:py-1.5 lg:py-2 rounded transition-colors whitespace-nowrap min-h-[36px] sm:min-h-0 flex-shrink-0 ${activeTab === 'weekly' ? 'bg-orange-600 text-white dark:bg-orange-500' : 'text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-700'}`}
+                      className={`text-xs sm:text-xs md:text-sm lg:text-sm xl:text-base font-medium px-2.5 sm:px-1.5 md:px-2 lg:px-2.5 py-1.5 sm:py-1 md:py-1.5 lg:py-2 rounded transition-colors whitespace-nowrap min-h-[36px] sm:min-h-0 flex-shrink-0 relative ${activeTab === 'weekly' ? 'bg-orange-600 text-white dark:bg-orange-500' : 'text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-700'}`}
                       onClick={() => setActiveTab('weekly')}
                     >
                       {t('nav.weekly')}
+                      {pendingSharesCount > 0 && (
+                        <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[8px] sm:text-[10px] font-bold rounded-full h-4 w-4 sm:h-5 sm:w-5 flex items-center justify-center">
+                          {pendingSharesCount > 9 ? '9+' : pendingSharesCount}
+                        </span>
+                      )}
                     </button>
                     {/* View Hours - Only for normal users (not admins, administratie, tester, or weekly_only) */}
                     {currentUser && !currentUser?.isAdmin && currentUser?.userType !== 'administratie' && !isTester(currentUser) && !isWeeklyOnly(currentUser) && (
@@ -2053,6 +2090,15 @@ const Index = () => {
         )}
         {activeTab === 'weekly' && !isAdministratie(currentUser) && (
           <div className="space-y-4">
+            {currentUser && (
+              <SharedEntriesPanel
+                currentUserId={currentUser.id}
+                onAcceptSuccess={() => {
+                  // Refresh pending shares count
+                  fetchPendingSharesCount();
+                }}
+              />
+            )}
             {useSimpleWeeklyView ? (
               <WeeklyCalendarEntrySimple 
                 currentUser={currentUser} 

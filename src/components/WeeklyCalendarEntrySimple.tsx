@@ -23,6 +23,8 @@ import { formatDateToYYYYMMDD } from "@/utils/dateUtils";
 import OvertimeSummaryPanel from "@/components/OvertimeSummaryPanel";
 import OvernightSummaryPanel from "@/components/OvernightSummaryPanel";
 import { BarChart3, Moon } from 'lucide-react';
+import ShareEntryButton from "@/components/ShareEntryButton";
+import ShareEntryDialog from "@/components/ShareEntryDialog";
 
 // Helper function to get work types with translations
 const getWorkTypes = (t: (key: string) => string) => [
@@ -148,6 +150,10 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
   const [availableWeeks, setAvailableWeeks] = useState<Array<{ weekStart: string; weekNumber: number; year: number; label: string }>>([]);
   const [weekReviewComment, setWeekReviewComment] = useState<string>("");
   const [sendingEmail, setSendingEmail] = useState(false);
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const [shareType, setShareType] = useState<'day' | 'week'>('day');
+  const [shareDate, setShareDate] = useState<Date>(new Date());
+  const [shareEntryCount, setShareEntryCount] = useState(0);
   const [showSendEmailDialog, setShowSendEmailDialog] = useState(false);
   
   // State for combined mobile panel
@@ -1681,6 +1687,69 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
     }
   };
 
+  const getDayEntryCount = (dayIdx: number): number => {
+    const day = days[dayIdx];
+    const dateStr = formatDateToYYYYMMDD(day.date);
+    const submittedCount = (submittedEntries[dateStr] || []).length;
+    const editableCount = day.entries.filter(e => e.project || e.workType || e.hours || e.startTime || e.endTime).length;
+    return submittedCount + editableCount;
+  };
+
+  const getWeekEntryCount = (): number => {
+    let total = 0;
+    days.forEach((day, dayIdx) => {
+      total += getDayEntryCount(dayIdx);
+    });
+    return total;
+  };
+
+  const handleShareDay = (dayIdx: number) => {
+    const day = days[dayIdx];
+    const entryCount = getDayEntryCount(dayIdx);
+    if (entryCount === 0) {
+      toast({
+        title: t('share.noEntries'),
+        description: t('share.noEntriesDescription'),
+        variant: 'destructive',
+      });
+      return;
+    }
+    setShareType('day');
+    setShareDate(day.date);
+    setShareEntryCount(entryCount);
+    setShareDialogOpen(true);
+  };
+
+  const handleShareWeek = () => {
+    const entryCount = getWeekEntryCount();
+    if (entryCount === 0) {
+      toast({
+        title: t('share.noEntries'),
+        description: t('share.noEntriesDescription'),
+        variant: 'destructive',
+      });
+      return;
+    }
+    setShareType('week');
+    setShareDate(weekDates[0]);
+    setShareEntryCount(entryCount);
+    setShareDialogOpen(true);
+  };
+
+  const getDayEntryCounts = (): Record<string, number> => {
+    const counts: Record<string, number> = {};
+    days.forEach((day, dayIdx) => {
+      const dateStr = formatDateToYYYYMMDD(day.date);
+      counts[dateStr] = getDayEntryCount(dayIdx);
+    });
+    return counts;
+  };
+
+  const handleShareSuccess = () => {
+    // Refresh submitted entries to show updated state
+    weekDates.forEach(d => fetchSubmittedEntries(formatDateToYYYYMMDD(d)));
+  };
+
   const handleSubmitAll = async () => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -3212,6 +3281,12 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
             <Button variant="outline" size={isMobile ? "sm" : "default"} onClick={() => changeWeek(1)} className="text-xs sm:text-sm">
               {t('weekly.next')} &gt;
             </Button>
+            {currentUser && (
+              <ShareEntryButton
+                onClick={handleShareWeek}
+                hasEntries={getWeekEntryCount() > 0}
+              />
+            )}
             {/* Week selector - Available for all users - Hide on mobile or make more compact */}
             {!isMobile && currentUser && availableWeeks.length > 0 && (
               <Select
@@ -3371,12 +3446,20 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
                               {activeSummary.totalHours}h • {activeSummary.entryCount}{" "}
                               {activeSummary.entryCount === 1 ? (t('weekly.entry') || 'entry') : (t('weekly.entries') || 'entries')}
                             </span>
-                            {activeSummary.hasOvernight && (
-                              <span className="flex items-center gap-1 shrink-0">
-                                <Moon className="h-3 w-3 text-indigo-600 dark:text-indigo-400" />
-                                <span>{t('weekly.overnightStay')}</span>
-                              </span>
-                            )}
+                            <div className="flex items-center gap-2">
+                              {activeSummary.hasOvernight && (
+                                <span className="flex items-center gap-1 shrink-0">
+                                  <Moon className="h-3 w-3 text-indigo-600 dark:text-indigo-400" />
+                                  <span>{t('weekly.overnightStay')}</span>
+                                </span>
+                              )}
+                              {currentUser && (
+                                <ShareEntryButton
+                                  onClick={() => handleShareDay(safeDayIdx)}
+                                  hasEntries={getDayEntryCount(safeDayIdx) > 0}
+                                />
+                              )}
+                            </div>
                           </div>
                         </div>
                         <Button
@@ -5204,6 +5287,19 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
             </SheetContent>
           </Sheet>
         </>
+      )}
+      {currentUser && (
+        <ShareEntryDialog
+          open={shareDialogOpen}
+          onOpenChange={setShareDialogOpen}
+          shareType={shareType}
+          shareDate={shareDate}
+          entryCount={shareEntryCount}
+          currentUserId={currentUser.id}
+          onShareSuccess={handleShareSuccess}
+          weekDates={shareType === 'week' ? weekDates : undefined}
+          dayEntryCounts={shareType === 'week' ? getDayEntryCounts() : undefined}
+        />
       )}
     </div>
   );

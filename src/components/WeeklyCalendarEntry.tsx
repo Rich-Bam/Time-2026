@@ -19,6 +19,8 @@ import OvertimeSummaryPanel from "@/components/OvertimeSummaryPanel";
 import OvernightSummaryPanel from "@/components/OvernightSummaryPanel";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import ShareEntryButton from "@/components/ShareEntryButton";
+import ShareEntryDialog from "@/components/ShareEntryDialog";
 
 const workTypes = [
   { value: 10, label: "Work" },
@@ -135,6 +137,73 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
   const [workTypeSearchValues, setWorkTypeSearchValues] = useState<Record<string, string>>({});
   const [availableWeeks, setAvailableWeeks] = useState<Array<{ weekStart: string; weekNumber: number; year: number; label: string }>>([]);
   const [weekReviewComment, setWeekReviewComment] = useState<string>("");
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const [shareType, setShareType] = useState<'day' | 'week'>('day');
+  const [shareDate, setShareDate] = useState<Date>(new Date());
+  const [shareEntryCount, setShareEntryCount] = useState(0);
+
+  const getDayEntryCount = (dayIdx: number): number => {
+    const day = days[dayIdx];
+    const dateStr = formatDateToYYYYMMDD(day.date);
+    const submittedCount = (submittedEntries[dateStr] || []).length;
+    const editableCount = day.entries.filter(e => e.project || e.workType || e.hours || e.startTime || e.endTime).length;
+    return submittedCount + editableCount;
+  };
+
+  const getWeekEntryCount = (): number => {
+    let total = 0;
+    days.forEach((day, dayIdx) => {
+      total += getDayEntryCount(dayIdx);
+    });
+    return total;
+  };
+
+  const handleShareDay = (dayIdx: number) => {
+    const day = days[dayIdx];
+    const entryCount = getDayEntryCount(dayIdx);
+    if (entryCount === 0) {
+      toast({
+        title: t('share.noEntries'),
+        description: t('share.noEntriesDescription'),
+        variant: 'destructive',
+      });
+      return;
+    }
+    setShareType('day');
+    setShareDate(day.date);
+    setShareEntryCount(entryCount);
+    setShareDialogOpen(true);
+  };
+
+  const handleShareWeek = () => {
+    const entryCount = getWeekEntryCount();
+    if (entryCount === 0) {
+      toast({
+        title: t('share.noEntries'),
+        description: t('share.noEntriesDescription'),
+        variant: 'destructive',
+      });
+      return;
+    }
+    setShareType('week');
+    setShareDate(weekDates[0]);
+    setShareEntryCount(entryCount);
+    setShareDialogOpen(true);
+  };
+
+  const getDayEntryCounts = (): Record<string, number> => {
+    const counts: Record<string, number> = {};
+    days.forEach((day, dayIdx) => {
+      const dateStr = formatDateToYYYYMMDD(day.date);
+      counts[dateStr] = getDayEntryCount(dayIdx);
+    });
+    return counts;
+  };
+
+  const handleShareSuccess = () => {
+    // Refresh submitted entries to show updated state
+    weekDates.forEach(d => fetchSubmittedEntries(formatDateToYYYYMMDD(d)));
+  };
 
   const weekDates = getWeekDates(weekStart);
   const weekNumber = getISOWeekNumber(weekDates[0]);
@@ -2170,6 +2239,20 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
         </Card>
       )}
 
+      {currentUser && (
+        <ShareEntryDialog
+          open={shareDialogOpen}
+          onOpenChange={setShareDialogOpen}
+          shareType={shareType}
+          shareDate={shareDate}
+          entryCount={shareEntryCount}
+          currentUserId={currentUser.id}
+          onShareSuccess={handleShareSuccess}
+          weekDates={shareType === 'week' ? weekDates : undefined}
+          dayEntryCounts={shareType === 'week' ? getDayEntryCounts() : undefined}
+        />
+      )}
+
       {/* Desktop: Overtime Summary Panels - For all users (except admins/administratie) */}
       {!isMobile && currentUser && !currentUser?.isAdmin && currentUser?.userType !== 'administratie' && (
         <>
@@ -2240,6 +2323,12 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
               >
                 🔄 {useSimpleView ? t('weekly.original') : t('weekly.simple')}
               </Button>
+            )}
+            {currentUser && (
+              <ShareEntryButton
+                onClick={handleShareWeek}
+                hasEntries={getWeekEntryCount() > 0}
+              />
             )}
           </div>
         </div>
@@ -2362,7 +2451,15 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
                             <tr key={`${dayIdx}-${entryIdx}`} className="border-t hover:bg-gray-50 dark:hover:bg-gray-800">
                               {isFirstEntry && (
                                 <td rowSpan={rowSpan || (hasRows ? totalRows : 1)} className="border p-2 sticky left-0 bg-white dark:bg-gray-900 font-medium align-top">
-                                  {dayName}
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span>{dayName}</span>
+                                    {currentUser && (
+                                      <ShareEntryButton
+                                        onClick={() => handleShareDay(dayIdx)}
+                                        hasEntries={getDayEntryCount(dayIdx) > 0}
+                                      />
+                                    )}
+                                  </div>
                                   <div className="mt-2 space-y-1">
                                     <Button 
                                       variant="outline" 
@@ -2647,7 +2744,15 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
             <>
           {days.map((day, dayIdx) => day.open && (
             <div key={dayIdx} className="mb-3 sm:mb-4 border rounded-lg p-3 sm:p-4 bg-white dark:bg-gray-800 shadow">
-              <div className="font-semibold mb-2 text-sm sm:text-base">{day.date.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'short', day: 'numeric' })}</div>
+              <div className="font-semibold mb-2 text-sm sm:text-base flex items-center justify-between">
+                <span>{day.date.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'short', day: 'numeric' })}</span>
+                {currentUser && (
+                  <ShareEntryButton
+                    onClick={() => handleShareDay(dayIdx)}
+                    hasEntries={getDayEntryCount(dayIdx) > 0}
+                  />
+                )}
+              </div>
               <div className="mb-3 flex items-center space-x-2">
                 <Checkbox
                   id={`stayedOvernight-cards-${dayIdx}`}
