@@ -8,7 +8,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { User, Calendar, Pencil, Check, X, Download, FileText, FileDown, Calendar as CalendarIcon, Users, Eye, AlertTriangle, Trash2, BarChart3, RefreshCw, Clock, Search, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { User, Calendar, Pencil, Check, X, Download, FileText, FileDown, Calendar as CalendarIcon, Users, Eye, AlertTriangle, Trash2, BarChart3, RefreshCw, Clock, Search, ArrowUpDown, ArrowUp, ArrowDown, Mail } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -185,6 +185,24 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
   const [hoursTakenOverrides, setHoursTakenOverrides] = useState<Record<string, number>>({});
   const [editingHoursTaken, setEditingHoursTaken] = useState<Record<string, string>>({});
   
+  // Late entries state (for administratie users)
+  interface LateEntry {
+    userId: string;
+    userName: string;
+    userEmail: string;
+    weekStartDate: string; // YYYY-MM-DD format
+    weekEndDate: string;
+    weekNumber: number;
+    year: number;
+    daysLate: number; // Days since week ended
+    selected?: boolean; // For UI selection
+  }
+  const [lateEntries, setLateEntries] = useState<LateEntry[]>([]);
+  const [lateEntriesLoading, setLateEntriesLoading] = useState<boolean>(false);
+  const [lateEntriesExpanded, setLateEntriesExpanded] = useState<boolean>(false); // Hidden by default
+  const [lateEntriesUserFilter, setLateEntriesUserFilter] = useState<string>('all');
+  const [lateEntriesDateCutoff, setLateEntriesDateCutoff] = useState<string>('12'); // Default to 12 weeks
+  
   // Helper function to get ISO week number
   const getISOWeekNumber = (date: Date) => {
     const tempDate = new Date(date.getTime());
@@ -296,6 +314,44 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
     return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
   };
 
+  // Helper functions for late entries
+  const getWeekEndDate = (weekStartDate: Date): Date => {
+    const endDate = new Date(weekStartDate);
+    endDate.setDate(weekStartDate.getDate() + 6); // Sunday (end of week)
+    return endDate;
+  };
+
+  const isWeekLate = (weekEndDate: Date): boolean => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    weekEndDate.setHours(0, 0, 0, 0);
+    return weekEndDate < today;
+  };
+
+  const calculateDaysLate = (weekEndDate: Date): number => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    weekEndDate.setHours(0, 0, 0, 0);
+    const diffTime = today.getTime() - weekEndDate.getTime();
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    return Math.max(0, diffDays);
+  };
+
+  const getCutoffDate = (cutoff: string): Date => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (cutoff === 'all') {
+      return new Date(2020, 0, 1); // Very old date to include all
+    }
+    const weeks = parseInt(cutoff);
+    if (!isNaN(weeks)) {
+      const cutoffDate = new Date(today);
+      cutoffDate.setDate(cutoffDate.getDate() - (weeks * 7));
+      return cutoffDate;
+    }
+    return today; // Default to today if invalid
+  };
+
   // Helper to get day name (language-aware)
   // Kept as getDayNameNL because other parts of the file reference it.
   const getDayNameNL = (dateStr: string) => {
@@ -380,19 +436,20 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
   // Fetch users
   const fetchUsers = async () => {
     setLoading(true);
-    // Try to fetch with weekly_view_option, fallback if column doesn't exist
-    let { data, error } = await supabase.from("users").select("id, email, name, isAdmin, must_change_password, approved, can_use_timebuzzer, timebuzzer_user_id, userType, weekly_view_option");
+    // Try to fetch with weekly_view_option and show_in_overdue_entries, fallback if columns don't exist
+    let { data, error } = await supabase.from("users").select("id, email, name, isAdmin, must_change_password, approved, can_use_timebuzzer, timebuzzer_user_id, userType, weekly_view_option, show_in_overdue_entries");
     
     // If error is about missing column, retry without it
-    if (error && error.message?.includes('weekly_view_option')) {
+    if (error && (error.message?.includes('weekly_view_option') || error.message?.includes('show_in_overdue_entries'))) {
       const fallbackResult = await supabase.from("users").select("id, email, name, isAdmin, must_change_password, approved, can_use_timebuzzer, timebuzzer_user_id, userType");
       if (fallbackResult.error) {
         toast({ title: "Error", description: fallbackResult.error.message, variant: "destructive" });
       } else {
-        // Add default weekly_view_option to all users
+        // Add default values for missing columns
         data = (fallbackResult.data || []).map((user: any) => ({
           ...user,
-          weekly_view_option: 'both' // Default value
+          weekly_view_option: 'both', // Default value
+          show_in_overdue_entries: true // Default value - include all users by default
         }));
         error = null;
       }
@@ -816,6 +873,190 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
       console.error('Error in fetchSimpleEntryData:', error);
     }
   };
+
+  // Fetch late entries (weeks that have ended but aren't confirmed)
+  const fetchLateEntries = async () => {
+    if (!isAdministratie(currentUser) && !isAdminOrAdministratie(currentUser) && !currentUser?.isAdmin) {
+      return;
+    }
+
+    setLateEntriesLoading(true);
+    try {
+      // Get all active/approved users
+      let { data: allUsers, error: usersError } = await supabase
+        .from('users')
+        .select('id, name, email, approved, created_at, show_in_overdue_entries')
+        .eq('approved', true);
+
+      // If error is about missing column, retry without it and default to true
+      if (usersError && usersError.message?.includes('show_in_overdue_entries')) {
+        const fallbackResult = await supabase
+          .from('users')
+          .select('id, name, email, approved, created_at')
+          .eq('approved', true);
+        
+        if (fallbackResult.error) {
+          console.error('Error fetching users for late entries:', fallbackResult.error);
+          setLateEntries([]);
+          setLateEntriesLoading(false);
+          return;
+        }
+        
+        // Add default value for missing column (include all users by default)
+        allUsers = (fallbackResult.data || []).map((user: any) => ({
+          ...user,
+          show_in_overdue_entries: true
+        }));
+        usersError = null;
+      }
+
+      if (usersError) {
+        console.error('Error fetching users for late entries:', usersError);
+        setLateEntries([]);
+        setLateEntriesLoading(false);
+        return;
+      }
+
+      if (!allUsers || allUsers.length === 0) {
+        setLateEntries([]);
+        setLateEntriesLoading(false);
+        return;
+      }
+
+      // Get all confirmed weeks
+      const { data: confirmedWeeksData, error: confirmedError } = await supabase
+        .from('confirmed_weeks')
+        .select('user_id, week_start_date, confirmed')
+        .eq('confirmed', true);
+
+      if (confirmedError) {
+        console.error('Error fetching confirmed weeks:', confirmedError);
+        setLateEntries([]);
+        setLateEntriesLoading(false);
+        return;
+      }
+
+      // Create a map of confirmed weeks per user
+      const confirmedWeeksMap: Record<string, Set<string>> = {};
+      (confirmedWeeksData || []).forEach((cw: any) => {
+        if (!confirmedWeeksMap[cw.user_id]) {
+          confirmedWeeksMap[cw.user_id] = new Set();
+        }
+        confirmedWeeksMap[cw.user_id].add(cw.week_start_date);
+      });
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      // Calculate current week start (Monday of current week)
+      const currentWeekStartDate = getISOWeekMonday(today);
+      
+      // Apply user filter
+      let filteredUsers = allUsers;
+      if (lateEntriesUserFilter !== 'all') {
+        filteredUsers = allUsers.filter(user => user.id === lateEntriesUserFilter);
+      }
+      
+      // Filter out users excluded from overdue checks
+      filteredUsers = filteredUsers.filter(user => user.show_in_overdue_entries !== false);
+
+      // Get cutoff date based on date cutoff setting
+      const cutoffDate = getCutoffDate(lateEntriesDateCutoff);
+      const lateEntriesList: LateEntry[] = [];
+
+      // For each user, check all weeks that have ended
+      for (const user of filteredUsers) {
+        const userCreatedDate = user.created_at ? new Date(user.created_at) : new Date(2020, 0, 1);
+        userCreatedDate.setHours(0, 0, 0, 0);
+        
+        // Start from cutoff date or user creation date, whichever is later
+        const checkFromDate = cutoffDate > userCreatedDate ? cutoffDate : userCreatedDate;
+
+        // Get user's confirmed weeks
+        const userConfirmedWeeks = confirmedWeeksMap[user.id] || new Set<string>();
+
+        // Check each week from checkFromDate to today
+        let weekToCheck = getISOWeekMonday(checkFromDate);
+        
+        while (weekToCheck <= today) {
+          const weekEnd = getWeekEndDate(weekToCheck);
+          const weekStartStr = formatDateToYYYYMMDD(weekToCheck);
+          
+          // Only check weeks that have ended AND ended after the cutoff date
+          if (isWeekLate(weekEnd) && weekEnd >= cutoffDate) {
+            // Check if this week is confirmed
+            if (!userConfirmedWeeks.has(weekStartStr)) {
+              const weekNum = getISOWeekNumber(weekToCheck);
+              const year = weekToCheck.getFullYear();
+              const currentYear = new Date().getFullYear();
+              
+              // Exclude entries from previous years - only show current year and later
+              if (year < currentYear) {
+                // Move to next week
+                weekToCheck = new Date(weekToCheck);
+                weekToCheck.setDate(weekToCheck.getDate() + 7);
+                continue;
+              }
+              
+              // Only show overdue entries from current week onwards
+              // Compare week start dates - only include weeks that start from current week or later
+              if (weekToCheck < currentWeekStartDate) {
+                // Move to next week
+                weekToCheck = new Date(weekToCheck);
+                weekToCheck.setDate(weekToCheck.getDate() + 7);
+                continue;
+              }
+              
+              const daysLate = calculateDaysLate(weekEnd);
+              const weekEndStr = formatDateToYYYYMMDD(weekEnd);
+
+              lateEntriesList.push({
+                userId: user.id,
+                userName: user.name || user.email || 'Unknown',
+                userEmail: user.email || '',
+                weekStartDate: weekStartStr,
+                weekEndDate: weekEndStr,
+                weekNumber: weekNum,
+                year: year,
+                daysLate: daysLate,
+                selected: false
+              });
+            }
+          }
+
+          // Move to next week
+          weekToCheck = new Date(weekToCheck);
+          weekToCheck.setDate(weekToCheck.getDate() + 7);
+        }
+      }
+
+      // Sort by days late (most late first), then by user name
+      lateEntriesList.sort((a, b) => {
+        if (b.daysLate !== a.daysLate) {
+          return b.daysLate - a.daysLate;
+        }
+        return a.userName.localeCompare(b.userName);
+      });
+
+      setLateEntries(lateEntriesList);
+    } catch (error) {
+      console.error('Error fetching late entries:', error);
+      setLateEntries([]);
+    } finally {
+      setLateEntriesLoading(false);
+    }
+  };
+
+  // Fetch late entries when admin/administratie user is viewing weeks tab
+  useEffect(() => {
+    if ((isAdministratie(currentUser) || isAdminOrAdministratie(currentUser) || currentUser?.isAdmin) && 
+        (activeTab === 'weeks' || (hideTabs && activeTab === 'weeks'))) {
+      fetchLateEntries();
+      // Refresh every 60 seconds
+      const interval = setInterval(fetchLateEntries, 60000);
+      return () => clearInterval(interval);
+    }
+  }, [currentUser, activeTab, hideTabs, lateEntriesUserFilter, lateEntriesDateCutoff]);
 
   // Fetch simple entry data when administratie user is viewing weeks tab
   useEffect(() => {
@@ -2083,6 +2324,41 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
     }
   };
 
+  // Toggle show in overdue entries for a user (only super admin can do this)
+  const handleToggleShowInOverdueEntries = async (userId: string, userEmail: string, showInOverdue: boolean) => {
+    if (currentUser.email !== SUPER_ADMIN_EMAIL) {
+      toast({
+        title: "Action not allowed",
+        description: "Only the super admin can manage this setting.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const { error } = await supabase.from("users").update({ show_in_overdue_entries: showInOverdue }).eq("id", userId);
+    if (error) {
+      if (error.message?.includes('show_in_overdue_entries') || error.message?.includes('column') || error.message?.includes('does not exist')) {
+        toast({
+          title: "Column Not Found",
+          description: "The show_in_overdue_entries column doesn't exist yet. Please run the SQL migration file 'add_show_in_overdue_entries_column.sql' in Supabase SQL Editor first.",
+          variant: "destructive",
+          duration: 10000,
+        });
+      } else {
+        toast({ title: "Error", description: error.message, variant: "destructive" });
+      }
+    } else {
+      toast({
+        title: "Setting updated",
+        description: `${userEmail} will ${showInOverdue ? "now" : "no longer"} be included in overdue entries checks.`,
+      });
+      fetchUsers();
+      // Refresh late entries if currently viewing weeks tab
+      if (activeTab === 'weeks' || (hideTabs && activeTab === 'weeks')) {
+        fetchLateEntries();
+      }
+    }
+  };
+
   // Change weekly view option for a user (only super admin can do this)
   const handleChangeWeeklyViewOption = async (userId: string, userEmail: string, newOption: string) => {
     if (currentUser?.email !== SUPER_ADMIN_EMAIL) {
@@ -2919,6 +3195,134 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
     setReminderYear(new Date().getFullYear().toString());
   };
 
+  // Send reminders for selected late entries
+  const handleSendReminderForLateEntries = async () => {
+    const selectedEntries = lateEntries.filter(entry => entry.selected);
+    
+    if (selectedEntries.length === 0) {
+      toast({
+        title: "No Selection",
+        description: "Please select at least one late entry to send reminders for.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Group by user and week (user_id, week_number, year)
+    const remindersMap: Record<string, { userId: string; weekNumber: number; year: number; entries: LateEntry[] }> = {};
+    
+    selectedEntries.forEach(entry => {
+      const key = `${entry.userId}-${entry.weekNumber}-${entry.year}`;
+      if (!remindersMap[key]) {
+        remindersMap[key] = {
+          userId: entry.userId,
+          weekNumber: entry.weekNumber,
+          year: entry.year,
+          entries: []
+        };
+      }
+      remindersMap[key].entries.push(entry);
+    });
+
+    // Create reminders for each unique user/week combination
+    const remindersToInsert = Object.values(remindersMap).map(({ userId, weekNumber, year }) => ({
+      user_id: userId,
+      week_number: weekNumber,
+      year: year,
+      message: `Please fill in and confirm your hours for week ${weekNumber} of ${year}. This week is overdue.`,
+      created_by: currentUser?.id ? currentUser.id.toString() : null,
+    }));
+
+    console.log("Inserting reminders for late entries:", remindersToInsert);
+
+    // Insert reminders into database
+    const { data: insertedReminders, error } = await supabase
+      .from("reminders")
+      .insert(remindersToInsert)
+      .select();
+
+    console.log("Reminder insert result:", { insertedReminders, error });
+
+    if (error) {
+      console.error("Error inserting reminders:", error);
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Send emails for each user/week combination
+    const userIds = Object.values(remindersMap).map(m => m.userId);
+    const uniqueUserIds = [...new Set(userIds)];
+    
+    // Group by week number and year for email sending
+    const weekGroups: Record<string, { weekNumber: number; year: number; userIds: string[] }> = {};
+    Object.values(remindersMap).forEach(({ userId, weekNumber, year }) => {
+      const weekKey = `${weekNumber}-${year}`;
+      if (!weekGroups[weekKey]) {
+        weekGroups[weekKey] = { weekNumber, year, userIds: [] };
+      }
+      if (!weekGroups[weekKey].userIds.includes(userId)) {
+        weekGroups[weekKey].userIds.push(userId);
+      }
+    });
+
+    let totalSent = 0;
+    let totalFailed = 0;
+
+    // Send emails for each week group
+    for (const { weekNumber, year, userIds: weekUserIds } of Object.values(weekGroups)) {
+      try {
+        const { data: emailData, error: emailError } = await supabase.functions.invoke('send-reminder-email', {
+          body: {
+            userIds: weekUserIds,
+            weekNumber: weekNumber,
+            year: year,
+            message: `Please fill in and confirm your hours for week ${weekNumber} of ${year}. This week is overdue.`,
+          },
+        });
+
+        if (emailError) {
+          console.error("Error sending reminder emails:", emailError);
+          totalFailed += weekUserIds.length;
+        } else if (emailData?.error) {
+          console.error("Edge function returned error:", emailData.error);
+          totalFailed += weekUserIds.length;
+        } else {
+          const sent = emailData?.sent || 0;
+          const failed = emailData?.failed || 0;
+          totalSent += sent;
+          totalFailed += failed;
+        }
+      } catch (emailErr: any) {
+        console.error("Exception sending reminder emails:", emailErr);
+        totalFailed += weekUserIds.length;
+      }
+    }
+
+    // Clear selections
+    setLateEntries(prev => prev.map(entry => ({ ...entry, selected: false })));
+
+    // Show success message
+    if (totalFailed > 0) {
+      toast({
+        title: "Reminders Sent",
+        description: `Reminders saved and ${totalSent} email(s) sent to ${uniqueUserIds.length} user(s) for ${Object.keys(weekGroups).length} overdue week(s). ${totalFailed} email(s) failed to send.`,
+        variant: "default",
+      });
+    } else {
+      toast({
+        title: "Reminders and Emails Sent",
+        description: `Reminders and emails sent successfully to ${uniqueUserIds.length} user(s) for ${Object.keys(weekGroups).length} overdue week(s).`,
+      });
+    }
+
+    // Refresh late entries list
+    fetchLateEntries();
+  };
+
   // Handle admin actions on confirmed weeks
   const handleApproveWeek = async (userId: string, weekStartDate: string) => {
     const { error } = await supabase
@@ -3739,6 +4143,20 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
                     </div>
                   )}
                   {currentUser.email === SUPER_ADMIN_EMAIL && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-600 dark:text-gray-400">{t('admin.showInOverdueEntries') || 'Show in Overdue:'}</span>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={user.show_in_overdue_entries !== false}
+                          onChange={(e) => handleToggleShowInOverdueEntries(user.id, user.email, e.target.checked)}
+                          className="h-3 w-3"
+                        />
+                        <span>{user.show_in_overdue_entries !== false ? t('admin.yes') : t('admin.no')}</span>
+                      </div>
+                    </div>
+                  )}
+                  {currentUser.email === SUPER_ADMIN_EMAIL && (
                     <div className="flex justify-between items-center">
                       <span className="text-gray-600 dark:text-gray-400">Weekly View:</span>
                       <Select 
@@ -3837,6 +4255,9 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
                     <th className="p-2 text-left text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700">{t('admin.mustChangePassword')}</th>
                     {currentUser.email === SUPER_ADMIN_EMAIL && (
                       <th className="p-2 text-left text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700">Timebuzzer</th>
+                    )}
+                    {currentUser.email === SUPER_ADMIN_EMAIL && (
+                      <th className="p-2 text-left text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700">{t('admin.showInOverdueEntries') || 'Show in Overdue'}</th>
                     )}
                     {currentUser.email === SUPER_ADMIN_EMAIL && (
                       <th className="p-2 text-left text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700">Weekly View</th>
@@ -3988,6 +4409,19 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
                             className="h-4 w-4"
                           />
                           <span className="text-gray-900 dark:text-gray-100">{user.can_use_timebuzzer ? t('admin.yes') : t('admin.no')}</span>
+                        </div>
+                      </td>
+                    )}
+                    {currentUser.email === SUPER_ADMIN_EMAIL && (
+                      <td className="p-2 border border-gray-300 dark:border-gray-700">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={user.show_in_overdue_entries !== false}
+                            onChange={(e) => handleToggleShowInOverdueEntries(user.id, user.email, e.target.checked)}
+                            className="h-4 w-4"
+                          />
+                          <span className="text-gray-900 dark:text-gray-100">{user.show_in_overdue_entries !== false ? t('admin.yes') : t('admin.no')}</span>
                         </div>
                       </td>
                     )}
@@ -4151,6 +4585,213 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
         {/* Weeks Tab - Only for admins, not for administratie users (they access it via header) */}
         {currentUser?.isAdmin && !isAdministratie(currentUser) && (
         <TabsContent value="weeks" className="space-y-6">
+          {/* Late Entries Section - For admin users */}
+          {(() => {
+            const selectedLateEntriesCount = lateEntries.filter(e => e.selected).length;
+            const uniqueUsersWithLateEntries = new Set(lateEntries.map(e => e.userId)).size;
+            const totalLateWeeks = lateEntries.length;
+
+            return (
+              <Card className={`border-2 ${lateEntries.length > 0 ? 'border-orange-500 dark:border-orange-600 bg-orange-50 dark:bg-orange-900/20' : 'border-gray-200 dark:border-gray-700'}`}>
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className={`h-5 w-5 ${lateEntries.length > 0 ? 'text-orange-600 dark:text-orange-400' : 'text-gray-400'}`} />
+                      <CardTitle className={`text-base sm:text-lg ${lateEntries.length > 0 ? 'text-orange-800 dark:text-orange-200' : 'text-gray-600 dark:text-gray-400'}`}>
+                        {t('admin.lateEntries') || "Overdue Weekly Entries"}
+                        {lateEntries.length > 0 && (
+                          <span className="ml-2 px-2 py-0.5 text-xs font-semibold bg-orange-600 text-white rounded-full">
+                            {uniqueUsersWithLateEntries} {uniqueUsersWithLateEntries === 1 ? t('admin.user') || 'user' : t('admin.users') || 'users'} • {totalLateWeeks} {totalLateWeeks === 1 ? t('admin.week') || 'week' : t('admin.weeks') || 'weeks'}
+                          </span>
+                        )}
+                      </CardTitle>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setLateEntriesExpanded(!lateEntriesExpanded);
+                        }}
+                        className="h-8"
+                      >
+                        {lateEntriesExpanded ? 'Hide' : 'Show'}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={fetchLateEntries}
+                        disabled={lateEntriesLoading}
+                        className="h-8"
+                      >
+                        <RefreshCw className={`h-4 w-4 mr-1 ${lateEntriesLoading ? 'animate-spin' : ''}`} />
+                        Refresh
+                      </Button>
+                    </div>
+                  </div>
+                </CardHeader>
+                {lateEntriesExpanded && (
+                  <CardContent>
+                    {lateEntriesLoading ? (
+                      <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                        {t('common.loading') || 'Loading...'}
+                      </div>
+                    ) : lateEntries.length === 0 ? (
+                      <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                        <Check className="h-8 w-8 mx-auto mb-2 text-green-500" />
+                        <p className="text-sm font-medium">{t('admin.noLateEntries') || "No late entries - all weeks are up to date!"}</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {/* Filter Controls */}
+                        <div className="flex flex-col sm:flex-row gap-3 pb-3 border-b">
+                          {/* User Filter */}
+                          <div className="flex-1">
+                            <Label className="text-sm font-semibold mb-2 block">{t('admin.lateEntriesUserFilter') || 'Filter by User'}</Label>
+                            <Select
+                              value={lateEntriesUserFilter}
+                              onValueChange={(value) => {
+                                setLateEntriesUserFilter(value);
+                                fetchLateEntries();
+                              }}
+                            >
+                              <SelectTrigger className="w-full">
+                                <SelectValue placeholder={t('admin.allUsers') || "All Users"} />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="all">{t('admin.allUsers') || "All Users"}</SelectItem>
+                                {users
+                                  .filter((user) => user.approved)
+                                  .map((user) => (
+                                    <SelectItem key={user.id} value={user.id}>
+                                      {user.name || user.email}
+                                    </SelectItem>
+                                  ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          {/* Date Cutoff Filter */}
+                          <div className="flex-1">
+                            <Label className="text-sm font-semibold mb-2 block">{t('admin.lateEntriesDateCutoff') || 'Check Weeks Back'}</Label>
+                            <Select
+                              value={lateEntriesDateCutoff}
+                              onValueChange={(value) => {
+                                setLateEntriesDateCutoff(value);
+                                fetchLateEntries();
+                              }}
+                            >
+                              <SelectTrigger className="w-full">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="4">{t('admin.lastWeeks', { n: '4' }) || 'Last 4 weeks'}</SelectItem>
+                                <SelectItem value="8">{t('admin.lastWeeks', { n: '8' }) || 'Last 8 weeks'}</SelectItem>
+                                <SelectItem value="12">{t('admin.lastWeeks', { n: '12' }) || 'Last 12 weeks'}</SelectItem>
+                                <SelectItem value="16">{t('admin.lastWeeks', { n: '16' }) || 'Last 16 weeks'}</SelectItem>
+                                <SelectItem value="all">{t('admin.allWeeks') || 'All weeks'}</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+
+                        {/* Bulk Actions */}
+                        <div className="flex items-center justify-between flex-wrap gap-2 pb-2 border-b">
+                          <div className="flex items-center gap-2">
+                            <Checkbox
+                              checked={selectedLateEntriesCount === lateEntries.length && lateEntries.length > 0}
+                              onCheckedChange={(checked) => {
+                                setLateEntries(prev => prev.map(entry => ({ ...entry, selected: !!checked })));
+                              }}
+                            />
+                            <Label className="text-sm font-medium">
+                              {t('admin.selectAll') || 'Select All'} ({selectedLateEntriesCount} {t('admin.selected') || 'selected'})
+                            </Label>
+                          </div>
+                          <Button
+                            onClick={handleSendReminderForLateEntries}
+                            disabled={selectedLateEntriesCount === 0}
+                            className="bg-orange-600 hover:bg-orange-700 text-white"
+                          >
+                            <Mail className="h-4 w-4 mr-2" />
+                            {t('admin.sendReminder') || 'Send Reminder'} {selectedLateEntriesCount > 0 && `(${selectedLateEntriesCount})`}
+                          </Button>
+                        </div>
+
+                        {/* Late Entries Table */}
+                        <div className="border rounded-lg overflow-hidden">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead className="w-12">
+                                  <Checkbox />
+                                </TableHead>
+                                <TableHead>{t('admin.user') || 'User'}</TableHead>
+                                <TableHead>{t('admin.week') || 'Week'}</TableHead>
+                                <TableHead>{t('admin.dateRange') || 'Date Range'}</TableHead>
+                                <TableHead className="text-right">{t('admin.daysLate') || 'Days Late'}</TableHead>
+                                <TableHead className="text-right">{t('admin.actions') || 'Actions'}</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {lateEntries.map((entry, index) => (
+                                <TableRow 
+                                  key={`${entry.userId}-${entry.weekStartDate}-${index}`}
+                                  className={entry.selected ? 'bg-orange-100 dark:bg-orange-900/30' : ''}
+                                >
+                                  <TableCell>
+                                    <Checkbox
+                                      checked={entry.selected || false}
+                                      onCheckedChange={(checked) => {
+                                        setLateEntries(prev => prev.map((e, i) => 
+                                          i === index ? { ...e, selected: !!checked } : e
+                                        ));
+                                      }}
+                                    />
+                                  </TableCell>
+                                  <TableCell className="font-medium">
+                                    {entry.userName}
+                                    <div className="text-xs text-gray-500 dark:text-gray-400">{entry.userEmail}</div>
+                                  </TableCell>
+                                  <TableCell>
+                                    Week {entry.weekNumber}, {entry.year}
+                                  </TableCell>
+                                  <TableCell>
+                                    {new Date(entry.weekStartDate).toLocaleDateString('nl-NL')} - {new Date(entry.weekEndDate).toLocaleDateString('nl-NL')}
+                                  </TableCell>
+                                  <TableCell className="text-right">
+                                    <span className={`font-semibold ${entry.daysLate > 7 ? 'text-red-600 dark:text-red-400' : 'text-orange-600 dark:text-orange-400'}`}>
+                                      {entry.daysLate} {entry.daysLate === 1 ? t('admin.day') || 'day' : t('admin.days') || 'days'}
+                                    </span>
+                                  </TableCell>
+                                  <TableCell className="text-right">
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => {
+                                        setLateEntries(prev => prev.map((e, i) => 
+                                          i === index ? { ...e, selected: true } : e
+                                        ));
+                                        handleSendReminderForLateEntries();
+                                      }}
+                                      className="h-7 text-xs"
+                                    >
+                                      <Mail className="h-3 w-3 mr-1" />
+                                      {t('admin.sendReminder') || 'Send'}
+                                    </Button>
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                )}
+              </Card>
+            );
+          })()}
+
           {/* All Confirmed Weeks Section - Available for admin */}
           {currentUser?.isAdmin && (() => {
             // Process all confirmed weeks into a flat array with computed data
@@ -4553,6 +5194,11 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
       
       {/* Weeks Content for administratie users when accessed via header (hideTabs=true, initialTab="weeks") */}
       {isAdministratie(currentUser) && hideTabs && activeTab === 'weeks' && (() => {
+        // Late Entries Section
+        const selectedLateEntriesCount = lateEntries.filter(e => e.selected).length;
+        const uniqueUsersWithLateEntries = new Set(lateEntries.map(e => e.userId)).size;
+        const totalLateWeeks = lateEntries.length;
+
         // Use current week simple entry data instead of confirmed weeks
         const processedWeeks = currentWeekSimpleEntryData.map((weekData) => ({
           ...weekData,
@@ -4654,6 +5300,205 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
                 
                 return (
           <div className="space-y-6">
+            {/* Late Entries Section */}
+            <Card className={`border-2 ${lateEntries.length > 0 ? 'border-orange-500 dark:border-orange-600 bg-orange-50 dark:bg-orange-900/20' : 'border-gray-200 dark:border-gray-700'}`}>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className={`h-5 w-5 ${lateEntries.length > 0 ? 'text-orange-600 dark:text-orange-400' : 'text-gray-400'}`} />
+                    <CardTitle className={`text-base sm:text-lg ${lateEntries.length > 0 ? 'text-orange-800 dark:text-orange-200' : 'text-gray-600 dark:text-gray-400'}`}>
+                      {t('admin.lateEntries') || "Overdue Weekly Entries"}
+                      {lateEntries.length > 0 && (
+                        <span className="ml-2 px-2 py-0.5 text-xs font-semibold bg-orange-600 text-white rounded-full">
+                          {uniqueUsersWithLateEntries} {uniqueUsersWithLateEntries === 1 ? t('admin.user') || 'user' : t('admin.users') || 'users'} • {totalLateWeeks} {totalLateWeeks === 1 ? t('admin.week') || 'week' : t('admin.weeks') || 'weeks'}
+                        </span>
+                      )}
+                    </CardTitle>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setLateEntriesExpanded(!lateEntriesExpanded);
+                      }}
+                      className="h-8"
+                    >
+                      {lateEntriesExpanded ? 'Hide' : 'Show'}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={fetchLateEntries}
+                      disabled={lateEntriesLoading}
+                      className="h-8"
+                    >
+                      <RefreshCw className={`h-4 w-4 mr-1 ${lateEntriesLoading ? 'animate-spin' : ''}`} />
+                      Refresh
+                    </Button>
+                  </div>
+                </div>
+              </CardHeader>
+              {lateEntriesExpanded && (
+                <CardContent>
+                  {lateEntriesLoading ? (
+                    <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                      {t('common.loading') || 'Loading...'}
+                    </div>
+                  ) : lateEntries.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                      <Check className="h-8 w-8 mx-auto mb-2 text-green-500" />
+                      <p className="text-sm font-medium">{t('admin.noLateEntries') || "No late entries - all weeks are up to date!"}</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {/* Filter Controls */}
+                      <div className="flex flex-col sm:flex-row gap-3 pb-3 border-b">
+                        {/* User Filter */}
+                        <div className="flex-1">
+                          <Label className="text-sm font-semibold mb-2 block">{t('admin.lateEntriesUserFilter') || 'Filter by User'}</Label>
+                          <Select
+                            value={lateEntriesUserFilter}
+                            onValueChange={(value) => {
+                              setLateEntriesUserFilter(value);
+                              fetchLateEntries();
+                            }}
+                          >
+                            <SelectTrigger className="w-full">
+                              <SelectValue placeholder={t('admin.allUsers') || "All Users"} />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="all">{t('admin.allUsers') || "All Users"}</SelectItem>
+                              {users
+                                .filter((user) => user.approved)
+                                .map((user) => (
+                                  <SelectItem key={user.id} value={user.id}>
+                                    {user.name || user.email}
+                                  </SelectItem>
+                                ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        {/* Date Cutoff Filter */}
+                        <div className="flex-1">
+                          <Label className="text-sm font-semibold mb-2 block">{t('admin.lateEntriesDateCutoff') || 'Check Weeks Back'}</Label>
+                          <Select
+                            value={lateEntriesDateCutoff}
+                            onValueChange={(value) => {
+                              setLateEntriesDateCutoff(value);
+                              fetchLateEntries();
+                            }}
+                          >
+                            <SelectTrigger className="w-full">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="4">{t('admin.lastWeeks', { n: '4' }) || 'Last 4 weeks'}</SelectItem>
+                              <SelectItem value="8">{t('admin.lastWeeks', { n: '8' }) || 'Last 8 weeks'}</SelectItem>
+                              <SelectItem value="12">{t('admin.lastWeeks', { n: '12' }) || 'Last 12 weeks'}</SelectItem>
+                              <SelectItem value="16">{t('admin.lastWeeks', { n: '16' }) || 'Last 16 weeks'}</SelectItem>
+                              <SelectItem value="all">{t('admin.allWeeks') || 'All weeks'}</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+
+                      {/* Bulk Actions */}
+                      <div className="flex items-center justify-between flex-wrap gap-2 pb-2 border-b">
+                        <div className="flex items-center gap-2">
+                          <Checkbox
+                            checked={selectedLateEntriesCount === lateEntries.length && lateEntries.length > 0}
+                            onCheckedChange={(checked) => {
+                              setLateEntries(prev => prev.map(entry => ({ ...entry, selected: !!checked })));
+                            }}
+                          />
+                          <Label className="text-sm font-medium">
+                            {t('admin.selectAll') || 'Select All'} ({selectedLateEntriesCount} {t('admin.selected') || 'selected'})
+                          </Label>
+                        </div>
+                        <Button
+                          onClick={handleSendReminderForLateEntries}
+                          disabled={selectedLateEntriesCount === 0}
+                          className="bg-orange-600 hover:bg-orange-700 text-white"
+                        >
+                          <Mail className="h-4 w-4 mr-2" />
+                          {t('admin.sendReminder') || 'Send Reminder'} {selectedLateEntriesCount > 0 && `(${selectedLateEntriesCount})`}
+                        </Button>
+                      </div>
+
+                      {/* Late Entries Table */}
+                      <div className="border rounded-lg overflow-hidden">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead className="w-12">
+                                <Checkbox />
+                              </TableHead>
+                              <TableHead>{t('admin.user') || 'User'}</TableHead>
+                              <TableHead>{t('admin.week') || 'Week'}</TableHead>
+                              <TableHead>{t('admin.dateRange') || 'Date Range'}</TableHead>
+                              <TableHead className="text-right">{t('admin.daysLate') || 'Days Late'}</TableHead>
+                              <TableHead className="text-right">{t('admin.actions') || 'Actions'}</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {lateEntries.map((entry, index) => (
+                              <TableRow 
+                                key={`${entry.userId}-${entry.weekStartDate}-${index}`}
+                                className={entry.selected ? 'bg-orange-100 dark:bg-orange-900/30' : ''}
+                              >
+                                <TableCell>
+                                  <Checkbox
+                                    checked={entry.selected || false}
+                                    onCheckedChange={(checked) => {
+                                      setLateEntries(prev => prev.map((e, i) => 
+                                        i === index ? { ...e, selected: !!checked } : e
+                                      ));
+                                    }}
+                                  />
+                                </TableCell>
+                                <TableCell className="font-medium">
+                                  {entry.userName}
+                                  <div className="text-xs text-gray-500 dark:text-gray-400">{entry.userEmail}</div>
+                                </TableCell>
+                                <TableCell>
+                                  Week {entry.weekNumber}, {entry.year}
+                                </TableCell>
+                                <TableCell>
+                                  {new Date(entry.weekStartDate).toLocaleDateString('nl-NL')} - {new Date(entry.weekEndDate).toLocaleDateString('nl-NL')}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  <span className={`font-semibold ${entry.daysLate > 7 ? 'text-red-600 dark:text-red-400' : 'text-orange-600 dark:text-orange-400'}`}>
+                                    {entry.daysLate} {entry.daysLate === 1 ? t('admin.day') || 'day' : t('admin.days') || 'days'}
+                                  </span>
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => {
+                                      setLateEntries(prev => prev.map((e, i) => 
+                                        i === index ? { ...e, selected: true } : e
+                                      ));
+                                      handleSendReminderForLateEntries();
+                                    }}
+                                    className="h-7 text-xs"
+                                  >
+                                    <Mail className="h-3 w-3 mr-1" />
+                                    {t('admin.sendReminder') || 'Send'}
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              )}
+            </Card>
+
             <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4 text-green-600 dark:text-green-400">
               {t('admin.currentWeekSimpleUsers') || "Huidige Week - Simple Entry Gebruikers"}
             </h3>

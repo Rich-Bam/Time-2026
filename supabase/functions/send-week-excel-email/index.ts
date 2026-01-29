@@ -22,7 +22,7 @@ type WeekExcelEmailPayload = {
   dateFrom: string;
   dateTo: string;
   excelBase64: string;
-  recipientEmail: string;
+  recipientEmails: string[]; // Changed to array to support multiple recipients
   filename: string;
 };
 
@@ -58,7 +58,7 @@ Deno.serve(async (req) => {
         userName: body.userName,
         weekNumber: body.weekNumber, 
         year: body.year,
-        recipientEmail: body.recipientEmail,
+        recipientEmails: body.recipientEmails,
         hasExcelBase64: !!body.excelBase64,
       });
       payload = body as WeekExcelEmailPayload;
@@ -70,11 +70,11 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { userId, userName, userEmail, weekNumber, year, dateFrom, dateTo, excelBase64, recipientEmail, filename } = payload;
+    const { userId, userName, userEmail, weekNumber, year, dateFrom, dateTo, excelBase64, recipientEmails, filename } = payload;
 
-    if (!userId || !userName || !weekNumber || !year || !excelBase64 || !recipientEmail || !filename) {
-      console.error("Validation failed:", { userId, userName, weekNumber, year, hasExcelBase64: !!excelBase64, recipientEmail, filename });
-      return new Response(JSON.stringify({ error: "userId, userName, weekNumber, year, excelBase64, recipientEmail, and filename are required" }), {
+    if (!userId || !userName || !weekNumber || !year || !excelBase64 || !recipientEmails || !Array.isArray(recipientEmails) || recipientEmails.length === 0 || !filename) {
+      console.error("Validation failed:", { userId, userName, weekNumber, year, hasExcelBase64: !!excelBase64, recipientEmails, filename });
+      return new Response(JSON.stringify({ error: "userId, userName, weekNumber, year, excelBase64, recipientEmails (array), and filename are required" }), {
         headers: corsHeaders,
         status: 400,
       });
@@ -205,11 +205,11 @@ The timesheet was sent directly from the weekly timesheet entry system.
 
     // Send email via Resend with attachment
     try {
-      console.log(`Sending email to ${recipientEmail}...`);
+      console.log(`Sending email to ${recipientEmails.join(', ')}...`);
       
       const emailPayload = {
         from: resendFromEmail,
-        to: recipientEmail,
+        to: recipientEmails, // Resend supports array of email addresses
         subject: `Weekly Timesheet - Week ${weekNumber} ${year} - ${userName}`,
         html: emailHtml,
         text: emailText,
@@ -230,14 +230,14 @@ The timesheet was sent directly from the weekly timesheet entry system.
         body: JSON.stringify(emailPayload),
       });
 
-      console.log(`Resend API response status: ${response.status} for ${recipientEmail}`);
+      console.log(`Resend API response status: ${response.status} for ${recipientEmails.join(', ')}`);
 
       let result;
       try {
         result = await response.json();
       } catch (jsonError) {
         const responseText = await response.text();
-        console.error(`Failed to parse Resend response for ${recipientEmail}:`, responseText);
+        console.error(`Failed to parse Resend response for ${recipientEmails.join(', ')}:`, responseText);
         return new Response(JSON.stringify({ 
           error: `Resend API returned invalid JSON: ${responseText.substring(0, 100)}` 
         }), {
@@ -247,7 +247,7 @@ The timesheet was sent directly from the weekly timesheet entry system.
       }
 
       if (!response.ok) {
-        console.error(`Resend API error for ${recipientEmail}:`, result);
+        console.error(`Resend API error for ${recipientEmails.join(', ')}:`, result);
         return new Response(JSON.stringify({ 
           error: result.message || result.error || "Failed to send email",
           details: result 
@@ -257,17 +257,17 @@ The timesheet was sent directly from the weekly timesheet entry system.
         });
       }
 
-      console.log(`Email sent successfully to ${recipientEmail}`);
+      console.log(`Email sent successfully to ${recipientEmails.join(', ')}`);
 
       return new Response(JSON.stringify({
         success: true,
-        message: `Email sent successfully to ${recipientEmail}`,
+        message: `Email sent successfully to ${recipientEmails.join(', ')}`,
       }), {
         headers: corsHeaders,
         status: 200,
       });
     } catch (err) {
-      console.error(`Exception sending email to ${recipientEmail}:`, err);
+      console.error(`Exception sending email to ${recipientEmails.join(', ')}:`, err);
       return new Response(JSON.stringify({ 
         error: "Failed to send email",
         details: err instanceof Error ? err.message : String(err)
