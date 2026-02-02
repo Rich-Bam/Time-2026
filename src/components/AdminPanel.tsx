@@ -3601,7 +3601,7 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
           dateFrom: fromDate,
           dateTo: toDate,
           excelBase64: base64,
-          recipientEmails: [ADMINISTRATIE_EMAIL],
+          recipientEmails: Array.from(new Set([ADMINISTRATIE_EMAIL, user.email].filter(Boolean))),
           filename,
         },
       });

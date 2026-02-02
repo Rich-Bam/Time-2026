@@ -2797,7 +2797,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
           dateFrom: fromDate,
           dateTo: toDate,
           excelBase64: base64,
-          recipientEmails: ADMINISTRATIE_EMAILS,
+          recipientEmails: Array.from(new Set([...ADMINISTRATIE_EMAILS, currentUser.email].filter(Boolean))),
           filename,
         },
       });
