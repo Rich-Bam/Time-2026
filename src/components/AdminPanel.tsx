@@ -3556,7 +3556,7 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
           dateFrom: fromDate,
           dateTo: toDate,
           excelBase64: base64,
-          recipientEmail: ADMINISTRATIE_EMAIL,
+          recipientEmails: [ADMINISTRATIE_EMAIL],
           filename,
         },
       });

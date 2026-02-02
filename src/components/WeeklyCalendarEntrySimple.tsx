@@ -183,6 +183,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
     // Add second email address here, e.g.:
     // "second-person@bampro.nl",
   ];
+  const ADMINISTRATIE_EMAIL = ADMINISTRATIE_EMAILS[0];
   
   const weekDates = getWeekDates(weekStart);
   const weekNumber = getISOWeekNumber(weekDates[0]);
@@ -2796,7 +2797,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
           dateFrom: fromDate,
           dateTo: toDate,
           excelBase64: base64,
-          recipientEmail: ADMINISTRATIE_EMAIL,
+          recipientEmails: ADMINISTRATIE_EMAILS,
           filename,
         },
       });
