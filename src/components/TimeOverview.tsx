@@ -23,11 +23,15 @@ const TimeOverview = ({ currentUser }: TimeOverviewProps) => {
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
-      // fetch data for all users
-      const { data: timesheetData } = await supabase
+      // For weekly_only users: only their own entries; for others: all users
+      let timesheetQuery = supabase
         .from("timesheet")
         .select("*, projects(name)")
         .order("date", { ascending: false });
+      if (currentUser?.userType === "weekly_only" && currentUser?.id) {
+        timesheetQuery = timesheetQuery.eq("user_id", currentUser.id);
+      }
+      const { data: timesheetData } = await timesheetQuery;
       const { data: projectData } = await supabase.from("projects").select("*");
       setTimesheet(timesheetData || []);
       setProjects(projectData || []);

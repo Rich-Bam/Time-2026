@@ -2026,8 +2026,8 @@ const Index = () => {
                     {t('nav.reportBug')}
                   </button>
                 )}
-                {/* Overview - Not visible for tester or weekly_only users */}
-                {!isTester(currentUser) && !isWeeklyOnly(currentUser) && (
+                {/* Overview - Not visible for tester */}
+                {!isTester(currentUser) && (
                   <button
                     className={`text-[9px] sm:text-xs md:text-sm lg:text-sm xl:text-base font-medium px-1 sm:px-1.5 md:px-2 lg:px-2.5 py-1.5 sm:py-1 md:py-1.5 lg:py-2 rounded transition-colors whitespace-nowrap min-h-[32px] sm:min-h-0 flex-shrink-0 ${activeTab === 'overview' ? 'bg-orange-600 text-white dark:bg-orange-500' : 'text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-700'}`}
                     onClick={() => setActiveTab('overview')}
@@ -2159,7 +2159,7 @@ const Index = () => {
             <div className="p-8 text-center text-red-600 font-semibold">You do not have permission to view this page.</div>
           )
         )}
-        {activeTab === 'overview' && !isTester(currentUser) && !isWeeklyOnly(currentUser) && (
+        {activeTab === 'overview' && !isTester(currentUser) && (
           <TimeOverview currentUser={currentUser} />
         )}
         {activeTab === 'export' && !currentUser?.isAdmin && !isAdministratie(currentUser) && !isTester(currentUser) && !isWeeklyOnly(currentUser) && (
