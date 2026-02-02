@@ -202,6 +202,7 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
   const [lateEntriesExpanded, setLateEntriesExpanded] = useState<boolean>(false); // Hidden by default
   const [lateEntriesUserFilter, setLateEntriesUserFilter] = useState<string>('all');
   const [lateEntriesDateCutoff, setLateEntriesDateCutoff] = useState<string>('12'); // Default to 12 weeks
+  const [lateEntriesDismissing, setLateEntriesDismissing] = useState<boolean>(false);
   
   // Helper function to get ISO week number
   const getISOWeekNumber = (date: Date) => {
@@ -948,9 +949,6 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       
-      // Calculate current week start (Monday of current week)
-      const currentWeekStartDate = getISOWeekMonday(today);
-      
       // Apply user filter
       let filteredUsers = allUsers;
       if (lateEntriesUserFilter !== 'all') {
@@ -998,15 +996,6 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
                 continue;
               }
               
-              // Only show overdue entries from current week onwards
-              // Compare week start dates - only include weeks that start from current week or later
-              if (weekToCheck < currentWeekStartDate) {
-                // Move to next week
-                weekToCheck = new Date(weekToCheck);
-                weekToCheck.setDate(weekToCheck.getDate() + 7);
-                continue;
-              }
-              
               const daysLate = calculateDaysLate(weekEnd);
               const weekEndStr = formatDateToYYYYMMDD(weekEnd);
 
@@ -1030,15 +1019,29 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
         }
       }
 
+      // Exclude dismissed overdue entries (table may not exist yet if migration not run)
+      const dismissedSet = new Set<string>();
+      const { data: dismissedData, error: dismissedError } = await supabase
+        .from('dismissed_overdue_weeks')
+        .select('user_id, week_start_date');
+      if (!dismissedError && dismissedData) {
+        dismissedData.forEach((d: { user_id: string; week_start_date: string }) => {
+          dismissedSet.add(`${d.user_id}|${d.week_start_date}`);
+        });
+      }
+      const filteredLateEntriesList = lateEntriesList.filter(
+        (entry) => !dismissedSet.has(`${entry.userId}|${entry.weekStartDate}`)
+      );
+
       // Sort by days late (most late first), then by user name
-      lateEntriesList.sort((a, b) => {
+      filteredLateEntriesList.sort((a, b) => {
         if (b.daysLate !== a.daysLate) {
           return b.daysLate - a.daysLate;
         }
         return a.userName.localeCompare(b.userName);
       });
 
-      setLateEntries(lateEntriesList);
+      setLateEntries(filteredLateEntriesList);
     } catch (error) {
       console.error('Error fetching late entries:', error);
       setLateEntries([]);
@@ -3323,6 +3326,48 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
     fetchLateEntries();
   };
 
+  // Dismiss overdue entries from the list (hide without confirming the week)
+  const handleDismissOverdueEntries = async (entries: LateEntry[]) => {
+    if (!entries.length) {
+      toast({
+        title: t('admin.noSelection') || 'No Selection',
+        description: t('admin.selectAtLeastOneLateEntry') || 'Please select at least one late entry to dismiss.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    setLateEntriesDismissing(true);
+    try {
+      const rows = entries.map((entry) => ({
+        user_id: entry.userId,
+        week_start_date: entry.weekStartDate,
+        dismissed_by: currentUser?.id ?? null,
+      }));
+      const { error } = await supabase
+        .from('dismissed_overdue_weeks')
+        .upsert(rows, { onConflict: 'user_id,week_start_date' });
+      if (error) throw error;
+      toast({
+        title: t('admin.dismissedOverdueSuccess') || 'Entries Dismissed',
+        description: entries.length === 1
+          ? t('admin.dismissedOverdueOne') || '1 entry removed from the overdue list.'
+          : (t('admin.dismissedOverdueCount') || '{count} entries removed from the overdue list.').replace('{count}', String(entries.length)),
+        variant: 'default',
+      });
+      setLateEntries((prev) => prev.map((e) => ({ ...e, selected: false })));
+      fetchLateEntries();
+    } catch (err: any) {
+      console.error('Error dismissing overdue entries:', err);
+      toast({
+        title: t('common.error') || 'Error',
+        description: err?.message || (t('admin.dismissedOverdueError') || 'Failed to dismiss entries.'),
+        variant: 'destructive',
+      });
+    } finally {
+      setLateEntriesDismissing(false);
+    }
+  };
+
   // Handle admin actions on confirmed weeks
   const handleApproveWeek = async (userId: string, weekStartDate: string) => {
     const { error } = await supabase
@@ -4707,14 +4752,25 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
                               {t('admin.selectAll') || 'Select All'} ({selectedLateEntriesCount} {t('admin.selected') || 'selected'})
                             </Label>
                           </div>
-                          <Button
-                            onClick={handleSendReminderForLateEntries}
-                            disabled={selectedLateEntriesCount === 0}
-                            className="bg-orange-600 hover:bg-orange-700 text-white"
-                          >
-                            <Mail className="h-4 w-4 mr-2" />
-                            {t('admin.sendReminder') || 'Send Reminder'} {selectedLateEntriesCount > 0 && `(${selectedLateEntriesCount})`}
-                          </Button>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleDismissOverdueEntries(lateEntries.filter((e) => e.selected))}
+                              disabled={selectedLateEntriesCount === 0 || lateEntriesDismissing}
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              {t('admin.dismissSelectedOverdue') || 'Dismiss selected'} {selectedLateEntriesCount > 0 && `(${selectedLateEntriesCount})`}
+                            </Button>
+                            <Button
+                              onClick={handleSendReminderForLateEntries}
+                              disabled={selectedLateEntriesCount === 0}
+                              className="bg-orange-600 hover:bg-orange-700 text-white"
+                            >
+                              <Mail className="h-4 w-4 mr-2" />
+                              {t('admin.sendReminder') || 'Send Reminder'} {selectedLateEntriesCount > 0 && `(${selectedLateEntriesCount})`}
+                            </Button>
+                          </div>
                         </div>
 
                         {/* Late Entries Table */}
@@ -4764,20 +4820,32 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
                                     </span>
                                   </TableCell>
                                   <TableCell className="text-right">
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      onClick={() => {
-                                        setLateEntries(prev => prev.map((e, i) => 
-                                          i === index ? { ...e, selected: true } : e
-                                        ));
-                                        handleSendReminderForLateEntries();
-                                      }}
-                                      className="h-7 text-xs"
-                                    >
-                                      <Mail className="h-3 w-3 mr-1" />
-                                      {t('admin.sendReminder') || 'Send'}
-                                    </Button>
+                                    <div className="flex items-center justify-end gap-1">
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => handleDismissOverdueEntries([entry])}
+                                        disabled={lateEntriesDismissing}
+                                        className="h-7 text-xs"
+                                      >
+                                        <Trash2 className="h-3 w-3 mr-1" />
+                                        {t('admin.dismissOverdue') || 'Dismiss'}
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => {
+                                          setLateEntries(prev => prev.map((e, i) => 
+                                            i === index ? { ...e, selected: true } : e
+                                          ));
+                                          handleSendReminderForLateEntries();
+                                        }}
+                                        className="h-7 text-xs"
+                                      >
+                                        <Mail className="h-3 w-3 mr-1" />
+                                        {t('admin.sendReminder') || 'Send'}
+                                      </Button>
+                                    </div>
                                   </TableCell>
                                 </TableRow>
                               ))}
@@ -5416,14 +5484,25 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
                             {t('admin.selectAll') || 'Select All'} ({selectedLateEntriesCount} {t('admin.selected') || 'selected'})
                           </Label>
                         </div>
-                        <Button
-                          onClick={handleSendReminderForLateEntries}
-                          disabled={selectedLateEntriesCount === 0}
-                          className="bg-orange-600 hover:bg-orange-700 text-white"
-                        >
-                          <Mail className="h-4 w-4 mr-2" />
-                          {t('admin.sendReminder') || 'Send Reminder'} {selectedLateEntriesCount > 0 && `(${selectedLateEntriesCount})`}
-                        </Button>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleDismissOverdueEntries(lateEntries.filter((e) => e.selected))}
+                            disabled={selectedLateEntriesCount === 0 || lateEntriesDismissing}
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            {t('admin.dismissSelectedOverdue') || 'Dismiss selected'} {selectedLateEntriesCount > 0 && `(${selectedLateEntriesCount})`}
+                          </Button>
+                          <Button
+                            onClick={handleSendReminderForLateEntries}
+                            disabled={selectedLateEntriesCount === 0}
+                            className="bg-orange-600 hover:bg-orange-700 text-white"
+                          >
+                            <Mail className="h-4 w-4 mr-2" />
+                            {t('admin.sendReminder') || 'Send Reminder'} {selectedLateEntriesCount > 0 && `(${selectedLateEntriesCount})`}
+                          </Button>
+                        </div>
                       </div>
 
                       {/* Late Entries Table */}
@@ -5473,20 +5552,32 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
                                   </span>
                                 </TableCell>
                                 <TableCell className="text-right">
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => {
-                                      setLateEntries(prev => prev.map((e, i) => 
-                                        i === index ? { ...e, selected: true } : e
-                                      ));
-                                      handleSendReminderForLateEntries();
-                                    }}
-                                    className="h-7 text-xs"
-                                  >
-                                    <Mail className="h-3 w-3 mr-1" />
-                                    {t('admin.sendReminder') || 'Send'}
-                                  </Button>
+                                  <div className="flex items-center justify-end gap-1">
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => handleDismissOverdueEntries([entry])}
+                                      disabled={lateEntriesDismissing}
+                                      className="h-7 text-xs"
+                                    >
+                                      <Trash2 className="h-3 w-3 mr-1" />
+                                      {t('admin.dismissOverdue') || 'Dismiss'}
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => {
+                                        setLateEntries(prev => prev.map((e, i) => 
+                                          i === index ? { ...e, selected: true } : e
+                                        ));
+                                        handleSendReminderForLateEntries();
+                                      }}
+                                      className="h-7 text-xs"
+                                    >
+                                      <Mail className="h-3 w-3 mr-1" />
+                                      {t('admin.sendReminder') || 'Send'}
+                                    </Button>
+                                  </div>
                                 </TableCell>
                               </TableRow>
                             ))}
