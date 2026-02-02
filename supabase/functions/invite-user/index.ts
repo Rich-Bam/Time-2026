@@ -18,6 +18,7 @@ type InvitePayload = {
   email: string;
   name: string;
   isAdmin?: boolean;
+  userType?: string;
 };
 
 const corsHeaders = {
@@ -38,7 +39,7 @@ Deno.serve(async (req) => {
     fetch('http://127.0.0.1:7242/ingest/677a8104-55ff-4a8e-a1c2-02170ea8e822',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'invite-user/index.ts:36',message:'Edge Function called',data:{method:req.method,hasBody:!!req.body},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
     // #endregion
     
-    const { email, name, isAdmin = false } = (await req.json()) as InvitePayload;
+    const { email, name, isAdmin = false, userType } = (await req.json()) as InvitePayload;
     
     // #region agent log
     fetch('http://127.0.0.1:7242/ingest/677a8104-55ff-4a8e-a1c2-02170ea8e822',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'invite-user/index.ts:40',message:'Request parsed',data:{email,name,isAdmin},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
@@ -227,14 +228,16 @@ Deno.serve(async (req) => {
       fetch('http://127.0.0.1:7242/ingest/677a8104-55ff-4a8e-a1c2-02170ea8e822',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'invite-user/index.ts:218',message:'User exists, updating',data:{userId:user.id,email,name,isAdmin},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
       // #endregion
       // User already exists - update instead of insert
+      const updatePayload: Record<string, unknown> = {
+        name,
+        isAdmin,
+        approved: true,
+        must_change_password: true,
+      };
+      if (userType != null) updatePayload.userType = userType;
       const { data: updatedUser, error: updateError } = await supabase
         .from("users")
-        .update({ 
-          name, 
-          isAdmin, 
-          approved: true, 
-          must_change_password: true 
-        })
+        .update(updatePayload)
         .eq("id", user.id)
         .select();
       
@@ -245,7 +248,7 @@ Deno.serve(async (req) => {
       fetch('http://127.0.0.1:7242/ingest/677a8104-55ff-4a8e-a1c2-02170ea8e822',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'invite-user/index.ts:232',message:'User does not exist, inserting',data:{userId:user.id,email,name,isAdmin},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
       // #endregion
       // User does not exist - insert new
-      const { data: newUser, error: insertError } = await supabase.from("users").insert({
+      const insertPayload: Record<string, unknown> = {
         id: user.id,
         email,
         name,
@@ -253,7 +256,9 @@ Deno.serve(async (req) => {
         isAdmin,
         must_change_password: true,
         approved: true,
-      }).select();
+      };
+      if (userType != null) insertPayload.userType = userType;
+      const { data: newUser, error: insertError } = await supabase.from("users").insert(insertPayload).select();
       
       insertedUser = newUser;
       dbError = insertError;
@@ -364,6 +369,7 @@ Deno.serve(async (req) => {
                   <li>Click the activation button above</li>
                   <li>Set a secure password for your account</li>
                   <li>Log in and start tracking your hours</li>
+                  ${userType === "weekly_only" ? "<li>See the attached handleiding (PDF) for how to fill in your hours</li>" : ""}
                 </ul>
               </div>
               
@@ -415,27 +421,51 @@ What's next?
 1. Click the activation link above
 2. Set a secure password for your account
 3. Log in and start tracking your hours
-
+${userType === "weekly_only" ? "4. See the attached handleiding (PDF) for how to fill in your hours\n" : ""}
 ---
 This is an automated invitation from BAMPRO MARINE Timesheet System.
 You are receiving this email because you have been invited to join our platform.
     `.trim();
 
+    // Fetch PDF handleiding for weekly_only users and prepare attachments
+    let attachments: { content: string; filename: string }[] = [];
+    if (userType === "weekly_only") {
+      try {
+        const pdfUrl = `${appUrl.replace(/\/$/, "")}/Handleiding_Weekly_Only.pdf`;
+        const pdfRes = await fetch(pdfUrl);
+        if (pdfRes.ok) {
+          const pdfBuf = await pdfRes.arrayBuffer();
+          const bytes = new Uint8Array(pdfBuf);
+          let binary = "";
+          for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+          const base64 = btoa(binary);
+          attachments = [{ content: base64, filename: "Handleiding_Weekly_Only.pdf" }];
+        } else {
+          console.warn("Handleiding PDF not found at", pdfUrl, pdfRes.status);
+        }
+      } catch (pdfErr) {
+        console.warn("Failed to fetch handleiding PDF:", pdfErr);
+      }
+    }
+
     // Send email via Resend
     try {
+      const resendBody: Record<string, unknown> = {
+        from: resendFromEmail,
+        to: email,
+        subject: `Welcome to BAMPRO MARINE - Activate Your Account`,
+        html: emailHtml,
+        text: emailText,
+      };
+      if (attachments.length > 0) resendBody.attachments = attachments;
+
       const response = await fetch("https://api.resend.com/emails", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${resendApiKey}`,
         },
-        body: JSON.stringify({
-          from: resendFromEmail,
-          to: email,
-          subject: `Welcome to BAMPRO MARINE - Activate Your Account`,
-          html: emailHtml,
-          text: emailText,
-        }),
+        body: JSON.stringify(resendBody),
       });
 
       const result = await response.json();

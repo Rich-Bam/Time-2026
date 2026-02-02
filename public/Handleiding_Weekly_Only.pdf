@@ -1,0 +1,622 @@
+%PDF-1.3
+%ºß¬à
+3 0 obj
+<</Type /Page
+/Parent 1 0 R
+/Resources 2 0 R
+/MediaBox [0 0 595.2799999999999727 841.8899999999999864]
+/Contents 4 0 R
+>>
+endobj
+4 0 obj
+<<
+/Length 5302
+>>
+stream
+0.5670000000000001 w
+0 G
+0.92 0.35 0.05 rg
+0. 841.8899999999999864 595.2755905511811534 -79.3700787401574814 re
+f
+BT
+/F2 20 Tf
+23. TL
+1. g
+112.8377952755905795 802.2049606299212883 Td
+(BAMPRO MARINE – Timesheet System) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+1. g
+198.0327952755905585 779.5277952755905062 Td
+(Handleiding: Uren invullen \(Weekly Only\)) Tj
+ET
+BT
+/F2 12 Tf
+13.7999999999999989 TL
+0.918 0.345 0.047 rg
+42.5196850393700814 739.8427559055118081 Td
+(1. Inloggen na uitnodiging) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0. g
+42.5196850393700814 717.1655905511811397 Td
+(1. Klik in de uitnodigingsmail op "Activeer je account" \(of op de link in de mail\).) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0. g
+42.5196850393700814 701.5750393700786844 Td
+(2. Stel een wachtwoord in en bevestig dit.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0. g
+42.5196850393700814 685.9844881889763428 Td
+(3. Log daarna in met je e-mailadres en het gekozen wachtwoord op de website van het BAMPRO MARINE) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0. g
+42.5196850393700814 670.3939370078740012 Td
+(Timesheet System.) Tj
+ET
+BT
+/F2 12 Tf
+13.7999999999999989 TL
+0.918 0.345 0.047 rg
+42.5196850393700814 637.7955118110235162 Td
+(2. Wat zie je na het inloggen?) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0. g
+42.5196850393700814 615.1183464566928478 Td
+(Je komt op het scherm "Wekelijkse Invoer". In de navigatie zie je o.a.: Wekelijkse Invoer \(hier vul je je uren per) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0. g
+42.5196850393700814 599.5277952755905062 Td
+(week in\), Overuren \(overzicht van je overuren\), Overzicht \(algemeen overzicht\). Verder zie je rechts o.a. thema,) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0. g
+42.5196850393700814 583.9372440944881646 Td
+(taal, je naam en Uitloggen.) Tj
+ET
+BT
+/F2 12 Tf
+13.7999999999999989 TL
+0.918 0.345 0.047 rg
+42.5196850393700814 551.3388188976377933 Td
+(3. Uren invullen – stap voor stap) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0. g
+42.5196850393700814 528.6616535433070112 Td
+(3.1 Juiste week kiezen) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0. g
+42.5196850393700814 513.0711023622046696 Td
+(Bovenaan staat Week X met het datumbereik \(maandag t/m zondag\). Gebruik "Vorige" / "Volgende" om een week) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0. g
+42.5196850393700814 497.480551181102328 Td
+(terug of vooruit te gaan. Op desktop kun je via "Selecteer week" een week kiezen waarin je al uren hebt ingevuld.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0. g
+42.5196850393700814 481.8899999999999295 Td
+(Standaard opent de huidige week.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0. g
+42.5196850393700814 450.7088976377952463 Td
+(3.2 Per dag uren invullen) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0. g
+42.5196850393700814 435.1183464566928478 Td
+(Voor elke dag \(maandag t/m zondag\) kun je één of meer regels invullen:) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0. g
+42.5196850393700814 419.5277952755905062 Td
+(• Werk type: kies het type werk \(bijv. Werk, Productie, Thuis-werk, Vrije dag/vakantie, Ziek\). Sommige types) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0. g
+42.5196850393700814 403.9372440944881077 Td
+(vereisen geen project.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0. g
+42.5196850393700814 388.3466929133857661 Td
+(• Project: bij de meeste werktypes moet je een project kiezen.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0. g
+42.5196850393700814 372.7561417322834245 Td
+(• Starttijd en eindtijd: vul Start \(bijv. 08:00\) en Eind \(bijv. 17:00\) in. De uren worden automatisch berekend.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0. g
+42.5196850393700814 357.1655905511810261 Td
+(• Hele dag vrij: voor vrije dagen/vakantie kun je "Hele dag vrij \(8 uren\)" aanvinken.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0. g
+42.5196850393700814 341.5750393700786844 Td
+(• Meerdere regels per dag: via "Voeg invoer toe" voeg je extra regels toe op dezelfde dag.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0. g
+42.5196850393700814 325.9844881889763428 Td
+(• Sla je wijzigingen op \(per regel/dag\).) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0. g
+42.5196850393700814 294.8033858267715459 Td
+(3.3 Week bevestigen) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0. g
+42.5196850393700814 279.2128346456692043 Td
+(Als alle werkdagen \(maandag–vrijdag\) zijn ingevuld, klik je op "Week bevestigen". Na bevestiging is de week) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0. g
+42.5196850393700814 263.6222834645668627 Td
+(vergrendeld: je kunt dan geen uren meer wijzigen. Na bevestigen kun je vaak nog kiezen om de week per e-mail) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0. g
+42.5196850393700814 248.0317322834645211 Td
+(naar administratie te sturen.) Tj
+ET
+BT
+/F2 12 Tf
+13.7999999999999989 TL
+0.918 0.345 0.047 rg
+42.5196850393700814 215.4333070866141497 Td
+(4. Uren terugkijken) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0. g
+42.5196850393700814 192.7561417322833677 Td
+(Gebruik "Vorige" / "Volgende" om week voor week te bladeren. Via "Selecteer week" kies je een week uit de) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0. g
+42.5196850393700814 177.1655905511810261 Td
+(dropdown \(alleen weken waarin je al uren hebt, worden getoond\). Je kunt een week ook "Exporteer week naar) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0. g
+42.5196850393700814 161.5750393700786844 Td
+(Excel" om uren op te slaan of te printen. Je hebt geen apart tabblad Ingevulde uren; je kijkt alles terug via het) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0. g
+42.5196850393700814 145.9844881889763428 Td
+(Wekelijkse Invoer-scherm door van week te wisselen.) Tj
+ET
+BT
+/F1 8 Tf
+9.1999999999999993 TL
+0.502 g
+198.7977952755905733 19.8427559055116944 Td
+(Pagina 1 van 2 – BAMPRO MARINE Timesheet System) Tj
+ET
+endstream
+endobj
+5 0 obj
+<</Type /Page
+/Parent 1 0 R
+/Resources 2 0 R
+/MediaBox [0 0 595.2799999999999727 841.8899999999999864]
+/Contents 6 0 R
+>>
+endobj
+6 0 obj
+<<
+/Length 2701
+>>
+stream
+0.5670000000000001 w
+0 G
+0.92 0.35 0.05 rg
+0. 841.8899999999999864 595.2755905511811534 -79.3700787401574814 re
+f
+BT
+/F2 20 Tf
+23. TL
+1. g
+112.8377952755905795 802.2049606299212883 Td
+(BAMPRO MARINE – Timesheet System) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+1. g
+198.0327952755905585 779.5277952755905062 Td
+(Handleiding: Uren invullen \(Weekly Only\)) Tj
+ET
+BT
+/F2 12 Tf
+13.7999999999999989 TL
+0.918 0.345 0.047 rg
+42.5196850393700814 739.8427559055118081 Td
+(5. Veiligheid van je gegevens \(RLS\)) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0. g
+42.5196850393700814 717.1655905511811397 Td
+(Alle gegevens die je invult worden opgeslagen onder een RLS-beleid \(Row Level Security\). RLS betekent dat op) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0. g
+42.5196850393700814 701.5750393700786844 Td
+(databaseniveau regels gelden over wie welke rijen mag zien en wijzigen. Jouw uren en gegevens zijn gekoppeld) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0. g
+42.5196850393700814 685.9844881889763428 Td
+(aan jouw account; het systeem zorgt ervoor dat je alleen je eigen uren ziet en kunt beheren. Dit waarborgt de) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0. g
+42.5196850393700814 670.3939370078740012 Td
+(vertrouwelijkheid en integriteit van je gegevens.) Tj
+ET
+BT
+/F2 12 Tf
+13.7999999999999989 TL
+0.918 0.345 0.047 rg
+42.5196850393700814 637.7955118110235162 Td
+(6. Korte samenvatting) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0. g
+42.5196850393700814 615.1183464566928478 Td
+(Week kiezen: Vorige/Volgende of Selecteer week.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0. g
+42.5196850393700814 599.5277952755905062 Td
+(Uren invullen: per dag werk type, project \(indien nodig\), start- en eindtijd; eventueel Hele dag vrij.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0. g
+42.5196850393700814 583.9372440944881646 Td
+(Week afronden: Week bevestigen – daarna is de week vergrendeld.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0. g
+42.5196850393700814 568.346692913385823 Td
+(Terugkijken: zelfde scherm; andere week kiezen of exporteren naar Excel.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0. g
+42.5196850393700814 552.7561417322833677 Td
+(Gegevens: opgeslagen onder RLS-beleid; alleen jouw gegevens zijn voor jou zichtbaar en bewerkbaar.) Tj
+ET
+BT
+/F2 12 Tf
+13.7999999999999989 TL
+0.918 0.345 0.047 rg
+42.5196850393700814 520.1577165354329964 Td
+(7. Hulp) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0. g
+42.5196850393700814 497.480551181102328 Td
+(Link verlopen? Vraag je beheerder om een nieuwe uitnodiging. Wachtwoord vergeten of technische problemen?) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0. g
+42.5196850393700814 481.8899999999999295 Td
+(Neem contact op met je beheerder of het BAMPRO MARINE Timesheet-beheer.) Tj
+ET
+BT
+/F1 8 Tf
+9.1999999999999993 TL
+0.502 g
+198.7977952755905733 19.8427559055116944 Td
+(Pagina 2 van 2 – BAMPRO MARINE Timesheet System) Tj
+ET
+endstream
+endobj
+1 0 obj
+<</Type /Pages
+/Kids [3 0 R 5 0 R ]
+/Count 2
+>>
+endobj
+7 0 obj
+<<
+/Type /Font
+/BaseFont /Helvetica
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+8 0 obj
+<<
+/Type /Font
+/BaseFont /Helvetica-Bold
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+9 0 obj
+<<
+/Type /Font
+/BaseFont /Helvetica-Oblique
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+10 0 obj
+<<
+/Type /Font
+/BaseFont /Helvetica-BoldOblique
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+11 0 obj
+<<
+/Type /Font
+/BaseFont /Courier
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+12 0 obj
+<<
+/Type /Font
+/BaseFont /Courier-Bold
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+13 0 obj
+<<
+/Type /Font
+/BaseFont /Courier-Oblique
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+14 0 obj
+<<
+/Type /Font
+/BaseFont /Courier-BoldOblique
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+15 0 obj
+<<
+/Type /Font
+/BaseFont /Times-Roman
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+16 0 obj
+<<
+/Type /Font
+/BaseFont /Times-Bold
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+17 0 obj
+<<
+/Type /Font
+/BaseFont /Times-Italic
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+18 0 obj
+<<
+/Type /Font
+/BaseFont /Times-BoldItalic
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+19 0 obj
+<<
+/Type /Font
+/BaseFont /ZapfDingbats
+/Subtype /Type1
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+20 0 obj
+<<
+/Type /Font
+/BaseFont /Symbol
+/Subtype /Type1
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+2 0 obj
+<<
+/ProcSet [/PDF /Text /ImageB /ImageC /ImageI]
+/Font <<
+/F1 7 0 R
+/F2 8 0 R
+/F3 9 0 R
+/F4 10 0 R
+/F5 11 0 R
+/F6 12 0 R
+/F7 13 0 R
+/F8 14 0 R
+/F9 15 0 R
+/F10 16 0 R
+/F11 17 0 R
+/F12 18 0 R
+/F13 19 0 R
+/F14 20 0 R
+>>
+/XObject <<
+>>
+>>
+endobj
+21 0 obj
+<<
+/Producer (jsPDF 3.0.4)
+/CreationDate (D:20260202221549+01'00')
+>>
+endobj
+22 0 obj
+<<
+/Type /Catalog
+/Pages 1 0 R
+/OpenAction [3 0 R /FitH null]
+/PageLayout /OneColumn
+>>
+endobj
+xref
+0 23
+0000000000 65535 f 
+0000008396 00000 n 
+0000010221 00000 n 
+0000000015 00000 n 
+0000000152 00000 n 
+0000005506 00000 n 
+0000005643 00000 n 
+0000008459 00000 n 
+0000008584 00000 n 
+0000008714 00000 n 
+0000008847 00000 n 
+0000008985 00000 n 
+0000009109 00000 n 
+0000009238 00000 n 
+0000009370 00000 n 
+0000009506 00000 n 
+0000009634 00000 n 
+0000009761 00000 n 
+0000009890 00000 n 
+0000010023 00000 n 
+0000010125 00000 n 
+0000010471 00000 n 
+0000010557 00000 n 
+trailer
+<<
+/Size 23
+/Root 22 0 R
+/Info 21 0 R
+/ID [ <8ACA721D76F0C1796422567336B11C68> <8ACA721D76F0C1796422567336B11C68> ]
+>>
+startxref
+10661
+%%EOF

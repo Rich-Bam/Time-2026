@@ -1575,6 +1575,7 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
           email: form.email,
           name: form.name || form.email,
           isAdmin: isAdmin,
+          userType: form.userType,
         },
       });
       
@@ -4688,7 +4689,7 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
                         }}
                         className="h-8"
                       >
-                        {lateEntriesExpanded ? 'Hide' : 'Show'}
+                        {lateEntriesExpanded ? t('admin.hide') : t('admin.show')}
                       </Button>
                       <Button
                         size="sm"
@@ -4698,7 +4699,7 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
                         className="h-8"
                       >
                         <RefreshCw className={`h-4 w-4 mr-1 ${lateEntriesLoading ? 'animate-spin' : ''}`} />
-                        Refresh
+                        {t('admin.refresh')}
                       </Button>
                     </div>
                   </div>
@@ -5427,7 +5428,7 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
                       }}
                       className="h-8"
                     >
-                      {lateEntriesExpanded ? 'Hide' : 'Show'}
+                      {lateEntriesExpanded ? t('admin.hide') : t('admin.show')}
                     </Button>
                     <Button
                       size="sm"
