@@ -2793,7 +2793,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
           userName: currentUser.name || currentUser.email || '',
           userEmail: currentUser.email || '',
           weekNumber,
-          year: new Date(fromDate).getFullYear(),
+          year: new Date(fomDate).getFullYear(),
           dateFrom: fromDate,
           dateTo: toDate,
           excelBase64: base64,

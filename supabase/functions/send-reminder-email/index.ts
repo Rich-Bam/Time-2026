@@ -21,6 +21,8 @@ type ReminderEmailPayload = {
   message?: string;
 };
 
+const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 // CORS headers - allow all headers that Supabase client and browser might send
 // Supabase client automatically adds many headers, so we need to allow them all
 const corsHeaders = {
@@ -250,11 +252,12 @@ If you have any questions, please contact your administrator.
 This is an automated reminder from BAMPRO MARINE Timesheet System.
     `.trim();
 
-    // Send emails to all users
+    // Send emails to all users (throttled to stay under Resend's 2 req/s limit)
     const emailResults: Array<{ userId: string; email: string; success: boolean }> = [];
     const errors: Array<{ userId: string; email?: string; error: string }> = [];
 
-    for (const user of users) {
+    for (let i = 0; i < users.length; i++) {
+      const user = users[i];
       if (!user.email) {
         errors.push({ userId: user.id, error: "User has no email address" });
         continue;
@@ -289,6 +292,7 @@ This is an automated reminder from BAMPRO MARINE Timesheet System.
           const responseText = await response.text();
           console.error(`Failed to parse Resend response for ${user.email}:`, responseText);
           errors.push({ userId: user.id, email: user.email, error: `Resend API returned invalid JSON: ${responseText.substring(0, 100)}` });
+          if (i < users.length - 1) await delay(600);
           continue;
         }
 
@@ -303,6 +307,8 @@ This is an automated reminder from BAMPRO MARINE Timesheet System.
         console.error(`Exception sending email to ${user.email}:`, err);
         errors.push({ userId: user.id, email: user.email, error: err instanceof Error ? err.message : String(err) });
       }
+
+      if (i < users.length - 1) await delay(600);
     }
 
     console.log("Sending response:", {

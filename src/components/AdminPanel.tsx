@@ -21,6 +21,7 @@ import { Switch } from "@/components/ui/switch";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { formatDateToYYYYMMDD } from "@/utils/dateUtils";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
 
 interface AdminPanelProps {
@@ -196,6 +197,7 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
     year: number;
     daysLate: number; // Days since week ended
     selected?: boolean; // For UI selection
+    reminderSentAt?: string | null; // ISO date from reminders.created_at when a reminder was sent
   }
   const [lateEntries, setLateEntries] = useState<LateEntry[]>([]);
   const [lateEntriesLoading, setLateEntriesLoading] = useState<boolean>(false);
@@ -1033,15 +1035,41 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
         (entry) => !dismissedSet.has(`${entry.userId}|${entry.weekStartDate}`)
       );
 
+      // Enrich with reminder-sent status from reminders table
+      const entryKeys = new Set(filteredLateEntriesList.map((e) => `${e.userId}|${e.weekNumber}|${e.year}`));
+      const userIds = [...new Set(filteredLateEntriesList.map((e) => e.userId))];
+      const weekNumbers = [...new Set(filteredLateEntriesList.map((e) => e.weekNumber))];
+      const years = [...new Set(filteredLateEntriesList.map((e) => e.year))];
+      const reminderMap = new Map<string, string>();
+      if (entryKeys.size > 0 && userIds.length > 0 && weekNumbers.length > 0 && years.length > 0) {
+        const { data: remindersData, error: remindersError } = await supabase
+          .from("reminders")
+          .select("user_id, week_number, year, created_at")
+          .in("user_id", userIds)
+          .in("week_number", weekNumbers)
+          .in("year", years)
+          .order("created_at", { ascending: false });
+        if (!remindersError && remindersData) {
+          remindersData.forEach((r: { user_id: string; week_number: number; year: number; created_at: string }) => {
+            const key = `${r.user_id}|${r.week_number}|${r.year}`;
+            if (entryKeys.has(key) && !reminderMap.has(key)) reminderMap.set(key, r.created_at);
+          });
+        }
+      }
+      const enrichedList = filteredLateEntriesList.map((entry) => ({
+        ...entry,
+        reminderSentAt: reminderMap.get(`${entry.userId}|${entry.weekNumber}|${entry.year}`) ?? null,
+      }));
+
       // Sort by days late (most late first), then by user name
-      filteredLateEntriesList.sort((a, b) => {
+      enrichedList.sort((a, b) => {
         if (b.daysLate !== a.daysLate) {
           return b.daysLate - a.daysLate;
         }
         return a.userName.localeCompare(b.userName);
       });
 
-      setLateEntries(filteredLateEntriesList);
+      setLateEntries(enrichedList);
     } catch (error) {
       console.error('Error fetching late entries:', error);
       setLateEntries([]);
@@ -4820,7 +4848,12 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
                                     </span>
                                   </TableCell>
                                   <TableCell className="text-right">
-                                    <div className="flex items-center justify-end gap-1">
+                                    <div className="flex items-center justify-end gap-1 flex-wrap">
+                                      {entry.reminderSentAt ? (
+                                        <Badge variant="secondary" className="text-xs shrink-0">
+                                          {(t('admin.sentOn') || 'Sent on {date}').replace('{date}', new Date(entry.reminderSentAt).toLocaleDateString())}
+                                        </Badge>
+                                      ) : null}
                                       <Button
                                         size="sm"
                                         variant="outline"
@@ -4840,10 +4873,12 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
                                           ));
                                           handleSendReminderForLateEntries();
                                         }}
+                                        disabled={!!entry.reminderSentAt}
+                                        title={entry.reminderSentAt ? (t('admin.reminderSent') || 'Reminder sent') : undefined}
                                         className="h-7 text-xs"
                                       >
                                         <Mail className="h-3 w-3 mr-1" />
-                                        {t('admin.sendReminder') || 'Send'}
+                                        {entry.reminderSentAt ? (t('admin.reminderSent') || 'Sent') : (t('admin.sendReminder') || 'Send')}
                                       </Button>
                                     </div>
                                   </TableCell>
@@ -5552,7 +5587,12 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
                                   </span>
                                 </TableCell>
                                 <TableCell className="text-right">
-                                  <div className="flex items-center justify-end gap-1">
+                                  <div className="flex items-center justify-end gap-1 flex-wrap">
+                                    {entry.reminderSentAt ? (
+                                      <Badge variant="secondary" className="text-xs shrink-0">
+                                        {(t('admin.sentOn') || 'Sent on {date}').replace('{date}', new Date(entry.reminderSentAt).toLocaleDateString())}
+                                      </Badge>
+                                    ) : null}
                                     <Button
                                       size="sm"
                                       variant="outline"
@@ -5572,10 +5612,12 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
                                         ));
                                         handleSendReminderForLateEntries();
                                       }}
+                                      disabled={!!entry.reminderSentAt}
+                                      title={entry.reminderSentAt ? (t('admin.reminderSent') || 'Reminder sent') : undefined}
                                       className="h-7 text-xs"
                                     >
                                       <Mail className="h-3 w-3 mr-1" />
-                                      {t('admin.sendReminder') || 'Send'}
+                                      {entry.reminderSentAt ? (t('admin.reminderSent') || 'Sent') : (t('admin.sendReminder') || 'Send')}
                                     </Button>
                                   </div>
                                 </TableCell>
