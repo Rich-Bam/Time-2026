@@ -14,16 +14,74 @@ const InviteConfirm = () => {
   const { toast } = useToast();
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [refreshToken, setRefreshToken] = useState<string | null>(null);
+  const [linkExpired, setLinkExpired] = useState(false);
+  const [codeExchangePending, setCodeExchangePending] = useState(true);
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
 
-  // Try to get access_token and refresh_token from query or hash
+  // Try to get access_token and refresh_token from query or hash; detect error params; optionally exchange code (PKCE)
   useEffect(() => {
+    const error = searchParams.get("error");
+    const codeParam = searchParams.get("_code");
+    const errorDescription = searchParams.get("error_description");
+    let hashError: string | null = null;
+    let hashCodeParam: string | null = null;
+    let hashErrorDescription: string | null = null;
+    if (window.location.hash) {
+      const hashParams = new URLSearchParams(window.location.hash.substring(1));
+      hashError = hashParams.get("error");
+      hashCodeParam = hashParams.get("_code");
+      hashErrorDescription = hashParams.get("error_description");
+    }
+    const resolvedError = error || hashError;
+    const resolvedCodeParam = codeParam || hashCodeParam;
+    const resolvedErrorDescription = errorDescription || hashErrorDescription;
+
+    // Detect expired or invalid link from Supabase redirect
+    if (
+      resolvedCodeParam === "otp_expired" ||
+      (resolvedErrorDescription &&
+        (resolvedErrorDescription.toLowerCase().includes("invalid") ||
+          resolvedErrorDescription.toLowerCase().includes("expired"))) ||
+      resolvedError
+    ) {
+      setLinkExpired(true);
+      setCodeExchangePending(false);
+      return;
+    }
+
+    // PKCE: exchange code for session if code is present and no error
+    const code = searchParams.get("code");
+    let hashCode: string | null = null;
+    if (window.location.hash) {
+      const hashParams = new URLSearchParams(window.location.hash.substring(1));
+      hashCode = hashParams.get("code");
+    }
+    const resolvedCode = code || hashCode;
+    if (resolvedCode) {
+      supabase.auth
+        .exchangeCodeForSession(resolvedCode)
+        .then(({ data: sessionData, error: exchangeError }) => {
+          if (exchangeError) {
+            setLinkExpired(true);
+          } else if (sessionData?.session) {
+            setAccessToken(sessionData.session.access_token);
+            setRefreshToken(sessionData.session.refresh_token ?? null);
+          }
+          setCodeExchangePending(false);
+        })
+        .catch(() => {
+          setLinkExpired(true);
+          setCodeExchangePending(false);
+        });
+      return;
+    }
+
+    setCodeExchangePending(false);
     let token = searchParams.get("access_token");
     let refresh = searchParams.get("refresh_token");
-    
     if (!token && window.location.hash) {
       const hashParams = new URLSearchParams(window.location.hash.substring(1));
       token = hashParams.get("access_token");
@@ -141,7 +199,25 @@ const InviteConfirm = () => {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {accessToken ? (
+          {linkExpired ? (
+            <div className="space-y-4">
+              <div className="text-center text-red-600 p-4 bg-red-50 rounded border border-red-200">
+                De activatielink is verlopen of is al gebruikt. Vraag je beheerder om een nieuwe uitnodiging.
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                onClick={() => navigate("/")}
+              >
+                Naar inlogpagina
+              </Button>
+            </div>
+          ) : codeExchangePending ? (
+            <div className="text-center py-6 text-muted-foreground">
+              Bezig met controleren van de link...
+            </div>
+          ) : accessToken ? (
             <form onSubmit={handleSetPassword} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="new-password">Wachtwoord</Label>
