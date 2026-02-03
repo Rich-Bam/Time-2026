@@ -762,7 +762,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
           event: '*',
           schema: 'public',
           table: 'confirmed_weeks',
-          filter: `user_id=eq.${currentUser.id} AND week_start_date=eq.${weekKey}`§
+          filter: `user_id=eq.${currentUser.id} AND week_start_date=eq.${weekKey}`
         },
         (payload) => {
           console.log('Real-time update for confirmed_weeks (Simple view):', payload);
