@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -155,7 +155,11 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
   const [shareDate, setShareDate] = useState<Date>(new Date());
   const [shareEntryCount, setShareEntryCount] = useState(0);
   const [showSendEmailDialog, setShowSendEmailDialog] = useState(false);
-  
+  const [savingDayIdx, setSavingDayIdx] = useState<number | null>(null);
+  const autoSaveTimersRef = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
+  const daysRef = useRef(days);
+  daysRef.current = days;
+
   // State for combined mobile panel
   const [combinedOvertimeData, setCombinedOvertimeData] = useState<any>(null);
   const [combinedOvertimeLoading, setCombinedOvertimeLoading] = useState(false);
@@ -737,6 +741,13 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
     }
   };
 
+  useEffect(() => {
+    return () => {
+      Object.values(autoSaveTimersRef.current).forEach(t => clearTimeout(t));
+      autoSaveTimersRef.current = {};
+    };
+  }, []);
+
   // Set up real-time subscription to listen for changes to confirmed_weeks
   useEffect(() => {
     if (!currentUser) return;
@@ -751,7 +762,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
           event: '*',
           schema: 'public',
           table: 'confirmed_weeks',
-          filter: `user_id=eq.${currentUser.id} AND week_start_date=eq.${weekKey}`
+          filter: `user_id=eq.${currentUser.id} AND week_start_date=eq.${weekKey}`§
         },
         (payload) => {
           console.log('Real-time update for confirmed_weeks (Simple view):', payload);
@@ -842,6 +853,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
         ? { ...day, entries: [...day.entries, { workType: "", project: lastProject, hours: "", startTime: lastEndTime, endTime: "", fullDayOff: false, kilometers: "" }] }
         : day
     ));
+    scheduleAutoSaveDay(dayIdx);
   };
 
   const handleRemoveEntry = (dayIdx: number, entryIdx: number) => {
@@ -855,6 +867,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
         ? { ...day, entries: day.entries.filter((_, j) => j !== entryIdx) }
         : day
     ));
+    scheduleAutoSaveDay(dayIdx);
   };
 
   const handleEntryChange = (dayIdx: number, entryIdx: number, field: string, value: any) => {
@@ -898,9 +911,163 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
       
       return updatedDays;
     });
+    scheduleAutoSaveDay(dayIdx);
+  };
+
+  const AUTO_SAVE_DELAY_MS = 2500;
+
+  const scheduleAutoSaveDay = (dayIdx: number) => {
+    const weekKey = formatDateToYYYYMMDD(weekDates[0]);
+    if (confirmedWeeks[weekKey] || !currentUser) return;
+    const day = days[dayIdx];
+    if (!day) return;
+    const entryDate = new Date(day.date);
+    entryDate.setHours(0, 0, 0, 0);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (entryDate > today) return;
+    if (autoSaveTimersRef.current[dayIdx]) {
+      clearTimeout(autoSaveTimersRef.current[dayIdx]);
+    }
+    autoSaveTimersRef.current[dayIdx] = setTimeout(() => {
+      delete autoSaveTimersRef.current[dayIdx];
+      handleSaveDay(dayIdx, true);
+    }, AUTO_SAVE_DELAY_MS);
+  };
+
+  const handleSaveDay = async (dayIdx: number, isSilent = false) => {
+    if (!currentUser) return;
+    const weekKey = formatDateToYYYYMMDD(weekDates[0]);
+    if (confirmedWeeks[weekKey]) return;
+    const currentDays = daysRef.current;
+    const day = currentDays[dayIdx];
+    if (!day) return;
+    const dateStr = formatDateToYYYYMMDD(day.date);
+    const entryDate = new Date(day.date);
+    entryDate.setHours(0, 0, 0, 0);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (entryDate > today) {
+      if (!isSilent) toast({ title: "Future Date Not Allowed", description: "You cannot log hours for future dates.", variant: "destructive" });
+      return;
+    }
+    const entries = day.entries;
+    const toUpdate: { entry: Entry; index: number }[] = [];
+    const toInsert: Entry[] = [];
+    for (let i = 0; i < entries.length; i++) {
+      const entry = entries[i];
+      const isEmpty = !entry.id && !entry.workType && !entry.project && !entry.startTime && !entry.endTime && !entry.hours;
+      if (isEmpty) continue;
+      const isDayOff = entry.workType === "31";
+      const requiresProject = workTypeRequiresProject(entry.workType);
+      if (!entry.workType) {
+        if (!isSilent) toast({ title: "Error", description: "Please select a work type for all entries.", variant: "destructive" });
+        return;
+      }
+      if (!isDayOff) {
+        if (requiresProject && !entry.project) {
+          if (!isSilent) toast({ title: "Error", description: "Please select a project where required.", variant: "destructive" });
+          return;
+        }
+        if (entry.project && requiresProject) {
+          const selectedProject = projectsWithStatus.find(p => p.name === entry.project);
+          if (selectedProject && selectedProject.status === "closed") {
+            if (!isSilent) toast({ title: "Project Closed", description: `"${entry.project}" is closed.`, variant: "destructive" });
+            return;
+          }
+          const { data: projectData } = await supabase.from("projects").select("id, name, status").eq("name", entry.project).maybeSingle();
+          if (projectData && projectData.status === "closed") {
+            if (!isSilent) toast({ title: "Project Closed", description: `"${entry.project}" is closed.`, variant: "destructive" });
+            return;
+          }
+        }
+        if (!entry.startTime || !entry.endTime) {
+          if (!isSilent) toast({ title: "Error", description: "Please enter start and end times where required.", variant: "destructive" });
+          return;
+        }
+      } else {
+        if (!entry.fullDayOff && !entry.startTime && !entry.endTime && !entry.hours) {
+          if (!isSilent) toast({ title: "Error", description: "Enter times or check full day off.", variant: "destructive" });
+          return;
+        }
+      }
+      let hoursToSave = 0;
+      if (isDayOff && entry.fullDayOff) hoursToSave = 8;
+      else if (entry.startTime && entry.endTime) hoursToSave = parseFloat(calculateHours(entry.startTime, entry.endTime)) || 0;
+      else if (entry.hours) hoursToSave = Number(entry.hours);
+      if (hoursToSave <= 0 && !isDayOff) {
+        if (!isSilent) toast({ title: "Error", description: "Please enter valid start and end times.", variant: "destructive" });
+        return;
+      }
+      if (isDayOff && hoursToSave <= 0) {
+        if (!isSilent) toast({ title: "Error", description: "Enter valid hours or check full day off.", variant: "destructive" });
+        return;
+      }
+      if (entry.id) toUpdate.push({ entry, index: i });
+      else toInsert.push(entry);
+    }
+    if (toUpdate.length === 0 && toInsert.length === 0) {
+      if (!isSilent) toast({ title: "Nothing to save", description: "No valid entries to save.", variant: "destructive" });
+      return;
+    }
+    setSavingDayIdx(dayIdx);
+    try {
+      for (const { entry } of toUpdate) {
+        const isDayOff = entry.workType === "31";
+        let hoursToSave = 0;
+        if (isDayOff && entry.fullDayOff) hoursToSave = 8;
+        else if (entry.startTime && entry.endTime) hoursToSave = parseFloat(calculateHours(entry.startTime, entry.endTime)) || 0;
+        else if (entry.hours) hoursToSave = Number(entry.hours);
+        const updateData: any = {
+          project: (isDayOff || entry.workType === "35" || entry.workType === "20" || entry.workType === "21") ? (entry.project?.trim() || null) : entry.project,
+          hours: hoursToSave,
+          description: entry.workType,
+          startTime: entry.startTime || null,
+          endTime: entry.endTime || null,
+          kilometers: (entry.workType === "20" || entry.workType === "21") && entry.kilometers ? parseFloat(entry.kilometers) : null,
+        };
+        const { error } = await supabase.from("timesheet").update(updateData).eq("id", entry.id!);
+        if (error) throw error;
+      }
+      if (toInsert.length > 0) {
+        const insertPayload = toInsert.map(entry => {
+          const isDayOff = entry.workType === "31";
+          let hoursToSave = 0;
+          if (isDayOff && entry.fullDayOff) hoursToSave = 8;
+          else if (entry.startTime && entry.endTime) hoursToSave = parseFloat(calculateHours(entry.startTime, entry.endTime)) || 0;
+          else if (entry.hours) hoursToSave = Number(entry.hours);
+          return {
+            project: (isDayOff || entry.workType === "35" || entry.workType === "20" || entry.workType === "21") ? (entry.project?.trim() || null) : entry.project,
+            user_id: currentUser.id,
+            date: dateStr,
+            hours: hoursToSave,
+            description: entry.workType,
+            startTime: entry.startTime || null,
+            endTime: entry.endTime || null,
+            stayed_overnight: !!day.stayedOvernight,
+            kilometers: (entry.workType === "20" || entry.workType === "21") && entry.kilometers ? parseFloat(entry.kilometers) : null,
+          };
+        });
+        const { error } = await supabase.from("timesheet").insert(insertPayload);
+        if (error) throw error;
+      }
+      await fetchSubmittedEntries(dateStr);
+      setDays(prevDays => prevDays.map((d, i) => {
+        if (i !== dayIdx) return d;
+        return { ...d, entries: [{ workType: "", project: "", hours: "", startTime: "", endTime: "", fullDayOff: false, kilometers: "" }] };
+      }));
+      if (editingEntry && formatDateToYYYYMMDD(day.date) === editingEntry.dateStr) setEditingEntry(null);
+      const hasDayOff = (toUpdate.some(({ entry }) => entry.workType === "31") || toInsert.some(e => e.workType === "31"));
+      if (hasDayOff) await fetchDaysOff();
+      if (!isSilent) toast({ title: "Saved", description: `${toUpdate.length + toInsert.length} entries saved.` });
+    } catch (error: any) {
+      toast({ title: "Error", description: error?.message || "Failed to save", variant: "destructive" });
+    } finally {
+      setSavingDayIdx(null);
+    }
   };
   
-  // Save a single entry and add a new entry
+  // Save a single entry and add a new entry (kept for any legacy use; primary flow is handleSaveDay)
   const handleSaveEntry = async (dayIdx: number, entryIdx: number) => {
     if (!currentUser) return;
     
@@ -1917,6 +2084,17 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
     const h = Math.floor(hours);
     const m = Math.round((hours - h) * 60);
     return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  };
+
+  /** Format decimal hours for display as hours and minutes (e.g. 0.5 → "30 min", 4.5 → "4h 30 min") */
+  const formatHoursAsMinutes = (hoursDecimal: number): string => {
+    if (!Number.isFinite(hoursDecimal) || hoursDecimal < 0) return "-";
+    if (hoursDecimal === 0) return "0 min";
+    const h = Math.floor(hoursDecimal);
+    const m = Math.round((hoursDecimal - h) * 60);
+    if (h === 0) return `${m} min`;
+    if (m === 0) return `${h}h`;
+    return `${h}h ${m} min`;
   };
 
   // Export week entries to Excel with per-day sheets
@@ -3561,6 +3739,15 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
                                     <Plus className={`${isMobile ? 'h-2.5 w-2.5' : 'h-3 w-3'} mr-1`} />
                                     {t('weekly.addEntry')}
                                   </Button>
+                                  <Button 
+                                    variant="default" 
+                                    size={isMobile ? "sm" : "sm"}
+                                    className={`${isMobile ? 'h-7 text-xs flex-1' : 'h-7 text-xs'} bg-green-600 hover:bg-green-700`}
+                                    onClick={() => handleSaveDay(dayIdx, false)}
+                                    disabled={isLocked || savingDayIdx === dayIdx}
+                                  >
+                                    {savingDayIdx === dayIdx ? "..." : t('weekly.saveDay')}
+                                  </Button>
                                 </div>
                               )}
                             </div>
@@ -3608,15 +3795,6 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
                                       <Label className="text-xs font-semibold text-gray-900 dark:text-gray-100">{t('weekly.workType')}</Label>
                                     </div>
                                     <div className="flex items-center gap-1.5 sm:gap-2">
-                                      <Button 
-                                        variant="default" 
-                                        size="sm"
-                                        className={`${isMobile ? 'h-6 px-2' : 'h-7 px-3'} text-xs bg-green-600 hover:bg-green-700`}
-                                        onClick={() => handleSaveEntry(dayIdx, entryIdx)}
-                                        disabled={isLocked}
-                                      >
-                                        {t('common.save')}
-                                      </Button>
                                       {day.entries.length > 1 && (
                                         <Button 
                                           variant="destructive" 
@@ -3896,14 +4074,14 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
                                   if (entry.startTime && entry.endTime) {
                                     const calculated = calculateHours(entry.startTime, entry.endTime);
                                     const hours = parseFloat(calculated);
-                                    if (!isNaN(hours) && hours > 0) {
-                                      return `${hours.toFixed(2)}h`;
+                                    if (!isNaN(hours) && hours >= 0) {
+                                      return formatHoursAsMinutes(hours);
                                     }
                                   }
                                   if (entry.hours) {
                                     const hours = parseFloat(entry.hours);
-                                    if (!isNaN(hours) && hours > 0) {
-                                      return `${hours.toFixed(2)}h`;
+                                    if (!isNaN(hours) && hours >= 0) {
+                                      return formatHoursAsMinutes(hours);
                                     }
                                   }
                                   return "-";
@@ -3971,7 +4149,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
                                   ? t('weekly.fullDayOff') || "Hele dag vrij (8 uren)"
                                   : "-"
                             }</div>
-                            <div><strong className="text-gray-900 dark:text-gray-200">{t('weekly.hours')}:</strong> {submittedEntry.hours || "0"}h</div>
+                            <div><strong className="text-gray-900 dark:text-gray-200">{t('weekly.hours')}:</strong> {formatHoursAsMinutes(parseFloat(submittedEntry.hours || "0"))}</div>
                             {(submittedEntry.workType === "20" || submittedEntry.workType === "21") && (
                               <div><strong className="text-gray-900 dark:text-gray-200">{t('weekly.kilometers')}:</strong> {submittedEntry.kilometers ? `${submittedEntry.kilometers} km` : "-"}</div>
                             )}
@@ -3984,7 +4162,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
                         <div className="flex items-center justify-between mb-1">
                           <span className="text-sm sm:text-base text-gray-900 dark:text-gray-100">{t('weekly.hours')}:</span>
                           <span className="text-sm sm:text-base text-gray-900 dark:text-gray-100">
-                            {calculateDayTotal(dayIdx, dateStr).toFixed(2)}h
+                            {formatHoursAsMinutes(calculateDayTotal(dayIdx, dateStr))}
                           </span>
                         </div>
                         <div className="flex items-center justify-between">
@@ -4102,6 +4280,15 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
                           <Plus className={`${isMobile ? 'h-2.5 w-2.5' : 'h-3 w-3'} mr-1`} />
                           {t('weekly.addEntry')}
                         </Button>
+                        <Button 
+                          variant="default" 
+                          size={isMobile ? "sm" : "sm"}
+                          className={`${isMobile ? 'h-7 text-xs flex-1' : 'h-7 text-xs'} bg-green-600 hover:bg-green-700`}
+                          onClick={() => handleSaveDay(dayIdx, false)}
+                          disabled={isLocked || savingDayIdx === dayIdx}
+                        >
+                          {savingDayIdx === dayIdx ? "..." : t('weekly.saveDay')}
+                        </Button>
                       </div>
                     )}
                   </div>
@@ -4152,15 +4339,6 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
                               <Label className="text-xs font-semibold text-gray-900 dark:text-gray-100">{t('weekly.workType')}</Label>
                             </div>
                             <div className="flex items-center gap-1.5 sm:gap-2">
-                              <Button 
-                                variant="default" 
-                                size="sm"
-                                className={`${isMobile ? 'h-6 px-2' : 'h-7 px-3'} text-xs bg-green-600 hover:bg-green-700`}
-                                onClick={() => handleSaveEntry(dayIdx, entryIdx)}
-                                disabled={isLocked}
-                              >
-                                {t('common.save')}
-                              </Button>
                               {day.entries.length > 1 && (
                                 <Button 
                                   variant="destructive" 
@@ -4440,14 +4618,14 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
                                   if (entry.startTime && entry.endTime) {
                                     const calculated = calculateHours(entry.startTime, entry.endTime);
                                     const hours = parseFloat(calculated);
-                                    if (!isNaN(hours) && hours > 0) {
-                                      return `${hours.toFixed(2)}h`;
+                                    if (!isNaN(hours) && hours >= 0) {
+                                      return formatHoursAsMinutes(hours);
                                     }
                                   }
                                   if (entry.hours) {
                                     const hours = parseFloat(entry.hours);
-                                    if (!isNaN(hours) && hours > 0) {
-                                      return `${hours.toFixed(2)}h`;
+                                    if (!isNaN(hours) && hours >= 0) {
+                                      return formatHoursAsMinutes(hours);
                                     }
                                   }
                                   return "-";
@@ -4515,7 +4693,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
                                   ? t('weekly.fullDayOff') || "Hele dag vrij (8 uren)"
                                   : "-"
                             }</div>
-                            <div><strong className="text-gray-900 dark:text-gray-200">{t('weekly.hours')}:</strong> {submittedEntry.hours || "0"}h</div>
+                            <div><strong className="text-gray-900 dark:text-gray-200">{t('weekly.hours')}:</strong> {formatHoursAsMinutes(parseFloat(submittedEntry.hours || "0"))}</div>
                             {(submittedEntry.workType === "20" || submittedEntry.workType === "21") && (
                               <div><strong className="text-gray-900 dark:text-gray-200">{t('weekly.kilometers')}:</strong> {submittedEntry.kilometers ? `${submittedEntry.kilometers} km` : "-"}</div>
                             )}
@@ -4528,7 +4706,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
                         <div className="flex items-center justify-between mb-1">
                           <span className="text-sm sm:text-base text-gray-900 dark:text-gray-900">{t('weekly.hours')}:</span>
                           <span className="text-sm sm:text-base text-gray-900 dark:text-gray-100">
-                            {calculateDayTotal(dayIdx, dateStr).toFixed(2)}h
+                            {formatHoursAsMinutes(calculateDayTotal(dayIdx, dateStr))}
                           </span>
                         </div>
                         <div className="flex items-center justify-between">
@@ -4830,19 +5008,19 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
                                   {(() => {
                                     // If full day off is checked, show 8 hours
                                     if (entry.workType === "31" && entry.fullDayOff) {
-                                      return "8.00h";
+                                      return "8h";
                                     }
                                     if (entry.startTime && entry.endTime) {
                                       const calculated = calculateHours(entry.startTime, entry.endTime);
                                       const hours = parseFloat(calculated);
-                                      if (!isNaN(hours) && hours > 0) {
-                                        return `${hours.toFixed(2)}h`;
+                                      if (!isNaN(hours) && hours >= 0) {
+                                        return formatHoursAsMinutes(hours);
                                       }
                                     }
                                     if (entry.hours) {
                                       const hours = parseFloat(entry.hours);
-                                      if (!isNaN(hours) && hours > 0) {
-                                        return `${hours.toFixed(2)}h`;
+                                      if (!isNaN(hours) && hours >= 0) {
+                                        return formatHoursAsMinutes(hours);
                                       }
                                     }
                                     return "-";
@@ -4867,15 +5045,6 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
                               </td>
                               <td className="border border-gray-300 dark:border-gray-700 p-2 text-center">
                                 <div className="flex items-center justify-center gap-1">
-                                  <Button 
-                                    variant="default" 
-                                    size="sm"
-                                    className="h-8 px-3 text-xs bg-green-600 hover:bg-green-700"
-                                    onClick={() => handleSaveEntry(dayIdx, entryIdx)}
-                                    disabled={isLocked}
-                                  >
-                                    {t('common.save')}
-                                  </Button>
                                   {day.entries.length > 1 && (
                                     <Button 
                                       variant="destructive" 
@@ -4909,7 +5078,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
                                 <span className="text-sm text-gray-900 dark:text-gray-100">{submittedEntry.endTime || "-"}</span>
                               </td>
                               <td className="border border-gray-300 dark:border-gray-700 p-2">
-                                <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{submittedEntry.hours || "0"}</span>
+                                <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{formatHoursAsMinutes(parseFloat(submittedEntry.hours || "0"))}</span>
                               </td>
                               <td className="border border-gray-300 dark:border-gray-700 p-2">
                                 <span className="text-sm text-gray-900 dark:text-gray-100">
@@ -4954,7 +5123,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
                             </td>
                             <td className="border border-gray-300 dark:border-gray-700 p-2">
                               <span className="text-sm sm:text-base text-gray-900 dark:text-gray-900">
-                                {calculateDayTotal(dayIdx, dateStr).toFixed(2)}h
+                                {formatHoursAsMinutes(calculateDayTotal(dayIdx, dateStr))}
                               </span>
                             </td>
                             <td className="border border-gray-300 dark:border-gray-700 p-2">
@@ -5238,7 +5407,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
                       {(() => {
                         const calculated = calculateHours(quickEntry.startTime, quickEntry.endTime);
                         const hours = parseFloat(calculated);
-                        return !isNaN(hours) && hours > 0 ? `${hours.toFixed(2)}h` : "-";
+                        return !isNaN(hours) && hours >= 0 ? formatHoursAsMinutes(hours) : "-";
                       })()}
                     </div>
                   </div>
