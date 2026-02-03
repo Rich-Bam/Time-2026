@@ -282,55 +282,21 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
     }
 
     try {
-      // Add new project to database
-      // Only include fields that definitely exist in the schema
+      // Add new project to database as shared (user_id null) so all users can use it
       const projectData: any = {
         name: projectName.trim(),
         status: "active",
+        user_id: null,
       };
-      
-      // Only add user_id if it exists in the schema (optional)
-      // Try to insert with user_id first, if it fails, try without
-      let newProject;
-      let error;
-      
-      // First attempt: try with user_id
-      if (currentUser?.id) {
-        const result = await supabase
-          .from("projects")
-          .insert([{
-            ...projectData,
-            user_id: currentUser.id,
-          }])
-          .select("id, name")
-          .single();
-        
-        newProject = result.data;
-        error = result.error;
-        
-        // If error mentions user_id column doesn't exist, try without it
-        if (error && error.message?.includes("user_id")) {
-          const resultWithoutUserId = await supabase
-            .from("projects")
-            .insert([projectData])
-            .select("id, name")
-            .single();
-          
-          newProject = resultWithoutUserId.data;
-          error = resultWithoutUserId.error;
-        }
-      } else {
-        // No user_id, insert without it
-        const result = await supabase
-          .from("projects")
-          .insert([projectData])
-          .select("id, name")
-          .single();
-        
-        newProject = result.data;
-        error = result.error;
-      }
 
+      const result = await supabase
+        .from("projects")
+        .insert([projectData])
+        .select("id, name")
+        .single();
+
+      const newProject = result.data;
+      const error = result.error;
       if (error) throw error;
 
       // Add to projects list
@@ -2793,7 +2759,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
           userName: currentUser.name || currentUser.email || '',
           userEmail: currentUser.email || '',
           weekNumber,
-          year: new Date(fomDate).getFullYear(),
+          year: new Date(fromDate).getFullYear(),
           dateFrom: fromDate,
           dateTo: toDate,
           excelBase64: base64,

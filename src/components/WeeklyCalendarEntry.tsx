@@ -902,33 +902,14 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
           .single();
         
         if (!existingProject) {
-          // Try to insert with user_id first, if it fails, try without
-          const projectData: any = {
-            name: projectName,
-            status: "active",
-          };
-          
-          if (currentUser?.id) {
-            // First attempt: try with user_id
-            const result = await supabase
-              .from("projects")
-              .insert([{
-                ...projectData,
-                user_id: currentUser.id,
-              }]);
-            
-            // If error mentions user_id column doesn't exist, try without it
-            if (result.error && result.error.message?.includes("user_id")) {
-              await supabase
-                .from("projects")
-                .insert([projectData]);
-            }
-          } else {
-            // No user_id, insert without it
-            await supabase
-              .from("projects")
-              .insert([projectData]);
-          }
+          // Insert as shared project (user_id null) so all users can use it
+          await supabase
+            .from("projects")
+            .insert([{
+              name: projectName,
+              status: "active",
+              user_id: null,
+            }]);
         }
       }
       
@@ -1176,22 +1157,21 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
       }
     }
     
-    // Create all custom projects in batch
-    if (customProjectsToCreate.size > 0 && currentUser?.id) {
+    // Create all custom projects in batch (as shared so all users can use them)
+    if (customProjectsToCreate.size > 0) {
       for (const projectName of customProjectsToCreate) {
         const { data: existingProject } = await supabase
           .from("projects")
           .select("id")
           .eq("name", projectName)
-          .eq("user_id", currentUser.id)
-          .single();
+          .maybeSingle();
         
         if (!existingProject) {
           await supabase
             .from("projects")
             .insert([{
               name: projectName,
-              user_id: currentUser.id,
+              user_id: null,
               description: null
             }]);
         }
@@ -1201,12 +1181,14 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
       const { data: updatedProjects } = await supabase
         .from("projects")
         .select("id, name, user_id")
-        .or(`user_id.is.null,user_id.eq.${currentUser.id}`);
-      if (updatedProjects) {
+        .or(`user_id.is.null,user_id.eq.${currentUser?.id || ""}`);
+      if (updatedProjects && currentUser?.id) {
         const filteredProjects = updatedProjects.filter(
           p => !p.user_id || p.user_id === currentUser.id
         );
         setProjects(filteredProjects);
+      } else if (updatedProjects) {
+        setProjects(updatedProjects.map(p => ({ id: p.id, name: p.name })));
       }
     }
     
@@ -1296,52 +1278,26 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
         const isCustomProject = !projects.some(p => p.name === projectToSave);
         if (isCustomProject) {
           try {
-            // Try to check if project exists with user_id
-            const { data: existingProject, error: checkError } = await supabase
+            const { data: existingProject } = await supabase
               .from("projects")
               .select("id")
-              .eq("name", projectToSave);
+              .eq("name", projectToSave)
+              .maybeSingle();
             
-            let projectExists = false;
-            if (checkError && checkError.message.includes("does not exist")) {
-              // user_id column doesn't exist, just check by name
-              projectExists = existingProject && existingProject.length > 0;
-            } else {
-              // Try to filter by user_id
-              const { data: userProject } = await supabase
-                .from("projects")
-                .select("id")
-                .eq("name", projectToSave)
-                .eq("user_id", currentUser.id)
-                .single();
-              projectExists = !!userProject;
-            }
-            
-            if (!projectExists) {
-              // Try to insert with user_id
-              const { error: insertError } = await supabase
+            if (!existingProject) {
+              // Insert as shared project (user_id null) so all users can use it
+              await supabase
                 .from("projects")
                 .insert([{
                   name: projectToSave,
-                  user_id: currentUser.id,
+                  user_id: null,
                   description: null
                 }]);
               
-              // If user_id column doesn't exist, insert without it
-              if (insertError && insertError.message.includes("does not exist")) {
-                await supabase
-                  .from("projects")
-                  .insert([{
-                    name: projectToSave,
-                    description: null
-                  }]);
-              }
-              
-              // Refresh projects list
               const { data: updatedProjects } = await supabase
                 .from("projects")
-                .select("id, name");
-              setProjects(updatedProjects || []);
+                .select("id, name, user_id");
+              if (updatedProjects) setProjects(updatedProjects.map(p => ({ id: p.id, name: p.name })));
             }
           } catch (err) {
             console.warn("Could not save custom project:", err);
@@ -1640,14 +1596,13 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
       }
     }
     
-    // Create all custom projects in batch
-    if (customProjectsToCreate.size > 0 && currentUser?.id) {
+    // Create all custom projects in batch (as shared so all users can use them)
+    if (customProjectsToCreate.size > 0) {
       for (const projectName of customProjectsToCreate) {
         const { data: existingProject } = await supabase
           .from("projects")
           .select("id")
           .eq("name", projectName)
-          .eq("user_id", currentUser.id)
           .single();
         
         if (!existingProject) {
@@ -1655,7 +1610,7 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
             .from("projects")
             .insert([{
               name: projectName,
-              user_id: currentUser.id,
+              user_id: null,
               description: null
             }]);
         }
@@ -1665,12 +1620,14 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
       const { data: updatedProjects } = await supabase
         .from("projects")
         .select("id, name, user_id")
-        .or(`user_id.is.null,user_id.eq.${currentUser.id}`);
-      if (updatedProjects) {
+        .or(`user_id.is.null,user_id.eq.${currentUser?.id || ""}`);
+      if (updatedProjects && currentUser?.id) {
         const filteredProjects = updatedProjects.filter(
           p => !p.user_id || p.user_id === currentUser.id
         );
         setProjects(filteredProjects);
+      } else if (updatedProjects) {
+        setProjects(updatedProjects.map(p => ({ id: p.id, name: p.name })));
       }
     }
     
