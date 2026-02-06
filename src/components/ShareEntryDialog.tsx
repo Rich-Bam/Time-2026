@@ -334,6 +334,19 @@ const ShareEntryDialog: React.FC<ShareEntryDialogProps> = ({
         let totalShared = 0;
         let totalEntries = 0;
 
+        // Fetch sharer's overnight stays for the week (for days with only overnight, no timesheet entries)
+        const weekStart = currentWeekStart || selectedDays[0];
+        const weekDates = getWeekDates(weekStart);
+        const fromDate = formatDateToYYYYMMDD(weekDates[0]);
+        const toDate = formatDateToYYYYMMDD(weekDates[6]);
+        const { data: overnightRows } = await supabase
+          .from('overnight_stays')
+          .select('date')
+          .eq('user_id', currentUserId)
+          .gte('date', fromDate)
+          .lte('date', toDate);
+        const overnightStaysSet = new Set((overnightRows || []).map((r: { date: string }) => String(r.date)));
+
         for (const selectedDay of selectedDays) {
           const dayDateStr = formatDateToYYYYMMDD(selectedDay);
           
@@ -361,8 +374,11 @@ const ShareEntryDialog: React.FC<ShareEntryDialogProps> = ({
 
           if (entriesError) throw entriesError;
 
-          if (dayEntries && dayEntries.length > 0) {
-            // Create shared_entries record for this day
+          const hasTimesheetEntries = dayEntries && dayEntries.length > 0;
+          const hasOvernightOnly = !hasTimesheetEntries && overnightStaysSet.has(dayDateStr);
+
+          if (hasTimesheetEntries) {
+            // Create shared_entries record for this day with timesheet items
             const { data: sharedEntry, error: shareError } = await supabase
               .from('shared_entries')
               .insert({
@@ -378,7 +394,7 @@ const ShareEntryDialog: React.FC<ShareEntryDialogProps> = ({
             if (shareError) throw shareError;
 
             // Create shared_entry_items for this day
-            const items = dayEntries.map(entry => ({
+            const items = dayEntries.map((entry: { id: number }) => ({
               shared_entry_id: sharedEntry.id,
               timesheet_entry_id: entry.id,
             }));
@@ -391,6 +407,21 @@ const ShareEntryDialog: React.FC<ShareEntryDialogProps> = ({
 
             totalShared++;
             totalEntries += dayEntries.length;
+          } else if (hasOvernightOnly) {
+            // Day has only overnight stay (no timesheet entries): create shared_entries with no items
+            const { error: shareError } = await supabase
+              .from('shared_entries')
+              .insert({
+                sharer_id: currentUserId,
+                recipient_id: selectedUser.id,
+                share_type: 'day',
+                share_date: dayDateStr,
+                message: message || null,
+              });
+
+            if (shareError) throw shareError;
+
+            totalShared++;
           }
         }
 

@@ -3264,6 +3264,10 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
       const day = days[idx];
       const hasEditableEntries = day?.entries?.some((e: Entry) => {
         const hasWorkType = e.workType && e.workType.trim() !== "";
+        // Work type 31 (day off) with fullDayOff only is valid (no times required) - align with handleConfirmWeek
+        if (hasWorkType && e.workType === "31" && e.fullDayOff) {
+          return true;
+        }
         const hasTime = (e.startTime && e.startTime.trim() !== "") || 
                        (e.endTime && e.endTime.trim() !== "") || 
                        (e.hours && e.hours.trim() !== "");
@@ -5205,12 +5209,13 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
             <Button
               className="bg-orange-600 hover:bg-orange-700 text-white"
               onClick={async () => {
-                setShowSendEmailDialog(false);
+                // Keep dialog open until send completes so user sees loading and can retry on error
                 const success = await handleSendWeekToEmail(true);
                 if (success) {
-                  // Refresh status to update email_sent_at in UI
+                  setShowSendEmailDialog(false);
                   await fetchConfirmedStatus();
                 }
+                // On failure, dialog stays open and handleSendWeekToEmail already shows error toast
               }}
               disabled={sendingEmail}
             >

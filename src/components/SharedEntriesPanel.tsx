@@ -183,19 +183,26 @@ const SharedEntriesPanel: React.FC<SharedEntriesPanelProps> = ({
     }
   };
 
-  const handleAccept = async (share: SharedEntry, skipConfirm = false) => {
-    if (!skipConfirm) {
-      const hasExisting = await checkExistingEntries(share);
-      if (hasExisting) {
-        setPendingAcceptId(share.id);
-        setOverwriteConfirmOpen(true);
-        return;
-      }
-    }
+  // Copy sharer's overnight stay for share_date to recipient (if sharer had one)
+  const copyOvernightStayForShare = async (sharerId: number, shareDate: string) => {
+    const { data: sharerOvernight } = await supabase
+      .from('overnight_stays')
+      .select('date')
+      .eq('user_id', sharerId)
+      .eq('date', shareDate)
+      .maybeSingle();
 
+    if (sharerOvernight) {
+      await supabase
+        .from('overnight_stays')
+        .upsert([{ user_id: currentUserId, date: shareDate }], { onConflict: 'user_id,date' });
+    }
+  };
+
+  const handleAccept = async (share: SharedEntry, skipConfirm = false) => {
     setAcceptingId(share.id);
     try {
-      // Get all shared entry items
+      // Get all shared entry items (may be empty for overnight-only share)
       const { data: items, error: itemsError } = await supabase
         .from('shared_entry_items')
         .select('timesheet_entry_id')
@@ -203,8 +210,43 @@ const SharedEntriesPanel: React.FC<SharedEntriesPanelProps> = ({
 
       if (itemsError) throw itemsError;
 
-      if (!items || items.length === 0) {
-        throw new Error('No entries found in share');
+      const isOvernightOnlyShare = !items || items.length === 0;
+
+      // For shares with timesheet entries, check if recipient has existing entries (overwrite confirm)
+      if (!isOvernightOnlyShare && !skipConfirm) {
+        const hasExisting = await checkExistingEntries(share);
+        if (hasExisting) {
+          setAcceptingId(null);
+          setPendingAcceptId(share.id);
+          setOverwriteConfirmOpen(true);
+          return;
+        }
+      }
+
+      if (isOvernightOnlyShare) {
+        // Overnight-only day: no timesheet entries to copy; do not delete recipient's entries. Only copy overnight stay.
+        await copyOvernightStayForShare(share.sharer_id, share.share_date);
+
+        const { error: updateError } = await supabase
+          .from('shared_entries')
+          .update({
+            status: 'accepted',
+            accepted_at: new Date().toISOString(),
+          })
+          .eq('id', share.id);
+
+        if (updateError) throw updateError;
+
+        toast({
+          title: t('share.accepted'),
+          description: t('share.acceptedDescription'),
+        });
+
+        fetchPendingShares();
+        if (onAcceptSuccess) {
+          onAcceptSuccess();
+        }
+        return;
       }
 
       const entryIds = items.map((item) => item.timesheet_entry_id);
@@ -259,6 +301,9 @@ const SharedEntriesPanel: React.FC<SharedEntriesPanelProps> = ({
         .insert(newEntries);
 
       if (insertError) throw insertError;
+
+      // Copy sharer's overnight stay for this date to recipient (so UI shows overnight checkbox)
+      await copyOvernightStayForShare(share.sharer_id, share.share_date);
 
       // Update share status
       const { error: updateError } = await supabase
