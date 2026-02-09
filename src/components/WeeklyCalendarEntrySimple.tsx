@@ -1050,9 +1050,21 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
         if (error) throw error;
       }
       await fetchSubmittedEntries(dateStr);
+      const allSaved = [...toUpdate.map(({ entry }) => entry), ...toInsert].filter(e => e.endTime && e.endTime.trim() !== "");
+      const parseTime = (timeStr: string): number => {
+        const parts = (timeStr || "").trim().split(":");
+        if (parts.length !== 2) return 0;
+        const hours = parseInt(parts[0], 10) || 0;
+        const minutes = parseInt(parts[1], 10) || 0;
+        return hours * 60 + minutes;
+      };
+      const sortedSaved = [...allSaved].sort((a, b) => parseTime(a.endTime) - parseTime(b.endTime));
+      const lastSaved = sortedSaved.length > 0 ? sortedSaved[sortedSaved.length - 1] : null;
+      const nextStartTime = lastSaved?.endTime || "";
+      const nextProject = lastSaved?.project || "";
       setDays(prevDays => prevDays.map((d, i) => {
         if (i !== dayIdx) return d;
-        return { ...d, entries: [{ workType: "", project: "", hours: "", startTime: "", endTime: "", fullDayOff: false, kilometers: "" }] };
+        return { ...d, entries: [{ workType: "", project: nextProject, hours: "", startTime: nextStartTime, endTime: "", fullDayOff: false, kilometers: "" }] };
       }));
       if (editingEntry && formatDateToYYYYMMDD(day.date) === editingEntry.dateStr) setEditingEntry(null);
       const hasDayOff = (toUpdate.some(({ entry }) => entry.workType === "31") || toInsert.some(e => e.workType === "31"));
