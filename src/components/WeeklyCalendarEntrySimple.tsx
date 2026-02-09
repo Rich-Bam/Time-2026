@@ -159,6 +159,8 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
   const autoSaveTimersRef = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
   const daysRef = useRef(days);
   daysRef.current = days;
+  const submittedEntriesRef = useRef(submittedEntries);
+  submittedEntriesRef.current = submittedEntries;
 
   // State for combined mobile panel
   const [combinedOvertimeData, setCombinedOvertimeData] = useState<any>(null);
@@ -427,21 +429,19 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
       // Only show entries that have both startTime and endTime - these are user-created entries
       // Admin adjustments don't have startTime/endTime and should not be shown in weekly entry
       const filteredData = data.filter(e => e.startTime && e.endTime);
-      
-      setSubmittedEntries(prev => ({ 
-        ...prev, 
-        [dateStr]: filteredData.map((e: any) => ({
-          id: e.id,
-          workType: e.description || "",
-          project: e.project || "",
-          hours: String(e.hours || 0),
-          startTime: e.startTime || "",
-          endTime: e.endTime || "",
-          isSubmitted: true,
-          fullDayOff: false,
-          kilometers: e.kilometers ? String(e.kilometers) : "",
-        }))
+      const mapped = filteredData.map((e: any) => ({
+        id: e.id,
+        workType: e.description || "",
+        project: e.project || "",
+        hours: String(e.hours || 0),
+        startTime: e.startTime || "",
+        endTime: e.endTime || "",
+        isSubmitted: true,
+        fullDayOff: false,
+        kilometers: e.kilometers ? String(e.kilometers) : "",
       }));
+      setSubmittedEntries(prev => ({ ...prev, [dateStr]: mapped }));
+      submittedEntriesRef.current = { ...submittedEntriesRef.current, [dateStr]: mapped };
     }
   };
 
@@ -812,26 +812,26 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
     if (confirmedWeeks[weekKeyCheck]) {
       return;
     }
-    
-    // Find the last entry's endTime and project (from either editable entries or submitted entries)
-    const day = days[dayIdx];
+    // Use refs so we see latest data right after auto-save (state may not have updated yet)
+    const currentDays = daysRef.current;
+    const day = currentDays[dayIdx];
+    if (!day) return;
     const dateStr = formatDateToYYYYMMDD(day.date);
-    
+    const submittedForDate = submittedEntriesRef.current[dateStr] || [];
+
     // Get all entries for this day (editable + submitted)
     const allEntries = [
       ...day.entries.filter(e => e.endTime && e.endTime.trim() !== ""),
-      ...(submittedEntries[dateStr] || []).filter(e => e.endTime && e.endTime.trim() !== "")
+      ...submittedForDate.filter(e => e.endTime && e.endTime.trim() !== "")
     ];
-    
+
     // Sort by endTime to get the latest one
-    const sortedEntries = allEntries.sort((a, b) => {
+    const sortedEntries = [...allEntries].sort((a, b) => {
       const timeA = (a.endTime || "").trim();
       const timeB = (b.endTime || "").trim();
       if (!timeA && !timeB) return 0;
       if (!timeA) return 1;
       if (!timeB) return -1;
-      
-      // Convert time strings to comparable numbers (HH:MM -> minutes since midnight)
       const parseTime = (timeStr: string): number => {
         const parts = timeStr.split(':');
         if (parts.length !== 2) return 0;
@@ -839,19 +839,17 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
         const minutes = parseInt(parts[1], 10) || 0;
         return hours * 60 + minutes;
       };
-      
       return parseTime(timeA) - parseTime(timeB);
     });
-    
-    // Get the endTime and project from the last entry (if any)
+
     const lastEntry = sortedEntries.length > 0 ? sortedEntries[sortedEntries.length - 1] : null;
     const lastEndTime = lastEntry?.endTime || "";
     const lastProject = lastEntry?.project || "";
-    
-    setDays(days.map((day, i) =>
-      i === dayIdx 
-        ? { ...day, entries: [...day.entries, { workType: "", project: lastProject, hours: "", startTime: lastEndTime, endTime: "", fullDayOff: false, kilometers: "" }] }
-        : day
+
+    setDays(prevDays => prevDays.map((d, i) =>
+      i === dayIdx
+        ? { ...d, entries: [...d.entries, { workType: "", project: lastProject, hours: "", startTime: lastEndTime, endTime: "", fullDayOff: false, kilometers: "" }] }
+        : d
     ));
     scheduleAutoSaveDay(dayIdx);
   };

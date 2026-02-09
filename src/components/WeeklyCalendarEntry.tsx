@@ -751,8 +751,7 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
   const handleAddEntry = (dayIdx: number) => {
     const weekKey = formatDateToYYYYMMDD(weekDates[0]);
     const isWeekLocked = confirmedWeeks[weekKey];
-    
-    // Non-admins cannot add entries if week is confirmed
+
     if (isWeekLocked && !currentUser?.isAdmin) {
       toast({
         title: "Not Allowed",
@@ -761,9 +760,31 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
       });
       return;
     }
-    
-    setDays(days.map((day, i) =>
-      i === dayIdx ? { ...day, entries: [...day.entries, { workType: "", project: "", hours: "", startTime: "", endTime: "" }] } : day
+
+    const day = days[dayIdx];
+    if (!day) return;
+    const dateStr = formatDateToYYYYMMDD(day.date);
+    const withEndTime = (e: WeeklyEntryRow) => e.endTime && e.endTime.trim() !== "";
+    const allEntries = [
+      ...day.entries.filter(withEndTime),
+      ...(submittedEntries[dateStr] || []).filter((e: any) => e.endTime && e.endTime.trim() !== ""),
+    ];
+    const parseTime = (timeStr: string): number => {
+      const parts = (timeStr || "").trim().split(":");
+      if (parts.length !== 2) return 0;
+      const hours = parseInt(parts[0], 10) || 0;
+      const minutes = parseInt(parts[1], 10) || 0;
+      return hours * 60 + minutes;
+    };
+    const sorted = [...allEntries].sort((a, b) => parseTime((a as any).endTime) - parseTime((b as any).endTime));
+    const lastEntry = sorted.length > 0 ? sorted[sorted.length - 1] : null;
+    const lastEndTime = (lastEntry as any)?.endTime || "";
+    const lastProject = (lastEntry as any)?.project ?? "";
+
+    setDays(days.map((d, i) =>
+      i === dayIdx
+        ? { ...d, entries: [...d.entries, { workType: "", project: lastProject, hours: "", startTime: lastEndTime, endTime: "", fullDayOff: false }] }
+        : d
     ));
   };
 
