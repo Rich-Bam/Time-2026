@@ -21,8 +21,37 @@ const InviteConfirm = () => {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
 
-  // Try to get access_token and refresh_token from query or hash; detect error params; optionally exchange code (PKCE)
+  // Try token_hash (verifyOtp), then code (PKCE), then access_token/refresh_token (implicit); detect only known expiry/invalid errors
   useEffect(() => {
+    const tokenHash = searchParams.get("token_hash");
+    const typeParam = searchParams.get("type");
+
+    // (B) token_hash + type=invite: verify OTP client-side (works with PKCE-enabled projects)
+    if (tokenHash && typeParam === "invite") {
+      supabase.auth
+        .verifyOtp({ type: "invite", token_hash: tokenHash })
+        .then(({ data, error: verifyError }) => {
+          if (verifyError) {
+            const msg = (verifyError.message || "").toLowerCase();
+            const isExpiredOrUsed =
+              msg.includes("expired") || msg.includes("already used") || msg.includes("invalid");
+            setLinkExpired(isExpiredOrUsed);
+            if (!isExpiredOrUsed) {
+              console.warn("Invite verifyOtp failed:", verifyError.message);
+            }
+          } else if (data?.session) {
+            setAccessToken(data.session.access_token);
+            setRefreshToken(data.session.refresh_token ?? null);
+          }
+          setCodeExchangePending(false);
+        })
+        .catch((err) => {
+          console.warn("Invite verifyOtp error:", err);
+          setCodeExchangePending(false);
+        });
+      return;
+    }
+
     const error = searchParams.get("error");
     const codeParam = searchParams.get("_code");
     const errorDescription = searchParams.get("error_description");
@@ -39,20 +68,21 @@ const InviteConfirm = () => {
     const resolvedCodeParam = codeParam || hashCodeParam;
     const resolvedErrorDescription = errorDescription || hashErrorDescription;
 
-    // Detect expired or invalid link from Supabase redirect
-    if (
+    // (A) Only set linkExpired for known expiry/invalid cases (not any error param)
+    const knownExpiryErrors = ["access_denied", "expired", "invalid_request"];
+    const isKnownExpiryError =
       resolvedCodeParam === "otp_expired" ||
       (resolvedErrorDescription &&
         (resolvedErrorDescription.toLowerCase().includes("invalid") ||
           resolvedErrorDescription.toLowerCase().includes("expired"))) ||
-      resolvedError
-    ) {
+      (resolvedError && knownExpiryErrors.includes(resolvedError));
+    if (isKnownExpiryError) {
       setLinkExpired(true);
       setCodeExchangePending(false);
       return;
     }
 
-    // PKCE: exchange code for session if code is present and no error
+    // PKCE: exchange code for session if code is present
     const code = searchParams.get("code");
     let hashCode: string | null = null;
     if (window.location.hash) {
@@ -65,15 +95,21 @@ const InviteConfirm = () => {
         .exchangeCodeForSession(resolvedCode)
         .then(({ data: sessionData, error: exchangeError }) => {
           if (exchangeError) {
-            setLinkExpired(true);
+            const msg = (exchangeError.message || "").toLowerCase();
+            const isExpiredOrUsed =
+              msg.includes("expired") || msg.includes("already used") || msg.includes("invalid");
+            setLinkExpired(isExpiredOrUsed);
+            if (!isExpiredOrUsed) {
+              console.warn("Code exchange failed:", exchangeError.message);
+            }
           } else if (sessionData?.session) {
             setAccessToken(sessionData.session.access_token);
             setRefreshToken(sessionData.session.refresh_token ?? null);
           }
           setCodeExchangePending(false);
         })
-        .catch(() => {
-          setLinkExpired(true);
+        .catch((err) => {
+          console.warn("Code exchange error:", err);
           setCodeExchangePending(false);
         });
       return;

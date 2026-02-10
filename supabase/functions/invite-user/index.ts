@@ -196,7 +196,13 @@ Deno.serve(async (req) => {
         });
       }
 
-      inviteLink = linkData.properties.action_link;
+      // Use hashed_token so invite-confirm can call verifyOtp (works with PKCE-enabled projects)
+      const hashedToken = linkData.properties?.hashed_token;
+      if (hashedToken) {
+        inviteLink = `${appUrl}/invite-confirm?token_hash=${encodeURIComponent(hashedToken)}&type=invite`;
+      } else {
+        inviteLink = linkData.properties.action_link;
+      }
     }
 
     // Create or update matching row in public.users table using service_role (bypasses RLS)
