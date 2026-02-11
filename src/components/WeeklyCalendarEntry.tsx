@@ -341,70 +341,23 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
     const fetchProjects = async () => {
       try {
         // First, fetch ALL projects with status for validation (including closed ones)
-        let allProjectsQuery = supabase
+        const { data: allProjectsData } = await supabase
           .from("projects")
-          .select("id, name, user_id, status");
+          .select("id, name, status");
         
-        if (currentUser?.id) {
-          try {
-            const { data: allProjectsData } = await allProjectsQuery.or(`user_id.is.null,user_id.eq.${currentUser.id}`);
-            if (allProjectsData) {
-              // Store ALL projects (including closed) for validation
-              setProjectsWithStatus(allProjectsData
-                .filter(p => !p.user_id || p.user_id === currentUser.id)
-                .map(p => ({ id: p.id, name: p.name, status: p.status || null })));
-            }
-          } catch (err) {
-            // Fallback: fetch all projects without user_id filter
-            const { data: allData } = await supabase.from("projects").select("id, name, status");
-            setProjectsWithStatus((allData || []).map(p => ({ id: p.id, name: p.name, status: p.status || null })));
-          }
-        } else {
-          const { data: allData } = await supabase.from("projects").select("id, name, status");
-          setProjectsWithStatus((allData || []).map(p => ({ id: p.id, name: p.name, status: p.status || null })));
+        if (allProjectsData) {
+          // Store ALL projects (including closed) for validation
+          setProjectsWithStatus(allProjectsData.map(p => ({ id: p.id, name: p.name, status: p.status || null })));
         }
         
         // Now fetch only active projects for the dropdown
-        let query = supabase
+        const { data } = await supabase
           .from("projects")
-          .select("id, name, user_id, status");
-        
-        // Only filter by user_id if currentUser exists
-        if (currentUser?.id) {
-          try {
-            const { data, error } = await query.or(`user_id.is.null,user_id.eq.${currentUser.id}`);
-            if (error && error.message.includes("does not exist")) {
-              // user_id or status column doesn't exist yet, fetch all projects
-              const { data: allData } = await supabase.from("projects").select("id, name");
-              setProjects(allData || []);
-              return;
-            }
-            if (data) {
-              // Only show global projects and current user's custom projects
-              // Filter out closed projects (only show active projects for time entry)
-              const filteredProjects = data
-                .filter(p => !p.user_id || p.user_id === currentUser.id)
-                .filter(p => !p.status || p.status !== "closed")
-                .map(p => ({ id: p.id, name: p.name }));
-              setProjects(filteredProjects);
-              return;
-            }
-          } catch (err) {
-            // If user_id or status column doesn't exist, just fetch all projects
-            const { data: allData } = await supabase.from("projects").select("id, name");
-            setProjects(allData || []);
-            return;
-          }
-        } else {
-          // No currentUser, just fetch all active projects
-          const { data } = await supabase
-            .from("projects")
-            .select("id, name, status")
-            .or("status.is.null,status.neq.closed");
-          setProjects((data || []).map(p => ({ id: p.id, name: p.name })));
-        }
+          .select("id, name, status")
+          .or("status.is.null,status.neq.closed");
+        setProjects((data || []).map(p => ({ id: p.id, name: p.name })));
       } catch (err) {
-        // Fallback: fetch all projects without user_id/status filtering
+        // Fallback: fetch all projects without status filtering
         const { data } = await supabase.from("projects").select("id, name");
         setProjects(data || []);
         // Still try to get status for validation
@@ -972,37 +925,12 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
       }
       
       // Refresh projects list once after creating all custom projects
-      // Try to fetch with user_id filter, if it fails, fetch all
-      let updatedProjects;
-      if (currentUser?.id) {
-        const result = await supabase
-          .from("projects")
-          .select("id, name, user_id")
-          .or(`user_id.is.null,user_id.eq.${currentUser.id}`);
-        
-        if (result.error && result.error.message?.includes("user_id")) {
-          // user_id column doesn't exist, fetch all projects
-          const allProjectsResult = await supabase
-            .from("projects")
-            .select("id, name");
-          updatedProjects = allProjectsResult.data;
-        } else {
-          updatedProjects = result.data;
-          if (updatedProjects) {
-            updatedProjects = updatedProjects.filter(
-              p => !p.user_id || p.user_id === currentUser.id
-            );
-          }
-        }
-      } else {
-        const result = await supabase
-          .from("projects")
-          .select("id, name");
-        updatedProjects = result.data;
-      }
+      const result = await supabase
+        .from("projects")
+        .select("id, name");
       
-      if (updatedProjects) {
-        setProjects(updatedProjects);
+      if (result.data) {
+        setProjects(result.data);
       }
     }
     
@@ -1064,11 +992,8 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
             // Refresh projectsWithStatus
             const { data: allProjects } = await supabase
               .from("projects")
-              .select("id, name, user_id, status");
-            if (allProjects && currentUser?.id) {
-              const filtered = allProjects.filter(p => !p.user_id || p.user_id === currentUser.id);
-              setProjectsWithStatus(filtered.map(p => ({ id: p.id, name: p.name, status: p.status || null })));
-            } else if (allProjects) {
+              .select("id, name, status");
+            if (allProjects) {
               setProjectsWithStatus(allProjects.map(p => ({ id: p.id, name: p.name, status: p.status || null })));
             }
             return;
@@ -1229,7 +1154,6 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
             .from("projects")
             .insert([{
               name: projectName,
-              user_id: null,
               description: null
             }]);
         }
@@ -1238,15 +1162,9 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
       // Refresh projects list once after creating all custom projects
       const { data: updatedProjects } = await supabase
         .from("projects")
-        .select("id, name, user_id")
-        .or(`user_id.is.null,user_id.eq.${currentUser?.id || ""}`);
-      if (updatedProjects && currentUser?.id) {
-        const filteredProjects = updatedProjects.filter(
-          p => !p.user_id || p.user_id === currentUser.id
-        );
-        setProjects(filteredProjects);
-      } else if (updatedProjects) {
-        setProjects(updatedProjects.map(p => ({ id: p.id, name: p.name })));
+        .select("id, name");
+      if (updatedProjects) {
+        setProjects(updatedProjects);
       }
     }
     
@@ -1668,7 +1586,6 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
             .from("projects")
             .insert([{
               name: projectName,
-              user_id: null,
               description: null
             }]);
         }
@@ -1677,15 +1594,9 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
       // Refresh projects list once after creating all custom projects
       const { data: updatedProjects } = await supabase
         .from("projects")
-        .select("id, name, user_id")
-        .or(`user_id.is.null,user_id.eq.${currentUser?.id || ""}`);
-      if (updatedProjects && currentUser?.id) {
-        const filteredProjects = updatedProjects.filter(
-          p => !p.user_id || p.user_id === currentUser.id
-        );
-        setProjects(filteredProjects);
-      } else if (updatedProjects) {
-        setProjects(updatedProjects.map(p => ({ id: p.id, name: p.name })));
+        .select("id, name");
+      if (updatedProjects) {
+        setProjects(updatedProjects);
       }
     }
     

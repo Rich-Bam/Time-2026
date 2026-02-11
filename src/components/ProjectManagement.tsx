@@ -107,8 +107,8 @@ const ProjectManagement = ({ currentUser }: ProjectManagementProps) => {
       });
       return;
     }
-    // Insert new project into Supabase as shared (user_id null) so all users can use it
-    const { error } = await supabase.from("projects").insert([{ ...newProject, user_id: null }]);
+    // Insert new project into Supabase as shared so all users can use it
+    const { error } = await supabase.from("projects").insert([newProject]);
     if (error) {
       toast({
         title: "Error",

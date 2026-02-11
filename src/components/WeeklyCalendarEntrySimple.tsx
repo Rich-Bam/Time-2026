@@ -208,55 +208,18 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
     const fetchProjects = async () => {
       try {
         // First, fetch ALL projects with status for validation (including closed ones)
-        let allProjectsQuery = supabase.from("projects").select("id, name, user_id, status");
-        if (currentUser?.id) {
-          try {
-            const { data: allProjectsData } = await allProjectsQuery.or(`user_id.is.null,user_id.eq.${currentUser.id}`);
-            if (allProjectsData) {
-              // Store ALL projects (including closed) for validation
-              setProjectsWithStatus(allProjectsData
-                .filter(p => !p.user_id || p.user_id === currentUser.id)
-                .map(p => ({ id: p.id, name: p.name, status: p.status || null })));
-            }
-          } catch (err) {
-            // Fallback: fetch all projects without user_id filter
-            const { data: allData } = await supabase.from("projects").select("id, name, status");
-            setProjectsWithStatus((allData || []).map(p => ({ id: p.id, name: p.name, status: p.status || null })));
-          }
-        } else {
-          const { data: allData } = await supabase.from("projects").select("id, name, status");
-          setProjectsWithStatus((allData || []).map(p => ({ id: p.id, name: p.name, status: p.status || null })));
+        const { data: allProjectsData } = await supabase.from("projects").select("id, name, status");
+        if (allProjectsData) {
+          // Store ALL projects (including closed) for validation
+          setProjectsWithStatus(allProjectsData.map(p => ({ id: p.id, name: p.name, status: p.status || null })));
         }
         
         // Now fetch only active projects for the dropdown
-        let query = supabase.from("projects").select("id, name, user_id, status");
-        if (currentUser?.id) {
-          try {
-            const { data, error } = await query.or(`user_id.is.null,user_id.eq.${currentUser.id}`);
-            if (error && error.message.includes("does not exist")) {
-              const { data: allData } = await supabase.from("projects").select("id, name");
-              setProjects(allData || []);
-              return;
-            }
-            if (data) {
-              const filteredProjects = data
-                .filter(p => !p.user_id || p.user_id === currentUser.id)
-                .filter(p => !p.status || p.status !== "closed")
-                .map(p => ({ id: p.id, name: p.name }));
-              setProjects(filteredProjects);
-              return;
-            }
-          } catch (err) {
-            const { data: allData } = await supabase.from("projects").select("id, name");
-            setProjects(allData || []);
-          }
-        } else {
-          const { data } = await supabase
-            .from("projects")
-            .select("id, name, status")
-            .or("status.is.null,status.neq.closed");
-          setProjects((data || []).map(p => ({ id: p.id, name: p.name })));
-        }
+        const { data } = await supabase
+          .from("projects")
+          .select("id, name, status")
+          .or("status.is.null,status.neq.closed");
+        setProjects((data || []).map(p => ({ id: p.id, name: p.name })));
       } catch (err) {
         const { data } = await supabase.from("projects").select("id, name");
         setProjects(data || []);
@@ -289,11 +252,10 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
     }
 
     try {
-      // Add new project to database as shared (user_id null) so all users can use it
+      // Add new project to database as shared so all users can use it
       const projectData: any = {
         name: projectName.trim(),
         status: "active",
-        user_id: null,
       };
 
       const result = await supabase
