@@ -147,6 +147,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
   const [projectSearchValues, setProjectSearchValues] = useState<Record<string, string>>({});
   const [openWorkTypePopovers, setOpenWorkTypePopovers] = useState<Record<string, boolean>>({});
   const [workTypeSearchValues, setWorkTypeSearchValues] = useState<Record<string, string>>({});
+  const [savingOvernightStay, setSavingOvernightStay] = useState<Record<number, boolean>>({});
   const [availableWeeks, setAvailableWeeks] = useState<Array<{ weekStart: string; weekNumber: number; year: number; label: string }>>([]);
   const [weekReviewComment, setWeekReviewComment] = useState<string>("");
   const [sendingEmail, setSendingEmail] = useState(false);
@@ -706,12 +707,22 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
     };
   };
 
-  const persistOvernightStay = async (dayIdx: number, checked: boolean) => {
+  const persistOvernightStay = async (dayIdx: number, checked: boolean, retryCount = 0) => {
     if (!currentUser?.id) return;
     const weekKey = formatDateToYYYYMMDD(weekDates[0]);
     if (confirmedWeeks[weekKey]) return;
 
     const dateStr = formatDateToYYYYMMDD(days[dayIdx].date);
+    const dayName = days[dayIdx].date.toLocaleDateString();
+
+    console.log(`[OvernightStay] Saving overnight stay for ${dayName} (${dateStr}): ${checked ? 'checked' : 'unchecked'}`, {
+      userId: currentUser.id,
+      dayIdx,
+      retryCount
+    });
+
+    // Set loading state
+    setSavingOvernightStay(prev => ({ ...prev, [dayIdx]: true }));
 
     // Optimistic UI
     setDays(prevDays => prevDays.map((d, i) => (i === dayIdx ? { ...d, stayedOvernight: checked } : d)));
@@ -722,6 +733,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
           .from("overnight_stays")
           .upsert([{ user_id: currentUser.id, date: dateStr }], { onConflict: "user_id,date" });
         if (error) throw error;
+        console.log(`[OvernightStay] Successfully saved overnight stay for ${dayName} (${dateStr})`);
       } else {
         const { error } = await supabase
           .from("overnight_stays")
@@ -729,14 +741,39 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
           .eq("user_id", currentUser.id)
           .eq("date", dateStr);
         if (error) throw error;
+        console.log(`[OvernightStay] Successfully removed overnight stay for ${dayName} (${dateStr})`);
       }
+      
+      // Clear loading state on success
+      setSavingOvernightStay(prev => ({ ...prev, [dayIdx]: false }));
+      
+      // Show success feedback
+      toast({
+        title: t('common.success'),
+        description: `${t('weekly.overnightStay')} ${checked ? t('common.saved') : t('common.removed')} for ${dayName}`,
+        duration: 2000,
+      });
     } catch (error: any) {
-      // Revert on failure
+      console.error(`[OvernightStay] Error saving overnight stay for ${dayName} (${dateStr}):`, error);
+      
+      // Retry logic: attempt up to 2 retries with exponential backoff
+      if (retryCount < 2) {
+        const delayMs = Math.pow(2, retryCount) * 1000; // 1s, 2s
+        console.log(`[OvernightStay] Retrying in ${delayMs}ms... (attempt ${retryCount + 1}/2)`);
+        
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+        return persistOvernightStay(dayIdx, checked, retryCount + 1);
+      }
+      
+      // Revert on failure after all retries
       setDays(prevDays => prevDays.map((d, i) => (i === dayIdx ? { ...d, stayedOvernight: !checked } : d)));
+      setSavingOvernightStay(prev => ({ ...prev, [dayIdx]: false }));
+      
       toast({
         title: t('common.error'),
-        description: error?.message || "Failed to save overnight stay",
+        description: `${t('weekly.failedToSave')} ${t('weekly.overnightStay').toLowerCase()} for ${dayName}. ${error?.message || 'Unknown error'}. Please try again.`,
         variant: "destructive",
+        duration: 5000,
       });
     }
   };
@@ -3775,13 +3812,13 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
                                   onCheckedChange={(checked) => {
                                     persistOvernightStay(dayIdx, checked === true);
                                   }}
-                                  disabled={isDayLocked}
+                                  disabled={isDayLocked || savingOvernightStay[dayIdx]}
                                 />
                                 <Label
                                   htmlFor={`stayedOvernight-simple-${dayIdx}`}
-                                  className="text-xs sm:text-sm font-medium cursor-pointer text-gray-800 dark:text-gray-900"
+                                  className={`text-xs sm:text-sm font-medium cursor-pointer text-gray-800 dark:text-gray-900 ${savingOvernightStay[dayIdx] ? 'opacity-50' : ''}`}
                                 >
-                                  {t('weekly.overnightStay')}
+                                  {savingOvernightStay[dayIdx] ? `${t('common.saving')}...` : t('weekly.overnightStay')}
                                 </Label>
                               </div>
                             </div>
@@ -4316,13 +4353,13 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
                         onCheckedChange={(checked) => {
                           persistOvernightStay(dayIdx, checked === true);
                         }}
-                        disabled={isDayLocked}
+                        disabled={isDayLocked || savingOvernightStay[dayIdx]}
                       />
                       <Label
                         htmlFor={`stayedOvernight-simple-${dayIdx}`}
-                        className="text-xs sm:text-sm font-medium cursor-pointer text-gray-800 dark:text-gray-900"
+                        className={`text-xs sm:text-sm font-medium cursor-pointer text-gray-800 dark:text-gray-900 ${savingOvernightStay[dayIdx] ? 'opacity-50' : ''}`}
                       >
-                        {t('weekly.overnightStay')}
+                        {savingOvernightStay[dayIdx] ? `${t('common.saving')}...` : t('weekly.overnightStay')}
                       </Label>
                     </div>
                   </div>

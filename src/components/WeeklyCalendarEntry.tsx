@@ -141,6 +141,7 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
   const [shareType, setShareType] = useState<'day' | 'week'>('day');
   const [shareDate, setShareDate] = useState<Date>(new Date());
   const [shareEntryCount, setShareEntryCount] = useState(0);
+  const [savingOvernightStay, setSavingOvernightStay] = useState<Record<number, boolean>>({});
 
   const getDayEntryCount = (dayIdx: number): number => {
     const day = days[dayIdx];
@@ -446,9 +447,19 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?.id, weekStart]);
 
-  const persistOvernightStay = async (dayIdx: number, checked: boolean, isLocked: boolean) => {
+  const persistOvernightStay = async (dayIdx: number, checked: boolean, isLocked: boolean, retryCount = 0) => {
     if (!currentUser?.id || isLocked) return;
     const dateStr = formatDateToYYYYMMDD(days[dayIdx].date);
+    const dayName = days[dayIdx].date.toLocaleDateString();
+
+    console.log(`[OvernightStay] Saving overnight stay for ${dayName} (${dateStr}): ${checked ? 'checked' : 'unchecked'}`, {
+      userId: currentUser.id,
+      dayIdx,
+      retryCount
+    });
+
+    // Set loading state
+    setSavingOvernightStay(prev => ({ ...prev, [dayIdx]: true }));
 
     // Optimistic UI
     setDays(prevDays => prevDays.map((d, i) => (i === dayIdx ? { ...d, stayedOvernight: checked } : d)));
@@ -459,6 +470,7 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
           .from("overnight_stays")
           .upsert([{ user_id: currentUser.id, date: dateStr }], { onConflict: "user_id,date" });
         if (error) throw error;
+        console.log(`[OvernightStay] Successfully saved overnight stay for ${dayName} (${dateStr})`);
       } else {
         const { error } = await supabase
           .from("overnight_stays")
@@ -466,14 +478,39 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
           .eq("user_id", currentUser.id)
           .eq("date", dateStr);
         if (error) throw error;
+        console.log(`[OvernightStay] Successfully removed overnight stay for ${dayName} (${dateStr})`);
       }
+      
+      // Clear loading state on success
+      setSavingOvernightStay(prev => ({ ...prev, [dayIdx]: false }));
+      
+      // Show success feedback
+      toast({
+        title: t('common.success'),
+        description: `${t('weekly.overnightStay')} ${checked ? t('common.saved') : t('common.removed')} for ${dayName}`,
+        duration: 2000,
+      });
     } catch (error: any) {
-      // Revert on failure
+      console.error(`[OvernightStay] Error saving overnight stay for ${dayName} (${dateStr}):`, error);
+      
+      // Retry logic: attempt up to 2 retries with exponential backoff
+      if (retryCount < 2) {
+        const delayMs = Math.pow(2, retryCount) * 1000; // 1s, 2s
+        console.log(`[OvernightStay] Retrying in ${delayMs}ms... (attempt ${retryCount + 1}/2)`);
+        
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+        return persistOvernightStay(dayIdx, checked, isLocked, retryCount + 1);
+      }
+      
+      // Revert on failure after all retries
       setDays(prevDays => prevDays.map((d, i) => (i === dayIdx ? { ...d, stayedOvernight: !checked } : d)));
+      setSavingOvernightStay(prev => ({ ...prev, [dayIdx]: false }));
+      
       toast({
         title: t('common.error'),
-        description: error?.message || "Failed to save overnight stay",
+        description: `${t('weekly.failedToSave')} ${t('weekly.overnightStay').toLowerCase()} for ${dayName}. ${error?.message || 'Unknown error'}. Please try again.`,
         variant: "destructive",
+        duration: 5000,
       });
     }
   };
@@ -2467,13 +2504,13 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
                                       onCheckedChange={(checked) => {
                                         persistOvernightStay(dayIdx, checked === true, isLocked);
                                       }}
-                                      disabled={isLocked}
+                                      disabled={isLocked || savingOvernightStay[dayIdx]}
                                     />
                                     <Label
                                       htmlFor={`stayedOvernight-${dayIdx}`}
-                                      className="text-xs font-medium cursor-pointer"
+                                      className={`text-xs font-medium cursor-pointer ${savingOvernightStay[dayIdx] ? 'opacity-50' : ''}`}
                                     >
-                                      {t('weekly.overnightStay')}
+                                      {savingOvernightStay[dayIdx] ? `${t('common.saving')}...` : t('weekly.overnightStay')}
                                     </Label>
                                   </div>
                                 </td>
@@ -2739,13 +2776,13 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
                     const isLocked = !!confirmedWeeks[formatDateToYYYYMMDD(weekDates[0])];
                     persistOvernightStay(dayIdx, checked === true, isLocked);
                   }}
-                  disabled={confirmedWeeks[formatDateToYYYYMMDD(weekDates[0])] && !currentUser?.isAdmin}
+                  disabled={(confirmedWeeks[formatDateToYYYYMMDD(weekDates[0])] && !currentUser?.isAdmin) || savingOvernightStay[dayIdx]}
                 />
                 <Label
                   htmlFor={`stayedOvernight-cards-${dayIdx}`}
-                  className="text-sm font-medium cursor-pointer"
+                  className={`text-sm font-medium cursor-pointer ${savingOvernightStay[dayIdx] ? 'opacity-50' : ''}`}
                 >
-                  {t('weekly.overnightStay')}
+                  {savingOvernightStay[dayIdx] ? `${t('common.saving')}...` : t('weekly.overnightStay')}
                 </Label>
               </div>
               {confirmedWeeks[formatDateToYYYYMMDD(weekDates[0])] && (
