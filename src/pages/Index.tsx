@@ -50,15 +50,20 @@ const Index = () => {
     return user?.userType === 'weekly_only';
   };
   
-  // Helper function to check if user can see projects (admin or administratie)
+  // Helper function to check if user can see projects (all logged-in users)
   const canSeeProjects = (user: any): boolean => {
-    return user?.isAdmin || isAdministratie(user);
+    return !!user; // All logged-in users can see projects
   };
   const navigate = useNavigate();
   const { t } = useLanguage();
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
   const SUPER_ADMIN_EMAIL = "r.blance@bampro.nl";
+  
+  // Helper function to check if user is super admin
+  const isSuperAdmin = (user: any): boolean => {
+    return user?.email === SUPER_ADMIN_EMAIL;
+  };
   
   // Make currentUser available globally for error logging
   useEffect(() => {
@@ -2018,7 +2023,7 @@ const Index = () => {
                     {t('nav.export')}
                   </button>
                 )}
-                {currentUser?.isAdmin && !isAdministratie(currentUser) && (
+                {(currentUser?.isAdmin || isSuperAdmin(currentUser)) && !isAdministratie(currentUser) && (
                   <button
                     className={`text-[9px] sm:text-xs md:text-sm lg:text-sm xl:text-base font-medium px-1 sm:px-1.5 md:px-2 lg:px-2.5 py-1.5 sm:py-1 md:py-1.5 lg:py-2 rounded transition-colors whitespace-nowrap min-h-[32px] sm:min-h-0 flex-shrink-0 ${activeTab === 'bugreports' ? 'bg-orange-600 text-white dark:bg-orange-500' : 'text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-700'}`}
                     onClick={() => setActiveTab('bugreports')}
@@ -2392,7 +2397,7 @@ const Index = () => {
             <AdminPanel currentUser={currentUser} />
           </div>
         )}
-        {activeTab === 'bugreports' && currentUser?.isAdmin && (
+        {activeTab === 'bugreports' && (currentUser?.isAdmin || isSuperAdmin(currentUser)) && (
           <BugReports currentUser={currentUser} />
         )}
       </div>
