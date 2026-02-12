@@ -49,10 +49,15 @@ const Index = () => {
   const isWeeklyOnly = (user: any): boolean => {
     return user?.userType === 'weekly_only';
   };
+
+  // Helper function to check if user is viewer type (read-only overview + weeks)
+  const isViewer = (user: any): boolean => {
+    return user?.userType === 'viewer';
+  };
   
-  // Helper function to check if user can see projects (all logged-in users)
+  // Helper function to check if user can see projects (all logged-in users except viewer)
   const canSeeProjects = (user: any): boolean => {
-    return !!user; // All logged-in users can see projects
+    return !!user && user?.userType !== 'viewer';
   };
   const navigate = useNavigate();
   const { t } = useLanguage();
@@ -398,10 +403,13 @@ const Index = () => {
     }
   }, []);
 
-  // Set activeTab to "weeks" for administratie users when they log in
+  // Set activeTab to "weeks" for administratie users when they log in; "overview" for viewer
   useEffect(() => {
-    if (isLoggedIn && isAdministratie(currentUser) && activeTab === "weekly") {
+    if (!isLoggedIn || !currentUser) return;
+    if (isAdministratie(currentUser) && activeTab === "weekly") {
       setActiveTab("weeks");
+    } else if (isViewer(currentUser) && activeTab === "weekly") {
+      setActiveTab("overview");
     }
   }, [isLoggedIn, currentUser]);
 
@@ -1964,7 +1972,8 @@ const Index = () => {
               </button>
             )}
             <nav className="flex items-center gap-1.5 sm:gap-0.5 md:gap-1 lg:gap-1.5 shrink-0 flex-1 min-w-0 flex-nowrap overflow-x-auto">
-                {!isAdministratie(currentUser) && (
+                {/* Weekly, View Hours, Overtime - hidden for administratie and viewer */}
+                {!isAdministratie(currentUser) && !isViewer(currentUser) && (
                   <>
                     <button
                       className={`text-xs sm:text-xs md:text-sm lg:text-sm xl:text-base font-medium px-2.5 sm:px-1.5 md:px-2 lg:px-2.5 py-1.5 sm:py-1 md:py-1.5 lg:py-2 rounded transition-colors whitespace-nowrap min-h-[36px] sm:min-h-0 flex-shrink-0 relative ${activeTab === 'weekly' ? 'bg-orange-600 text-white dark:bg-orange-500' : 'text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-700'}`}
@@ -1977,8 +1986,8 @@ const Index = () => {
                         </span>
                       )}
                     </button>
-                    {/* View Hours - Only for normal users (not admins, administratie, tester, or weekly_only) */}
-                    {currentUser && !currentUser?.isAdmin && currentUser?.userType !== 'administratie' && !isTester(currentUser) && !isWeeklyOnly(currentUser) && (
+                    {/* View Hours - Only for normal users (not admins, administratie, viewer, tester, or weekly_only) */}
+                    {currentUser && !currentUser?.isAdmin && currentUser?.userType !== 'administratie' && !isViewer(currentUser) && !isTester(currentUser) && !isWeeklyOnly(currentUser) && (
                       <button
                         className={`text-xs sm:text-xs md:text-sm lg:text-sm xl:text-base font-medium px-2.5 sm:px-1.5 md:px-2 lg:px-2.5 py-1.5 sm:py-1 md:py-1.5 lg:py-2 rounded transition-colors whitespace-nowrap min-h-[36px] sm:min-h-0 flex-shrink-0 ${activeTab === 'viewhours' ? 'bg-orange-600 text-white dark:bg-orange-500' : 'text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-700'}`}
                         onClick={() => setActiveTab('viewhours')}
@@ -1986,8 +1995,8 @@ const Index = () => {
                         {t('nav.viewHours')}
                       </button>
                     )}
-                    {/* Overtime - Available for all users (except admins/administratie) */}
-                    {currentUser && !currentUser?.isAdmin && currentUser?.userType !== 'administratie' && (
+                    {/* Overtime - Available for all users (except admins/administratie/viewer) */}
+                    {currentUser && !currentUser?.isAdmin && currentUser?.userType !== 'administratie' && !isViewer(currentUser) && (
                       <button
                         className={`text-xs sm:text-xs md:text-sm lg:text-sm xl:text-base font-medium px-2.5 sm:px-1.5 md:px-2 lg:px-2.5 py-1.5 sm:py-1 md:py-1.5 lg:py-2 rounded transition-colors whitespace-nowrap min-h-[36px] sm:min-h-0 flex-shrink-0 ${activeTab === 'overtime' ? 'bg-orange-600 text-white dark:bg-orange-500' : 'text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-700'}`}
                         onClick={() => setActiveTab('overtime')}
@@ -1997,13 +2006,22 @@ const Index = () => {
                     )}
                   </>
                 )}
-                {/* Weken - Only for administratie users */}
-                {isAdministratie(currentUser) && (
+                {/* Weken - For administratie and viewer */}
+                {(isAdministratie(currentUser) || isViewer(currentUser)) && (
                   <button
                     className={`text-xs sm:text-xs md:text-sm lg:text-sm xl:text-base font-medium px-2.5 sm:px-1.5 md:px-2 lg:px-2.5 py-1.5 sm:py-1 md:py-1.5 lg:py-2 rounded transition-colors whitespace-nowrap min-h-[36px] sm:min-h-0 flex-shrink-0 ${activeTab === 'weeks' ? 'bg-orange-600 text-white dark:bg-orange-500' : 'text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-700'}`}
                     onClick={() => setActiveTab('weeks')}
                   >
                     {t('nav.weeks')}
+                  </button>
+                )}
+                {/* Overtime - For viewer (read-only all-users overtime) */}
+                {isViewer(currentUser) && (
+                  <button
+                    className={`text-xs sm:text-xs md:text-sm lg:text-sm xl:text-base font-medium px-2.5 sm:px-1.5 md:px-2 lg:px-2.5 py-1.5 sm:py-1 md:py-1.5 lg:py-2 rounded transition-colors whitespace-nowrap min-h-[36px] sm:min-h-0 flex-shrink-0 ${activeTab === 'overtime' ? 'bg-orange-600 text-white dark:bg-orange-500' : 'text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-700'}`}
+                    onClick={() => setActiveTab('overtime')}
+                  >
+                    {t('nav.overtime')}
                   </button>
                 )}
                 {canSeeProjects(currentUser) && (
@@ -2014,8 +2032,8 @@ const Index = () => {
                     {t('nav.projects')}
                   </button>
                 )}
-                {/* Export - Visible for regular users, not for admin/administratie/tester/weekly_only (they have it in Admin Panel or don't need it) */}
-                {currentUser && !currentUser?.isAdmin && !isAdministratie(currentUser) && !isTester(currentUser) && !isWeeklyOnly(currentUser) && (
+                {/* Export - Visible for regular users, not for admin/administratie/viewer/tester/weekly_only (they have it in Admin Panel or don't need it) */}
+                {currentUser && !currentUser?.isAdmin && !isAdministratie(currentUser) && !isViewer(currentUser) && !isTester(currentUser) && !isWeeklyOnly(currentUser) && (
                   <button
                     className={`text-[9px] sm:text-xs md:text-sm lg:text-sm xl:text-base font-medium px-1 sm:px-1.5 md:px-2 lg:px-2.5 py-1.5 sm:py-1 md:py-1.5 lg:py-2 rounded transition-colors whitespace-nowrap min-h-[32px] sm:min-h-0 flex-shrink-0 ${activeTab === 'export' ? 'bg-orange-600 text-white dark:bg-orange-500' : 'text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-700'}`}
                     onClick={() => setActiveTab('export')}
@@ -2040,7 +2058,7 @@ const Index = () => {
                     {t('nav.overview')}
                   </button>
                 )}
-                {(currentUser?.isAdmin || isAdministratie(currentUser)) && (
+                {(currentUser?.isAdmin || isAdministratie(currentUser)) && !isViewer(currentUser) && (
                   <button
                     className={`text-[9px] sm:text-xs md:text-sm lg:text-sm xl:text-base font-medium px-1 sm:px-1.5 md:px-2 lg:px-2.5 py-1.5 sm:py-1 md:py-1.5 lg:py-2 rounded transition-colors whitespace-nowrap min-h-[32px] sm:min-h-0 flex-shrink-0 ${activeTab === 'admin' ? 'bg-orange-600 text-white dark:bg-orange-500' : 'text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-700'}`}
                     onClick={() => setActiveTab('admin')}
@@ -2154,7 +2172,12 @@ const Index = () => {
         {activeTab === 'viewhours' && currentUser && !currentUser?.isAdmin && currentUser?.userType !== 'administratie' && !isTester(currentUser) && !isWeeklyOnly(currentUser) && (
           <ViewHours currentUser={currentUser} />
         )}
-        {activeTab === 'overtime' && currentUser && !currentUser?.isAdmin && currentUser?.userType !== 'administratie' && (
+        {activeTab === 'overtime' && isViewer(currentUser) && (
+          <div className="w-full">
+            <AdminPanel currentUser={currentUser} initialTab="overtime" hideTabs={true} readOnly={true} />
+          </div>
+        )}
+        {activeTab === 'overtime' && currentUser && !currentUser?.isAdmin && currentUser?.userType !== 'administratie' && !isViewer(currentUser) && (
           <UserOvertimeView currentUser={currentUser} />
         )}
         {activeTab === 'projects' && (
@@ -2387,9 +2410,9 @@ const Index = () => {
         {activeTab === 'profile' && (
           <Profile currentUser={currentUser} setCurrentUser={setCurrentUser} />
         )}
-        {activeTab === 'weeks' && isAdministratie(currentUser) && (
+        {activeTab === 'weeks' && (isAdministratie(currentUser) || isViewer(currentUser)) && (
           <div className="w-full">
-            <AdminPanel currentUser={currentUser} initialTab="weeks" hideTabs={true} />
+            <AdminPanel currentUser={currentUser} initialTab="weeks" hideTabs={true} readOnly={isViewer(currentUser)} />
           </div>
         )}
         {activeTab === 'admin' && (currentUser?.isAdmin || isAdministratie(currentUser)) && (

@@ -14,7 +14,7 @@ interface TimeOverviewProps {
 
 const TimeOverview = ({ currentUser }: TimeOverviewProps) => {
   const { t } = useLanguage();
-  const canSelectUser = currentUser?.isAdmin || currentUser?.userType === "administratie";
+  const canSelectUser = currentUser?.isAdmin || currentUser?.userType === "administratie" || currentUser?.userType === "viewer";
   const [timesheet, setTimesheet] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);

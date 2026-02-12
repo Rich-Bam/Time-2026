@@ -28,6 +28,7 @@ interface AdminPanelProps {
   currentUser: any;
   initialTab?: string;
   hideTabs?: boolean; // Hide the tab navigation when accessed from top banner
+  readOnly?: boolean; // Viewer mode: show weeks/overview data only, no actions
 }
 
 // Helper to get date range from week number and year (ISO week)
@@ -59,10 +60,11 @@ function getISOWeekNumber(date: Date) {
 }
 
 
-const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelProps) => {
+const AdminPanel = ({ currentUser, initialTab, hideTabs = false, readOnly = false }: AdminPanelProps) => {
   const { t, language } = useLanguage();
   const { toast } = useToast();
   const isMobile = useIsMobile();
+  const isViewerMode = readOnly || currentUser?.userType === 'viewer';
  
   // Break entries (work type 35) should never count as worked hours in totals/exports
   const isBreakEntry = (entry: any): boolean => String(entry?.description ?? "").trim() === "35";
@@ -75,6 +77,11 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
   // Helper function to check if user is administratie type
   const isAdministratie = (user: any): boolean => {
     return user?.userType === 'administratie';
+  };
+
+  // Helper function to check if user is viewer type (read-only)
+  const isViewer = (user: any): boolean => {
+    return user?.userType === 'viewer';
   };
   
   // Helper function to check if user is super admin
@@ -1078,9 +1085,9 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
     }
   };
 
-  // Fetch late entries when admin/administratie user is viewing weeks tab
+  // Fetch late entries when admin/administratie/viewer is viewing weeks tab
   useEffect(() => {
-    if ((isAdministratie(currentUser) || isAdminOrAdministratie(currentUser) || currentUser?.isAdmin) && 
+    if ((isAdministratie(currentUser) || isViewer(currentUser) || isAdminOrAdministratie(currentUser) || currentUser?.isAdmin) && 
         (activeTab === 'weeks' || (hideTabs && activeTab === 'weeks'))) {
       fetchLateEntries();
       // Refresh every 60 seconds
@@ -1089,9 +1096,9 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
     }
   }, [currentUser, activeTab, hideTabs, lateEntriesUserFilter, lateEntriesDateCutoff]);
 
-  // Fetch simple entry data when administratie user is viewing weeks tab
+  // Fetch simple entry data when administratie or viewer is viewing weeks tab
   useEffect(() => {
-    if (!isAdministratie(currentUser) || !hideTabs || activeTab !== 'weeks') {
+    if (!(isAdministratie(currentUser) || isViewer(currentUser)) || !hideTabs || activeTab !== 'weeks') {
       return;
     }
 
@@ -2318,7 +2325,10 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
       const typeLabels: Record<string, string> = {
         'super_admin': t('admin.userType.superAdmin'),
         'admin': t('admin.userType.admin'),
-        'user': t('admin.userType.user')
+        'administratie': t('admin.userType.administratie'),
+        'user': t('admin.userType.user'),
+        'weekly_only': t('admin.userType.weeklyOnly'),
+        'viewer': t('admin.userType.viewer')
       };
       toast({
         title: "User type updated",
@@ -3969,6 +3979,7 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
                     <SelectItem value="administratie">{t('admin.userType.administratie')}</SelectItem>
                     <SelectItem value="admin">{t('admin.userType.admin')}</SelectItem>
                     <SelectItem value="weekly_only">{t('admin.userType.weeklyOnly')}</SelectItem>
+                    <SelectItem value="viewer">{t('admin.userType.viewer')}</SelectItem>
                     {currentUser?.email === SUPER_ADMIN_EMAIL && (
                       <SelectItem value="super_admin">{t('admin.userType.superAdmin')}</SelectItem>
                     )}
@@ -4186,6 +4197,7 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
                         <SelectItem value="administratie">{t('admin.userType.administratie')}</SelectItem>
                         <SelectItem value="admin">{t('admin.userType.admin')}</SelectItem>
                         <SelectItem value="weekly_only">{t('admin.userType.weeklyOnly')}</SelectItem>
+                        <SelectItem value="viewer">{t('admin.userType.viewer')}</SelectItem>
                         {currentUser.email === SUPER_ADMIN_EMAIL && (
                           <SelectItem value="super_admin" disabled={user.email !== SUPER_ADMIN_EMAIL}>
                             {t('admin.userType.superAdmin')}
@@ -4463,6 +4475,7 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
                           <SelectItem value="administratie">{t('admin.userType.administratie')}</SelectItem>
                           <SelectItem value="admin">{t('admin.userType.admin')}</SelectItem>
                           <SelectItem value="weekly_only">{t('admin.userType.weeklyOnly')}</SelectItem>
+                          <SelectItem value="viewer">{t('admin.userType.viewer')}</SelectItem>
                           {currentUser.email === SUPER_ADMIN_EMAIL && (
                             <SelectItem value="super_admin" disabled={user.email !== SUPER_ADMIN_EMAIL}>
                               {t('admin.userType.superAdmin')}
@@ -5190,7 +5203,7 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
                               </TableCell>
                               <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                                 <div className="flex justify-end gap-2">
-                                  {!week.admin_reviewed && (
+                                  {!isViewerMode && !week.admin_reviewed && (
                                     <>
                               <Button
                                 size="sm"
@@ -5210,6 +5223,7 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
                               </Button>
                                     </>
                             )}
+                            {!isViewerMode && (
                             <Button
                               size="sm"
                               variant="outline"
@@ -5218,6 +5232,7 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
                             >
                               {t('admin.unlockButton')}
                             </Button>
+                            )}
                                   <Button
                                     size="sm"
                                     variant="ghost"
@@ -5296,8 +5311,8 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
         </TabsContent>
         )}
       
-      {/* Weeks Content for administratie users when accessed via header (hideTabs=true, initialTab="weeks") */}
-      {isAdministratie(currentUser) && hideTabs && activeTab === 'weeks' && (() => {
+      {/* Weeks Content for administratie or viewer when accessed via header (hideTabs=true, initialTab="weeks") */}
+      {(isAdministratie(currentUser) || isViewer(currentUser)) && hideTabs && activeTab === 'weeks' && (() => {
         // Late Entries Section
         const selectedLateEntriesCount = lateEntries.filter(e => e.selected).length;
         const uniqueUsersWithLateEntries = new Set(lateEntries.map(e => e.userId)).size;
@@ -5430,6 +5445,7 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
                     >
                       {lateEntriesExpanded ? t('admin.hide') : t('admin.show')}
                     </Button>
+                    {!isViewerMode && (
                     <Button
                       size="sm"
                       variant="outline"
@@ -5440,6 +5456,7 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
                       <RefreshCw className={`h-4 w-4 mr-1 ${lateEntriesLoading ? 'animate-spin' : ''}`} />
                       Refresh
                     </Button>
+                    )}
                   </div>
                 </div>
               </CardHeader>
@@ -5507,7 +5524,8 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
                         </div>
                       </div>
 
-                      {/* Bulk Actions */}
+                      {!isViewerMode && (
+                      /* Bulk Actions */
                       <div className="flex items-center justify-between flex-wrap gap-2 pb-2 border-b">
                         <div className="flex items-center gap-2">
                           <Checkbox
@@ -5540,20 +5558,25 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
                           </Button>
                         </div>
                       </div>
+                      )}
 
                       {/* Late Entries Table */}
                       <div className="border rounded-lg overflow-hidden">
                         <Table>
                           <TableHeader>
                             <TableRow>
+                              {!isViewerMode && (
                               <TableHead className="w-12">
                                 <Checkbox />
                               </TableHead>
+                              )}
                               <TableHead>{t('admin.user') || 'User'}</TableHead>
                               <TableHead>{t('admin.week') || 'Week'}</TableHead>
                               <TableHead>{t('admin.dateRange') || 'Date Range'}</TableHead>
                               <TableHead className="text-right">{t('admin.daysLate') || 'Days Late'}</TableHead>
+                              {!isViewerMode && (
                               <TableHead className="text-right">{t('admin.actions') || 'Actions'}</TableHead>
+                              )}
                             </TableRow>
                           </TableHeader>
                           <TableBody>
@@ -5562,6 +5585,7 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
                                 key={`${entry.userId}-${entry.weekStartDate}-${index}`}
                                 className={entry.selected ? 'bg-orange-100 dark:bg-orange-900/30' : ''}
                               >
+                                {!isViewerMode && (
                                 <TableCell>
                                   <Checkbox
                                     checked={entry.selected || false}
@@ -5572,6 +5596,7 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
                                     }}
                                   />
                                 </TableCell>
+                                )}
                                 <TableCell className="font-medium">
                                   {entry.userName}
                                   <div className="text-xs text-gray-500 dark:text-gray-400">{entry.userEmail}</div>
@@ -5587,6 +5612,7 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
                                     {entry.daysLate} {entry.daysLate === 1 ? t('admin.day') || 'day' : t('admin.days') || 'days'}
                                   </span>
                                 </TableCell>
+                                {!isViewerMode && (
                                 <TableCell className="text-right">
                                   <div className="flex items-center justify-end gap-1 flex-wrap">
                                     {entry.reminderSentAt ? (
@@ -5622,6 +5648,7 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
                                     </Button>
                                   </div>
                                 </TableCell>
+                                )}
                               </TableRow>
                             ))}
                           </TableBody>
@@ -5811,7 +5838,7 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
                           </TableCell>
                           <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                             <div className="flex justify-end gap-2">
-                              {!week.admin_reviewed && (
+                              {!isViewerMode && !week.admin_reviewed && (
                                 <>
                           <Button
                             size="sm"
@@ -5831,6 +5858,7 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
                           </Button>
                                 </>
                         )}
+                        {!isViewerMode && (
                         <Button
                           size="sm"
                           variant="outline"
@@ -5839,6 +5867,7 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
                         >
                           {t('admin.unlockButton')}
                         </Button>
+                        )}
                               <Button
                                 size="sm"
                                 variant="ghost"
@@ -7055,8 +7084,8 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
 
         {/* Overtime Tab */}
         <TabsContent value="overtime" className="space-y-6">
-          {/* Overtime Tracking Section - Available for admin and administratie */}
-          {isAdminOrAdministratie(currentUser) && (
+          {/* Overtime Tracking Section - Available for admin, administratie, and viewer (read-only) */}
+          {(isAdminOrAdministratie(currentUser) || isViewer(currentUser)) && (
           <div className="p-4 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg">
         <h3 className="text-base sm:text-lg font-semibold mb-3 text-blue-800 dark:text-blue-200 flex items-center gap-2">
           <Calendar className="h-5 w-5" />
@@ -9476,7 +9505,7 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
                     </div>
                   </div>
                   <div className="flex gap-2">
-                    {(!cw || !cw.admin_reviewed) && (
+                    {!isViewerMode && (!cw || !cw.admin_reviewed) && (
                       <Button
                         size="sm"
                         variant="default"
@@ -9489,7 +9518,7 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
                         {t('admin.approveButton')}
                       </Button>
                     )}
-                    {(!cw || !cw.admin_reviewed) && (
+                    {!isViewerMode && (!cw || !cw.admin_reviewed) && (
                       <Button
                         size="sm"
                         variant="outline"
@@ -9502,6 +9531,7 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
                         {t('admin.rejectButton')}
                       </Button>
                     )}
+                    {!isViewerMode && (
                     <Button
                       size="sm"
                       variant="outline"
@@ -9513,6 +9543,7 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false }: AdminPanelPro
                     >
                       {t('admin.unlockButton')}
                     </Button>
+                    )}
                   </div>
                 </div>
                 <div className="overflow-x-auto">
