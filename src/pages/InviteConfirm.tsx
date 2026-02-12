@@ -16,6 +16,9 @@ const InviteConfirm = () => {
   const [refreshToken, setRefreshToken] = useState<string | null>(null);
   const [linkExpired, setLinkExpired] = useState(false);
   const [codeExchangePending, setCodeExchangePending] = useState(true);
+  /** When set, we have token_hash+invite in URL but defer verifyOtp until user clicks "Activate" (avoids prefetch consuming the token) */
+  const [pendingInviteTokenHash, setPendingInviteTokenHash] = useState<string | null>(null);
+  const [activating, setActivating] = useState(false);
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -26,29 +29,10 @@ const InviteConfirm = () => {
     const tokenHash = searchParams.get("token_hash");
     const typeParam = searchParams.get("type");
 
-    // (B) token_hash + type=invite: verify OTP client-side (works with PKCE-enabled projects)
+    // (B) token_hash + type=invite: defer verifyOtp until user clicks "Activate" to avoid email prefetchers consuming the one-time token
     if (tokenHash && typeParam === "invite") {
-      supabase.auth
-        .verifyOtp({ type: "invite", token_hash: tokenHash })
-        .then(({ data, error: verifyError }) => {
-          if (verifyError) {
-            const msg = (verifyError.message || "").toLowerCase();
-            const isExpiredOrUsed =
-              msg.includes("expired") || msg.includes("already used") || msg.includes("invalid");
-            setLinkExpired(isExpiredOrUsed);
-            if (!isExpiredOrUsed) {
-              console.warn("Invite verifyOtp failed:", verifyError.message);
-            }
-          } else if (data?.session) {
-            setAccessToken(data.session.access_token);
-            setRefreshToken(data.session.refresh_token ?? null);
-          }
-          setCodeExchangePending(false);
-        })
-        .catch((err) => {
-          console.warn("Invite verifyOtp error:", err);
-          setCodeExchangePending(false);
-        });
+      setPendingInviteTokenHash(tokenHash);
+      setCodeExchangePending(false);
       return;
     }
 
@@ -126,6 +110,36 @@ const InviteConfirm = () => {
     setAccessToken(token);
     setRefreshToken(refresh);
   }, [searchParams]);
+
+  const handleActivateInvite = async () => {
+    if (!pendingInviteTokenHash) return;
+    setActivating(true);
+    setMessage("");
+    try {
+      const { data, error: verifyError } = await supabase.auth.verifyOtp({
+        type: "invite",
+        token_hash: pendingInviteTokenHash,
+      });
+      if (verifyError) {
+        const msg = (verifyError.message || "").toLowerCase();
+        const isExpiredOrUsed =
+          msg.includes("expired") || msg.includes("already used") || msg.includes("invalid");
+        setLinkExpired(isExpiredOrUsed);
+        if (!isExpiredOrUsed) {
+          setMessage(verifyError.message || "Activatielink kon niet worden geverifieerd.");
+        }
+      } else if (data?.session) {
+        setAccessToken(data.session.access_token);
+        setRefreshToken(data.session.refresh_token ?? null);
+        setPendingInviteTokenHash(null);
+      }
+    } catch (err) {
+      console.warn("Invite verifyOtp error:", err);
+      setMessage("Er is een fout opgetreden. Probeer het opnieuw of vraag een nieuwe uitnodiging.");
+    } finally {
+      setActivating(false);
+    }
+  };
 
   const handleSetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -252,6 +266,25 @@ const InviteConfirm = () => {
           ) : codeExchangePending ? (
             <div className="text-center py-6 text-muted-foreground">
               Bezig met controleren van de link...
+            </div>
+          ) : pendingInviteTokenHash ? (
+            <div className="space-y-4">
+              <p className="text-center text-muted-foreground text-sm">
+                Klik op de knop hieronder om je account te activeren. Daarna kun je je wachtwoord instellen.
+              </p>
+              <Button
+                type="button"
+                className="w-full bg-orange-600 hover:bg-orange-700"
+                onClick={handleActivateInvite}
+                disabled={activating}
+              >
+                {activating ? "Bezig..." : "Account activeren"}
+              </Button>
+              {message && (
+                <div className="text-sm text-center mt-2 p-3 rounded bg-red-50 text-red-700 border border-red-200">
+                  {message}
+                </div>
+              )}
             </div>
           ) : accessToken ? (
             <form onSubmit={handleSetPassword} className="space-y-4">
