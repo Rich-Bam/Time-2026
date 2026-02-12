@@ -14,22 +14,41 @@ interface TimeOverviewProps {
 
 const TimeOverview = ({ currentUser }: TimeOverviewProps) => {
   const { t } = useLanguage();
+  const canSelectUser = currentUser?.isAdmin || currentUser?.userType === "administratie";
   const [timesheet, setTimesheet] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
+  const [selectedUserId, setSelectedUserId] = useState<string>("all");
   const [loading, setLoading] = useState(true);
   const [timePeriod, setTimePeriod] = useState<"all" | "month" | "week">("all");
   const isMobile = useIsMobile();
 
+  // Fetch users for admin/administratie dropdown
+  useEffect(() => {
+    if (!canSelectUser) return;
+    const fetchUsers = async () => {
+      const { data } = await supabase
+        .from("users")
+        .select("id, email, name")
+        .eq("approved", true)
+        .order("name");
+      setUsers(data || []);
+    };
+    fetchUsers();
+  }, [canSelectUser]);
+
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
-      // For weekly_only users: only their own entries; for others: all users
+      // For weekly_only users: only their own entries; for others: all users or selected user
       let timesheetQuery = supabase
         .from("timesheet")
         .select("*, projects(name)")
         .order("date", { ascending: false });
       if (currentUser?.userType === "weekly_only" && currentUser?.id) {
         timesheetQuery = timesheetQuery.eq("user_id", currentUser.id);
+      } else if (canSelectUser && selectedUserId && selectedUserId !== "all") {
+        timesheetQuery = timesheetQuery.eq("user_id", selectedUserId);
       }
       const { data: timesheetData } = await timesheetQuery;
       const { data: projectData } = await supabase.from("projects").select("*");
@@ -38,7 +57,7 @@ const TimeOverview = ({ currentUser }: TimeOverviewProps) => {
       setLoading(false);
     };
     fetchData();
-  }, [currentUser]);
+  }, [currentUser, canSelectUser, selectedUserId]);
 
   // Helper: get start/end of this week and month
   const today = new Date();
@@ -112,6 +131,13 @@ const TimeOverview = ({ currentUser }: TimeOverviewProps) => {
 
   const totalHours = projectHours.reduce((sum, p) => sum + p.hours, 0);
 
+  const displayName =
+    canSelectUser && selectedUserId && selectedUserId !== "all"
+      ? (users.find((u) => String(u.id) === selectedUserId)?.name ||
+         users.find((u) => String(u.id) === selectedUserId)?.email) ||
+        t("common.user")
+      : currentUser?.name || t("common.user");
+
   return (
     <div className="space-y-4 sm:space-y-6">
       {/* Period Selector */}
@@ -120,18 +146,35 @@ const TimeOverview = ({ currentUser }: TimeOverviewProps) => {
           <div className={`flex ${isMobile ? 'flex-col' : 'items-center justify-between'} gap-3 sm:gap-0`}>
             <div>
               <CardTitle className="text-lg sm:text-xl">{t('overview.title')}</CardTitle>
-              <CardDescription className="text-sm">{t('overview.subtitle', { name: currentUser?.name || t('common.user') })}</CardDescription>
+              <CardDescription className="text-sm">{t('overview.subtitle', { name: displayName })}</CardDescription>
             </div>
-            <Select value={timePeriod} onValueChange={(value: "all" | "month" | "week") => setTimePeriod(value)}>
-              <SelectTrigger className={`${isMobile ? 'w-full' : 'w-40'} h-10 sm:h-9`}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{t('overview.allTime')}</SelectItem>
-                <SelectItem value="month">{t('overview.thisMonth')}</SelectItem>
-                <SelectItem value="week">{t('overview.thisWeek')}</SelectItem>
-              </SelectContent>
-            </Select>
+            <div className={`flex ${isMobile ? 'flex-col' : 'items-center'} gap-3`}>
+              {canSelectUser && (
+                <Select value={selectedUserId || "all"} onValueChange={(v) => setSelectedUserId(v)}>
+                  <SelectTrigger className={`${isMobile ? 'w-full' : 'w-48'} h-10 sm:h-9`}>
+                    <SelectValue placeholder={t("export.allUsers")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">{t("export.allUsers")}</SelectItem>
+                    {users.map((u) => (
+                      <SelectItem key={u.id} value={String(u.id)}>
+                        {u.name || u.email}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+              <Select value={timePeriod} onValueChange={(value: "all" | "month" | "week") => setTimePeriod(value)}>
+                <SelectTrigger className={`${isMobile ? 'w-full' : 'w-40'} h-10 sm:h-9`}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t('overview.allTime')}</SelectItem>
+                  <SelectItem value="month">{t('overview.thisMonth')}</SelectItem>
+                  <SelectItem value="week">{t('overview.thisWeek')}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </CardHeader>
         <CardContent className="p-4 sm:p-6 pt-0">
