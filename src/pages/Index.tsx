@@ -1943,7 +1943,7 @@ const Index = () => {
           {isMobile && (
             <div className="flex justify-center mb-1">
               <button
-                onClick={() => setActiveTab(isAdministratie(currentUser) ? 'weeks' : 'weekly')}
+                onClick={() => setActiveTab(isViewer(currentUser) ? 'overview' : isAdministratie(currentUser) ? 'weeks' : 'weekly')}
                 className="cursor-pointer hover:opacity-80 transition-opacity"
                 title="Go to homepage"
               >
@@ -1960,7 +1960,7 @@ const Index = () => {
           <div className="flex flex-row items-center gap-1.5 sm:gap-1 md:gap-1.5 lg:gap-2 overflow-hidden">
             {!isMobile && (
               <button
-                onClick={() => setActiveTab(isAdministratie(currentUser) ? 'weeks' : 'weekly')}
+                onClick={() => setActiveTab(isViewer(currentUser) ? 'overview' : isAdministratie(currentUser) ? 'weeks' : 'weekly')}
                 className="cursor-pointer hover:opacity-80 transition-opacity shrink-0"
                 title="Go to homepage"
               >

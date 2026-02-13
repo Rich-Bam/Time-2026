@@ -700,11 +700,11 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false, readOnly = fals
       let weekEndStr: string;
       let targetUserIds: string[] | null = null;
 
-      // Determine which users to fetch
+      // Determine which users to fetch (include all view types: simple, both, original)
       let simpleUsersQuery = supabase
         .from('users')
         .select('id, name, email, weekly_view_option')
-        .eq('weekly_view_option', 'simple');
+        .in('weekly_view_option', ['simple', 'both', 'original']);
 
       if (options.userId) {
         const userIds = Array.isArray(options.userId) ? options.userId : [options.userId];
@@ -886,7 +886,7 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false, readOnly = fals
 
   // Fetch late entries (weeks that have ended but aren't confirmed)
   const fetchLateEntries = async () => {
-    if (!isAdministratie(currentUser) && !isAdminOrAdministratie(currentUser) && !currentUser?.isAdmin) {
+    if (!isAdministratie(currentUser) && !isAdminOrAdministratie(currentUser) && !currentUser?.isAdmin && !isViewer(currentUser)) {
       return;
     }
 
@@ -1116,7 +1116,7 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false, readOnly = fals
       } else if (searchQuery.length > 0) {
         // Search by user name - find matching users
         const matchingUsers = users.filter(u =>
-          u.weekly_view_option === 'simple' &&
+          ['simple', 'both', 'original'].includes(u.weekly_view_option) &&
           (u.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
            u.email?.toLowerCase().includes(searchQuery.toLowerCase()))
         );
@@ -1150,7 +1150,7 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false, readOnly = fals
         fetchSimpleEntryData({ weekNumber: weekNum, year });
       } else if (searchQuery.length > 0) {
         const matchingUsers = users.filter(u =>
-          u.weekly_view_option === 'simple' &&
+          ['simple', 'both', 'original'].includes(u.weekly_view_option) &&
           (u.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
            u.email?.toLowerCase().includes(searchQuery.toLowerCase()))
         );
@@ -1515,6 +1515,13 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false, readOnly = fals
       setOvertimeLoading(false);
     }
   };
+
+  // Auto-load overtime data when overtime tab is active for viewer/administratie (hideTabs mode)
+  useEffect(() => {
+    if (activeTab === 'overtime' && (isViewer(currentUser) || isAdministratie(currentUser)) && hideTabs) {
+      calculateOvertime();
+    }
+  }, [activeTab, currentUser, hideTabs]);
 
   // Add user (with optional invite via Supabase Edge Function)
   const handleAddUser = async (e: React.FormEvent) => {
@@ -5715,7 +5722,7 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false, readOnly = fals
                   <SelectContent>
                     <SelectItem value="all">{t('admin.allUsers') || "All Users"}</SelectItem>
                     {users
-                      .filter((user) => user.weekly_view_option === 'simple')
+                      .filter((user) => ['simple', 'both', 'original'].includes(user.weekly_view_option))
                       .map((user) => (
                         <SelectItem key={user.id} value={user.id}>
                           {user.name || user.email}
