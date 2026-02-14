@@ -15,6 +15,8 @@ const InviteConfirm = () => {
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [refreshToken, setRefreshToken] = useState<string | null>(null);
   const [linkExpired, setLinkExpired] = useState(false);
+  /** When linkExpired is true: true = "already used", false = "expired" (clearer UX) */
+  const [linkAlreadyUsed, setLinkAlreadyUsed] = useState(false);
   const [codeExchangePending, setCodeExchangePending] = useState(true);
   /** When set, we have token_hash+invite in URL but defer verifyOtp until user clicks "Activate" (avoids prefetch consuming the token) */
   const [pendingInviteTokenHash, setPendingInviteTokenHash] = useState<string | null>(null);
@@ -62,6 +64,8 @@ const InviteConfirm = () => {
       (resolvedError && knownExpiryErrors.includes(resolvedError));
     if (isKnownExpiryError) {
       setLinkExpired(true);
+      const desc = (resolvedErrorDescription || "").toLowerCase();
+      setLinkAlreadyUsed(desc.includes("already used") || desc.includes("al gebruikt"));
       setCodeExchangePending(false);
       return;
     }
@@ -83,6 +87,7 @@ const InviteConfirm = () => {
             const isExpiredOrUsed =
               msg.includes("expired") || msg.includes("already used") || msg.includes("invalid");
             setLinkExpired(isExpiredOrUsed);
+            setLinkAlreadyUsed(msg.includes("already used"));
             if (!isExpiredOrUsed) {
               console.warn("Code exchange failed:", exchangeError.message);
             }
@@ -125,6 +130,7 @@ const InviteConfirm = () => {
         const isExpiredOrUsed =
           msg.includes("expired") || msg.includes("already used") || msg.includes("invalid");
         setLinkExpired(isExpiredOrUsed);
+        setLinkAlreadyUsed(msg.includes("already used"));
         if (!isExpiredOrUsed) {
           setMessage(verifyError.message || "Activatielink kon niet worden geverifieerd.");
         }
@@ -252,7 +258,9 @@ const InviteConfirm = () => {
           {linkExpired ? (
             <div className="space-y-4">
               <div className="text-center text-red-600 p-4 bg-red-50 rounded border border-red-200">
-                De activatielink is verlopen of is al gebruikt. Vraag je beheerder om een nieuwe uitnodiging.
+                {linkAlreadyUsed
+                  ? "De activatielink is al gebruikt. Vraag je beheerder om een nieuwe uitnodiging."
+                  : "De activatielink is verlopen. Vraag je beheerder om een nieuwe uitnodiging."}
               </div>
               <Button
                 type="button"

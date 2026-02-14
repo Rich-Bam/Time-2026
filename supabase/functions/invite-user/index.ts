@@ -143,21 +143,24 @@ Deno.serve(async (req) => {
       inviteLink = linkData.properties.action_link;
     } else {
       // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/677a8104-55ff-4a8e-a1c2-02170ea8e822',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'invite-user/index.ts:91',message:'Creating new user in auth',data:{email,name,isAdmin},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+      fetch('http://127.0.0.1:7242/ingest/677a8104-55ff-4a8e-a1c2-02170ea8e822',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'invite-user/index.ts:91',message:'Creating new user in auth (createUser + generateLink)',data:{email,name,isAdmin},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
       // #endregion
-      
-      // Create new user in Supabase Auth
+      // Option B: Create user without inviteUserByEmail so Supabase does NOT send its own email.
+      // We send only the Resend email with our link, avoiding "link already used" from double consumption.
+      const tempPassword = Math.random().toString(36).slice(-12) + Math.random().toString(36).slice(-12) + "A1!";
       const {
         data: { user: newUser },
         error: authError,
-      } = await supabase.auth.admin.inviteUserByEmail(email, {
-        data: { 
-          name, 
-          isAdmin: isAdmin ? "true" : "false"
+      } = await supabase.auth.admin.createUser({
+        email,
+        password: tempPassword,
+        email_confirm: false,
+        user_metadata: {
+          name,
+          isAdmin: isAdmin ? "true" : "false",
         },
-        redirectTo: `${appUrl}/invite-confirm`,
       });
-      
+
       // #region agent log
       fetch('http://127.0.0.1:7242/ingest/677a8104-55ff-4a8e-a1c2-02170ea8e822',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'invite-user/index.ts:103',message:'Auth user creation result',data:{hasNewUser:!!newUser,hasAuthError:!!authError,authErrorMessage:authError?.message,userId:newUser?.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
       // #endregion
@@ -166,9 +169,9 @@ Deno.serve(async (req) => {
         // #region agent log
         fetch('http://127.0.0.1:7242/ingest/677a8104-55ff-4a8e-a1c2-02170ea8e822',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'invite-user/index.ts:106',message:'Auth creation failed',data:{authErrorMessage:authError?.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
         // #endregion
-        return new Response(JSON.stringify({ 
-          error: authError?.message || "Failed to invite user",
-          details: "Could not create user in Supabase Auth"
+        return new Response(JSON.stringify({
+          error: authError?.message || "Failed to create user",
+          details: "Could not create user in Supabase Auth",
         }), {
           headers: corsHeaders,
           status: 400,
@@ -176,8 +179,8 @@ Deno.serve(async (req) => {
       }
 
       user = newUser;
-      
-      // Get the invite link from the response
+
+      // Generate invite link (only link for this user; no Supabase email sent)
       const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
         type: "invite",
         email: email,
@@ -187,16 +190,15 @@ Deno.serve(async (req) => {
       });
 
       if (linkError || !linkData) {
-        return new Response(JSON.stringify({ 
+        return new Response(JSON.stringify({
           error: "Failed to generate invite link",
-          details: linkError?.message || "Could not generate invitation link"
+          details: linkError?.message || "Could not generate invitation link",
         }), {
           headers: corsHeaders,
           status: 400,
         });
       }
 
-      // Use hashed_token so invite-confirm can call verifyOtp (works with PKCE-enabled projects)
       const hashedToken = linkData.properties?.hashed_token;
       if (hashedToken) {
         inviteLink = `${appUrl}/invite-confirm?token_hash=${encodeURIComponent(hashedToken)}&type=invite`;
@@ -366,7 +368,7 @@ Deno.serve(async (req) => {
               </div>
               
               <p style="margin: 30px 0 0 0; color: #6b7280; font-size: 14px; line-height: 1.6;">
-                <strong>Important:</strong> This invitation link will expire in 7 days. If you have any questions or need assistance, please contact your administrator.
+                <strong>Important:</strong> This invitation link is valid for 7 days. If you have any questions or need assistance, please contact your administrator.
               </p>
               
               <div style="margin: 30px 0; padding: 20px; background-color: #f9fafb; border-radius: 6px; border: 1px solid #e5e7eb;">
@@ -421,7 +423,7 @@ To get started, please click the link below to set up your password and activate
 
 ${inviteLink}
 
-Important: This invitation link will expire in 7 days. If you have any questions or need assistance, please contact your administrator.
+Important: This invitation link is valid for 7 days. If you have any questions or need assistance, please contact your administrator.
 
 What's next?
 1. Click the activation link above

@@ -2111,7 +2111,7 @@ const Index = () => {
         {activeTab === 'timesheet' && (
           <TimesheetEntry currentUser={currentUser} hasUnreadDaysOffNotification={hasUnreadDaysOffNotification} />
         )}
-        {activeTab === 'weekly' && !isAdministratie(currentUser) && (
+        {activeTab === 'weekly' && !isAdministratie(currentUser) && !isViewer(currentUser) && (
           <div className="space-y-4">
             {currentUser && (
               <SharedEntriesPanel

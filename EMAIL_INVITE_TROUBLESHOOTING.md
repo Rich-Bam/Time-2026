@@ -1,5 +1,25 @@
 # Email Uitnodigingen Troubleshooting
 
+## Belangrijk: Eén uitnodigingsmail (geen dubbele link)
+
+De uitnodiging moet via **één** mail gaan (onze Resend-mail met de activatielink). Als Supabase ook een invite-mail stuurt, kan de link "al gebruikt" lijken omdat de andere link de token al verbruikt heeft.
+
+- **In de Edge Function** maken we nieuwe gebruikers aan met `createUser` + `generateLink` (geen `inviteUserByEmail`), zodat Supabase **geen** invite-mail stuurt. Alleen de Resend-mail wordt verstuurd.
+- **Optioneel in Dashboard:** Ga naar **Authentication** → **Email Templates** → **Invite user**. Je kunt de template uitschakelen of leegmaken zodat Supabase nooit een invite-mail stuurt. Dan is er maar één link.
+
+## Link verlooptijd (maximaliseren)
+
+Standaard verloopt een activatielink na **24 uur**. Om gebruikers meer tijd te geven:
+
+1. Ga naar **Supabase Dashboard** → **Authentication** → **Settings** (of **URL Configuration**).
+2. Zoek naar **Magic link / Invite / OTP expiry** (of vergelijkbare instelling).
+3. Zet de waarde op het **maximum** (bijv. 7 dagen / 168 uur als dat kan).
+4. De e-mailtekst in de Edge Function zegt "valid for 7 days"; pas die tekst aan als je een andere verlooptijd kiest (bijv. 24 uur).
+
+"Never expire" wordt door Supabase niet ondersteund; gebruik de maximale waarde die het dashboard toestaat.
+
+---
+
 ## Stap 1: Check of Edge Function bestaat
 
 1. Ga naar **Supabase Dashboard** → **Edge Functions** → **Functions**
@@ -90,9 +110,11 @@ Als je WEL een email krijgt:
 - [ ] Browser console toont geen 404 errors
 - [ ] Supabase logs tonen geen errors
 - [ ] `APP_URL` secret is ingesteld (optioneel maar aanbevolen)
-- [ ] Direct invite via Supabase Dashboard werkt (test)
+- [ ] Alleen Resend stuurt de invite-mail (geen tweede mail van Supabase)
+- [ ] Invite/link expiry in Auth-instellingen op maximum gezet (bijv. 7 dagen)
 - [ ] Email komt aan (check spam folder)
 - [ ] Email link gaat naar juiste URL (niet localhost)
+- [ ] Klik op "Account activeren" werkt; link toont niet "al gebruikt" of "verlopen"
 
 ## Snelle Test
 
