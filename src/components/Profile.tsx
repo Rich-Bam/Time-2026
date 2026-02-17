@@ -4,20 +4,28 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { hashPassword } from "@/utils/password";
 import { User, Camera, Phone, Save, X, Download } from "lucide-react";
 import { usePWAInstall } from "@/components/InstallPWA";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useLanguage } from "@/contexts/LanguageContext";
+
+const SUPER_ADMIN_EMAIL = "r.blance@bampro.nl";
 
 interface ProfileProps {
   currentUser: any;
   setCurrentUser: (user: any) => void;
+  viewAsUserType?: string | null;
+  onViewAsChange?: (value: string | null) => void;
 }
 
-const Profile = ({ currentUser, setCurrentUser }: ProfileProps) => {
+const Profile = ({ currentUser, setCurrentUser, viewAsUserType = null, onViewAsChange }: ProfileProps) => {
   const { toast } = useToast();
+  const { t } = useLanguage();
   const { canInstall, handleInstall } = usePWAInstall();
+  const isSuperAdmin = currentUser?.email === SUPER_ADMIN_EMAIL;
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
@@ -307,6 +315,36 @@ const Profile = ({ currentUser, setCurrentUser }: ProfileProps) => {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {/* Super admin: View app as another user type (for testing all roles) */}
+          {isSuperAdmin && onViewAsChange && (
+            <div className="space-y-2 mb-6 pb-6 border-b border-gray-200 dark:border-gray-700">
+              <Label>{t('profile.viewAppAs')}</Label>
+              <Select
+                value={viewAsUserType ?? '__default__'}
+                onValueChange={(value) => {
+                  const v = value === '__default__' ? null : value;
+                  onViewAsChange(v);
+                  if (v !== null) localStorage.setItem('bampro_view_as_user_type', v);
+                  else localStorage.removeItem('bampro_view_as_user_type');
+                }}
+              >
+                <SelectTrigger className="w-full max-w-xs">
+                  <SelectValue placeholder={t('profile.viewAppAsDefault')} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__default__">{t('profile.viewAppAsDefault')}</SelectItem>
+                  <SelectItem value="user">{t('admin.userType.user')}</SelectItem>
+                  <SelectItem value="admin">{t('admin.userType.admin')}</SelectItem>
+                  <SelectItem value="super_admin">{t('admin.userType.superAdmin')}</SelectItem>
+                  <SelectItem value="administratie">{t('admin.userType.administratie')}</SelectItem>
+                  <SelectItem value="viewer">{t('admin.userType.viewer')}</SelectItem>
+                  <SelectItem value="tester">{t('profile.viewAppAsTester')}</SelectItem>
+                  <SelectItem value="weekly_only">{t('admin.userType.weeklyOnly')}</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-gray-500 dark:text-gray-400">{t('profile.viewAppAsDescription')}</p>
+            </div>
+          )}
           <form onSubmit={handleSaveProfile} className="space-y-6">
             {/* Profile Photo Section */}
             <div className="space-y-4">

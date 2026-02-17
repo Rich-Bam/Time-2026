@@ -25,7 +25,12 @@ const translations: Record<Language, Record<string, string>> = {
     'nav.welcome': 'Welkom',
     'nav.logout': 'Uitloggen',
     'nav.clickToViewProfile': 'Klik om je profiel te bekijken en te bewerken',
-    
+    'profile.viewAppAs': 'Bekijk app als',
+    'profile.viewAppAsDefault': 'Standaard (Super admin)',
+    'profile.viewAppAsDescription': 'Wissel van rol om te controleren of alle gebruikers een werkende website hebben. Alleen zichtbaar voor super admin.',
+    'profile.viewAppAsTester': 'Tester',
+    'profile.viewingAs': 'Bekijk als',
+
     // Project Management
     'project.addNew': 'Nieuw Project Toevoegen',
     'project.create': 'Maak een nieuw project voor urenregistratie',
@@ -661,7 +666,12 @@ const translations: Record<Language, Record<string, string>> = {
     'nav.welcome': 'Welcome',
     'nav.logout': 'Logout',
     'nav.clickToViewProfile': 'Click to view and edit your profile',
-    
+    'profile.viewAppAs': 'View app as',
+    'profile.viewAppAsDefault': 'Default (Super admin)',
+    'profile.viewAppAsDescription': 'Switch role to verify all user types have a working website. Only visible to super admin.',
+    'profile.viewAppAsTester': 'Tester',
+    'profile.viewingAs': 'Viewing as',
+
     // Project Management
     'project.addNew': 'Add New Project',
     'project.create': 'Create a new project for time tracking',
