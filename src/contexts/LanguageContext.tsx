@@ -592,6 +592,15 @@ const translations: Record<Language, Record<string, string>> = {
 
     // Bug Report
     'View.manage': 'Bekijk en beheer bug rapporten ingediend door gebruikers',
+    'bugReport.acceptWithComment': 'Bug accepteren met opmerking',
+    'bugReport.adminComment': 'Opmerking voor de reporter (optioneel)',
+    'bugReport.adminCommentPlaceholder': 'Optioneel bericht voor de reporter...',
+    'bugReport.myReports': 'Mijn bug reports',
+    'bugReport.myReportsDescription': 'Bekijk je ingediende bug reports en de reactie van de admin',
+    'bugReport.statusPending': 'In behandeling',
+    'bugReport.statusAccepted': 'Geaccepteerd',
+    'bugReport.adminFeedback': 'Reactie van admin',
+    'bugReport.acceptedWithCommentToast': 'Bug report geaccepteerd. Opmerking toegevoegd voor de reporter.',
 
     // Entry Sharing
     'share.share': 'Deel',
@@ -1234,6 +1243,15 @@ const translations: Record<Language, Record<string, string>> = {
 
     // Bug Report
     'View.manage': 'View and manage bug reports submitted by users',
+    'bugReport.acceptWithComment': 'Accept bug with comment',
+    'bugReport.adminComment': 'Comment for the reporter (optional)',
+    'bugReport.adminCommentPlaceholder': 'Optional message for the reporter...',
+    'bugReport.myReports': 'My bug reports',
+    'bugReport.myReportsDescription': 'View your submitted bug reports and admin feedback',
+    'bugReport.statusPending': 'In progress',
+    'bugReport.statusAccepted': 'Accepted',
+    'bugReport.adminFeedback': 'Admin feedback',
+    'bugReport.acceptedWithCommentToast': 'Bug report accepted. Comment added for the reporter.',
 
     // Entry Sharing
     'share.share': 'Share',

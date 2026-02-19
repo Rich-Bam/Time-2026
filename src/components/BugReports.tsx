@@ -14,9 +14,13 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 interface BugReportsProps {
-  currentUser: any;
+  currentUser: any;  // Effective user (for view / view-as)
+  realCurrentUser?: any;  // Actual logged-in user (for real-time notifications - only super admin gets them)
 }
 
 interface BugReport {
@@ -29,10 +33,13 @@ interface BugReport {
   description: string | null;
   created_at: string;
   admin_viewed?: boolean;
+  admin_comment?: string | null;
+  admin_comment_at?: string | null;
 }
 
-const BugReports = ({ currentUser }: BugReportsProps) => {
+const BugReports = ({ currentUser, realCurrentUser }: BugReportsProps) => {
   const { toast } = useToast();
+  const { t } = useLanguage();
   const isMobile = useIsMobile();
   const [bugReports, setBugReports] = useState<BugReport[]>([]);
   const [loading, setLoading] = useState(true);
@@ -40,20 +47,26 @@ const BugReports = ({ currentUser }: BugReportsProps) => {
   const [reportToDelete, setReportToDelete] = useState<BugReport | null>(null);
   const [selectedReport, setSelectedReport] = useState<BugReport | null>(null);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
+  const [acceptDialogOpen, setAcceptDialogOpen] = useState(false);
+  const [reportToAccept, setReportToAccept] = useState<BugReport | null>(null);
+  const [acceptComment, setAcceptComment] = useState("");
   const lastBugReportIdRef = useRef<string | null>(null);
 
   const SUPER_ADMIN_EMAIL = "r.blance@bampro.nl";
-  const isSuperAdmin = currentUser?.email === SUPER_ADMIN_EMAIL;
+  const actualUser = realCurrentUser ?? currentUser;
+  const isSuperAdmin = actualUser?.email === SUPER_ADMIN_EMAIL;
+  const isAdminView = currentUser?.isAdmin || currentUser?.userType === "super_admin";
 
   // Fetch bug reports from screenshots table
   const fetchBugReports = async () => {
     setLoading(true);
     try {
       console.log("BugReports: Fetching bug reports from screenshots table...");
-      const { data, error } = await supabase
-        .from("screenshots")
-        .select("*")
-        .order("created_at", { ascending: false });
+      let query = supabase.from("screenshots").select("*").order("created_at", { ascending: false });
+      if (!isAdminView && currentUser?.id) {
+        query = query.eq("user_id", currentUser.id);
+      }
+      const { data, error } = await query;
 
       if (error) {
         console.error("BugReports: Error fetching bug reports:", error);
@@ -218,25 +231,37 @@ const BugReports = ({ currentUser }: BugReportsProps) => {
     };
   }, [isSuperAdmin, toast]);
 
-  // Fetch bug reports on mount
+  // Fetch bug reports on mount and when user/view changes
   useEffect(() => {
     fetchBugReports();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [isAdminView, currentUser?.id]);
 
-  const handleMarkAsViewed = async (reportId: string) => {
+  const handleOpenAcceptDialog = (report: BugReport) => {
+    setReportToAccept(report);
+    setAcceptComment("");
+    setAcceptDialogOpen(true);
+  };
+
+  const handleAcceptWithComment = async () => {
+    if (!reportToAccept) return;
+    const comment = acceptComment?.trim() || null;
+    const now = comment ? new Date().toISOString() : null;
     try {
       const { error } = await supabase
         .from("screenshots")
-        .update({ admin_viewed: true })
-        .eq("id", reportId);
+        .update({
+          admin_viewed: true,
+          admin_comment: comment,
+          admin_comment_at: now,
+        })
+        .eq("id", reportToAccept.id);
 
       if (error) {
-        // Check if the error is because the column doesn't exist
-        if (error.message?.includes("admin_viewed") || error.message?.includes("column") || error.message?.includes("schema cache")) {
+        if (error.message?.includes("admin_viewed") || error.message?.includes("admin_comment") || error.message?.includes("column") || error.message?.includes("schema cache")) {
           toast({
             title: "Database Schema Error",
-            description: "De 'admin_viewed' kolom bestaat nog niet. Voer eerst het SQL script 'add_admin_viewed_to_screenshots.sql' uit in Supabase SQL Editor.",
+            description: "De benodigde kolommen bestaan nog niet. Voer het SQL script 'add_admin_comment_to_screenshots.sql' uit in Supabase SQL Editor.",
             variant: "destructive",
             duration: 15000,
           });
@@ -245,20 +270,24 @@ const BugReports = ({ currentUser }: BugReportsProps) => {
         throw error;
       }
 
-      // Update local state
-      setBugReports(bugReports.map(r => 
-        r.id === reportId ? { ...r, admin_viewed: true } : r
+      setBugReports(bugReports.map(r =>
+        r.id === reportToAccept.id
+          ? { ...r, admin_viewed: true, admin_comment: comment, admin_comment_at: now }
+          : r
       ));
+      setAcceptDialogOpen(false);
+      setReportToAccept(null);
+      setAcceptComment("");
 
       toast({
         title: "Bug Report Accepted",
-        description: "The bug report has been marked as viewed and will no longer show notifications.",
+        description: comment ? t("bugReport.acceptedWithCommentToast") : "The bug report has been marked as viewed and will no longer show notifications.",
       });
     } catch (error: any) {
-      console.error("Error marking bug report as viewed:", error);
+      console.error("Error accepting bug report:", error);
       toast({
         title: "Error",
-        description: error.message || "Failed to mark bug report as viewed.",
+        description: error.message || "Failed to accept bug report.",
         variant: "destructive",
       });
     }
@@ -327,8 +356,10 @@ const BugReports = ({ currentUser }: BugReportsProps) => {
     <div className="space-y-4">
       <Card>
         <CardHeader>
-          <CardTitle>Bug Reports</CardTitle>
-          <CardDescription>View and manage bug reports submitted by users</CardDescription>
+          <CardTitle>{isAdminView ? "Bug Reports" : t("bugReport.myReports")}</CardTitle>
+          <CardDescription>
+            {isAdminView ? t("View.manage") : t("bugReport.myReportsDescription")}
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {loading ? (
@@ -344,19 +375,39 @@ const BugReports = ({ currentUser }: BugReportsProps) => {
                 >
                   <div className={`flex ${isMobile ? 'flex-col' : 'items-center justify-between'} gap-4`}>
                     <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
-                        <User className="h-4 w-4 text-gray-500 dark:text-gray-400" />
-                        <span className="font-semibold text-gray-900 dark:text-gray-100">
-                          {report.user_name || report.user_email}
-                        </span>
-                        <Badge variant="outline" className="text-xs">
-                          {report.user_email}
-                        </Badge>
-                      </div>
+                      {isAdminView && (
+                        <div className="flex items-center gap-2 mb-2">
+                          <User className="h-4 w-4 text-gray-500 dark:text-gray-400" />
+                          <span className="font-semibold text-gray-900 dark:text-gray-100">
+                            {report.user_name || report.user_email}
+                          </span>
+                          <Badge variant="outline" className="text-xs">
+                            {report.user_email}
+                          </Badge>
+                        </div>
+                      )}
                       {report.description && (
                         <div className="flex items-start gap-2 mb-2">
                           <FileText className="h-4 w-4 text-gray-500 dark:text-gray-400 mt-0.5" />
                           <p className="text-sm text-gray-700 dark:text-gray-300">{report.description}</p>
+                        </div>
+                      )}
+                      {!isAdminView && (
+                        <div className="mb-2">
+                          <Badge
+                            variant="outline"
+                            className={report.admin_viewed
+                              ? "border-green-200 dark:border-green-700 text-green-700 dark:text-green-300"
+                              : "border-amber-200 dark:border-amber-700 text-amber-700 dark:text-amber-300"}
+                          >
+                            {report.admin_viewed ? t("bugReport.statusAccepted") : t("bugReport.statusPending")}
+                          </Badge>
+                        </div>
+                      )}
+                      {!isAdminView && report.admin_viewed && report.admin_comment && (
+                        <div className="mt-2 p-3 rounded-md bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600">
+                          <h4 className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">{t("bugReport.adminFeedback")}</h4>
+                          <p className="text-sm text-gray-700 dark:text-gray-300">{report.admin_comment}</p>
                         </div>
                       )}
                       <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
@@ -369,11 +420,11 @@ const BugReports = ({ currentUser }: BugReportsProps) => {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => handleMarkAsViewed(report.id)}
+                          onClick={() => handleOpenAcceptDialog(report)}
                           className="border-green-200 dark:border-green-700 text-green-700 dark:text-green-300 hover:bg-green-50 dark:hover:bg-green-900/40"
                         >
                           <Check className="h-4 w-4 mr-2" />
-                          Accept
+                          {t("share.accept") || "Accept"}
                         </Button>
                       )}
                       {report.admin_viewed && isSuperAdmin && (
@@ -391,18 +442,20 @@ const BugReports = ({ currentUser }: BugReportsProps) => {
                         <ExternalLink className="h-4 w-4 mr-2" />
                         View
                       </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          setReportToDelete(report);
-                          setDeleteConfirmOpen(true);
-                        }}
-                        className="border-red-200 dark:border-red-700 text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/40"
-                      >
-                        <Trash2 className="h-4 w-4 mr-2" />
-                        Delete
-                      </Button>
+                      {isAdminView && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setReportToDelete(report);
+                            setDeleteConfirmOpen(true);
+                          }}
+                          className="border-red-200 dark:border-red-700 text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/40"
+                        >
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          Delete
+                        </Button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -428,8 +481,14 @@ const BugReports = ({ currentUser }: BugReportsProps) => {
                 <p className="text-sm text-gray-700 dark:text-gray-300">{selectedReport.description}</p>
               </div>
             )}
+            {selectedReport?.admin_viewed && selectedReport?.admin_comment && (
+              <div className="p-3 rounded-md bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600">
+                <h4 className="font-semibold mb-2 text-gray-900 dark:text-gray-100">{t("bugReport.adminFeedback")}</h4>
+                <p className="text-sm text-gray-700 dark:text-gray-300">{selectedReport.admin_comment}</p>
+              </div>
+            )}
             <div>
-              <h4 className="font-semibold mb-2">Screenshot:</h4>
+              <h4 className="font-semibold mb-2 text-gray-900 dark:text-gray-100">Screenshot:</h4>
               {selectedReport?.url && (
                 <img
                   src={selectedReport.url}
@@ -444,7 +503,7 @@ const BugReports = ({ currentUser }: BugReportsProps) => {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setViewDialogOpen(false)}>
-              Close
+              {t("common.close") || "Close"}
             </Button>
             {selectedReport?.url && (
               <Button
@@ -455,6 +514,56 @@ const BugReports = ({ currentUser }: BugReportsProps) => {
                 Open in New Tab
               </Button>
             )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Accept with Comment Dialog */}
+      <Dialog open={acceptDialogOpen} onOpenChange={(open) => {
+        setAcceptDialogOpen(open);
+        if (!open) {
+          setReportToAccept(null);
+          setAcceptComment("");
+        }
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("bugReport.acceptWithComment")}</DialogTitle>
+            <DialogDescription>
+              {reportToAccept?.description ? (
+                <span className="block mt-2 text-sm text-gray-600 dark:text-gray-400">{reportToAccept.description}</span>
+              ) : (
+                t("bugReport.adminComment")
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <Label htmlFor="accept-comment">{t("bugReport.adminComment")}</Label>
+              <Textarea
+                id="accept-comment"
+                value={acceptComment}
+                onChange={(e) => setAcceptComment(e.target.value)}
+                placeholder={t("bugReport.adminCommentPlaceholder") || "Optional message for the reporter..."}
+                className="mt-2 min-h-[100px]"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setAcceptDialogOpen(false);
+              setReportToAccept(null);
+              setAcceptComment("");
+            }}>
+              {t("common.cancel") || "Cancel"}
+            </Button>
+            <Button
+              onClick={handleAcceptWithComment}
+              className="border-green-200 dark:border-green-700 text-green-700 dark:text-green-300 hover:bg-green-50 dark:hover:bg-green-900/40"
+            >
+              <Check className="h-4 w-4 mr-2" />
+              {t("share.accept") || "Accept"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

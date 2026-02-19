@@ -136,7 +136,7 @@ const Index = () => {
       weeks: isAdministratie(effectiveUser) || isViewer(effectiveUser),
       projects: canSeeProjects(effectiveUser),
       export: !!effectiveUser && !effectiveUser?.isAdmin && !isAdministratie(effectiveUser) && !isViewer(effectiveUser) && !isTester(effectiveUser) && !isWeeklyOnly(effectiveUser),
-      bugreports: (effectiveUser?.isAdmin || effectiveUser?.userType === 'super_admin') && !isAdministratie(effectiveUser),
+      bugreports: !isAdministratie(effectiveUser),
       overview: !isTester(effectiveUser),
       admin: (effectiveUser?.isAdmin || isAdministratie(effectiveUser)) && !isViewer(effectiveUser),
       profile: true,
@@ -2082,7 +2082,7 @@ const Index = () => {
                     {t('nav.export')}
                   </button>
                 )}
-                {(effectiveUser?.isAdmin || effectiveUser?.userType === 'super_admin') && !isAdministratie(effectiveUser) && (
+                {!isAdministratie(effectiveUser) && (
                   <button
                     className={`text-[9px] sm:text-xs md:text-sm lg:text-sm xl:text-base font-medium px-1 sm:px-1.5 md:px-2 lg:px-2.5 py-1.5 sm:py-1 md:py-1.5 lg:py-2 rounded transition-colors whitespace-nowrap min-h-[32px] sm:min-h-0 flex-shrink-0 ${activeTab === 'bugreports' ? 'bg-orange-600 text-white dark:bg-orange-500' : 'text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-700'}`}
                     onClick={() => setActiveTab('bugreports')}
@@ -2472,8 +2472,8 @@ const Index = () => {
             <AdminPanel currentUser={effectiveUser} />
           </div>
         )}
-        {activeTab === 'bugreports' && (effectiveUser?.isAdmin || effectiveUser?.userType === 'super_admin') && (
-          <BugReports currentUser={currentUser} />
+        {activeTab === 'bugreports' && !isAdministratie(effectiveUser) && (
+          <BugReports currentUser={effectiveUser} realCurrentUser={currentUser} />
         )}
       </div>
       
