@@ -1701,6 +1701,9 @@ const WeeklyCalendarEntry = ({ currentUser, hasUnreadDaysOffNotification = false
         i === dayIdx ? { ...d, stayedOvernight: !!previousDay?.stayedOvernight } : d
       )));
       
+      // Persist overnight stay to overnight_stays table (checkbox state alone is not enough)
+      await persistOvernightStay(dayIdx, !!previousDay?.stayedOvernight, false);
+      
       // Check if any copied entries were day off entries and refresh days off
       const hasDayOffEntry = entriesToSave.some(e => e.description === "31");
       if (hasDayOffEntry) {

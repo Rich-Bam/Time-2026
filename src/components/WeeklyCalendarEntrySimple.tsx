@@ -1788,7 +1788,7 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
         description: entry.workType,
         startTime: entry.startTime || null,
         endTime: entry.endTime || null,
-        stayed_overnight: !!currentDay?.stayedOvernight,
+        stayed_overnight: !!previousDay?.stayedOvernight,
         kilometers: (entry.workType === "20" || entry.workType === "21") && entry.kilometers ? parseFloat(entry.kilometers) : null,
       });
     }
@@ -1815,6 +1815,9 @@ const WeeklyCalendarEntrySimple = ({ currentUser, hasUnreadDaysOffNotification =
       setDays(prevDays => prevDays.map((d, i) => (
         i === dayIdx ? { ...d, stayedOvernight: !!previousDay?.stayedOvernight } : d
       )));
+      
+      // Persist overnight stay to overnight_stays table (checkbox state alone is not enough)
+      await persistOvernightStay(dayIdx, !!previousDay?.stayedOvernight);
       
       // Check if any copied entries were day off entries and refresh days off
       const hasDayOffEntry = entriesToSave.some(e => e.description === "31");
