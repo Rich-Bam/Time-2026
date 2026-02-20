@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { Clock, Calendar, Plus } from "lucide-react";
+import { AlertCircle, Clock, Calendar, Plus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { formatDateToYYYYMMDD } from "@/utils/dateUtils";
 
@@ -142,12 +142,18 @@ const TimesheetEntry = ({ currentUser, hasUnreadDaysOffNotification = false }: T
     { value: 100, label: "Remote" },
   ];
 
-  // Helper to check if selected work type is 'Day Off / Vacation' (31)
-  const isDayOff = entry.description === "31";
+  // Helper to check if a work type requires a project (work types 17 and 30-40 don't require one)
+  const workTypeRequiresProject = (workType: string): boolean => {
+    if (!workType) return true;
+    const workTypeNum = parseInt(workType, 10);
+    if (workTypeNum === 17) return false;
+    if (workTypeNum >= 30 && workTypeNum <= 40) return false;
+    return true;
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!entry.project && !isDayOff) {
+    if (!entry.project && workTypeRequiresProject(entry.description)) {
       toast({
         title: "Missing Information",
         description: "Please fill in all required fields",
@@ -157,7 +163,7 @@ const TimesheetEntry = ({ currentUser, hasUnreadDaysOffNotification = false }: T
     }
 
     // Validate that project is not closed - check directly from database for most up-to-date status
-    if (entry.project && !isDayOff) {
+    if (entry.project && workTypeRequiresProject(entry.description)) {
       // First check local cache
       const selectedProject = projectsWithStatus.find(p => p.name === entry.project);
       if (selectedProject && selectedProject.status === "closed") {
@@ -197,7 +203,7 @@ const TimesheetEntry = ({ currentUser, hasUnreadDaysOffNotification = false }: T
     // Insert time entry into Supabase
     const { error } = await supabase.from("timesheet").insert([
       {
-        project: isDayOff ? null : entry.project,
+        project: workTypeRequiresProject(entry.description) ? entry.project : null,
         user_id: currentUser?.id || null,
         date: entry.date,
         hours: hoursToSave,
@@ -266,15 +272,14 @@ const TimesheetEntry = ({ currentUser, hasUnreadDaysOffNotification = false }: T
                   className="h-10 sm:h-9"
                 />
               </div>
-              {/* Project select is hidden if Day Off is selected */}
-              {!isDayOff && (
+              {/* Project select is hidden when work type does not require it (e.g. Sick 30, Day Off 31) */}
+              {workTypeRequiresProject(entry.description) && (
                 <div className="space-y-2">
                   <Label htmlFor="project" className="text-sm font-semibold">Project</Label>
                   <Input
                     value={entry.project}
                     onChange={e => setEntry({ ...entry, project: e.target.value })}
                     placeholder="Project"
-                    disabled={isDayOff}
                     className="h-10 sm:h-9"
                   />
                 </div>
