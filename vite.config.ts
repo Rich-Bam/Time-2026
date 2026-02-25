@@ -69,7 +69,7 @@ export default defineConfig(({ mode }) => ({
       },
       workbox: {
         navigateFallback: '/index.html',
-        navigateFallbackDenylist: [/^\/_/],
+        navigateFallbackDenylist: [/^\/_/, /^\/Handleiding_Weekly_Only\.pdf$/],
         globPatterns: ['**/*.{js,css,html,ico,png,svg,jpg,jpeg}'],
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // 5 MB instead of default 2 MB
         // Clean up old caches automatically
