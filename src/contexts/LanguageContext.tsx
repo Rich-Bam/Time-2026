@@ -25,6 +25,8 @@ const translations: Record<Language, Record<string, string>> = {
     'nav.welcome': 'Welkom',
     'nav.logout': 'Uitloggen',
     'nav.clickToViewProfile': 'Klik om je profiel te bekijken en te bewerken',
+    'profile.userManual': 'Gebruikershandleiding',
+    'profile.userManualDescription': 'Download of bekijk de handleiding voor het invullen van uren.',
     'profile.viewAppAs': 'Bekijk app als',
     'profile.viewAppAsDefault': 'Standaard (Super admin)',
     'profile.viewAppAsDescription': 'Wissel van rol om te controleren of alle gebruikers een werkende website hebben. Alleen zichtbaar voor super admin.',
@@ -495,6 +497,8 @@ const translations: Record<Language, Record<string, string>> = {
     'auth.checkConsole': 'Check de browser console (F12) voor meer details.',
     'auth.loggedOut': 'Uitgelogd',
     'auth.loggedOutText': 'Je bent succesvol uitgelogd.',
+    'auth.setNewPassword': 'Stel een nieuw wachtwoord in',
+    'auth.passwordResetByAdmin': 'Je beheerder heeft je wachtwoord gereset. Kies hieronder een nieuw wachtwoord om door te gaan.',
     
     // Maintenance Mode
     'maintenance.mode': 'Onderhoudsmodus',
@@ -682,6 +686,8 @@ const translations: Record<Language, Record<string, string>> = {
     'nav.welcome': 'Welcome',
     'nav.logout': 'Logout',
     'nav.clickToViewProfile': 'Click to view and edit your profile',
+    'profile.userManual': 'User Manual',
+    'profile.userManualDescription': 'Download or view the user manual for filling in hours.',
     'profile.viewAppAs': 'View app as',
     'profile.viewAppAsDefault': 'Default (Super admin)',
     'profile.viewAppAsDescription': 'Switch role to verify all user types have a working website. Only visible to super admin.',
@@ -1152,6 +1158,8 @@ const translations: Record<Language, Record<string, string>> = {
     'auth.checkConsole': 'Check the browser console (F12) for more details.',
     'auth.loggedOut': 'Logged Out',
     'auth.loggedOutText': 'You have been successfully logged out.',
+    'auth.setNewPassword': 'Set a new password',
+    'auth.passwordResetByAdmin': 'Your administrator has reset your password. Please choose a new password below to continue.',
     'admin.existingUsers': 'Existing Users',
     
     // Maintenance Mode

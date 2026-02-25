@@ -1839,8 +1839,25 @@ const Index = () => {
   // Force password change if required
   if (currentUser?.must_change_password) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <ChangePasswordForm currentUser={currentUser} setCurrentUser={setCurrentUser} />
+      <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-orange-100 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 flex items-center justify-center p-4">
+        <Card className="w-full max-w-md shadow-lg">
+          <CardHeader className="text-center space-y-4">
+            <div className="flex justify-center">
+              <img
+                src="/bampro-marine-logo.jpg"
+                alt="BAMPRO MARINE"
+                className="h-16 sm:h-20 object-contain"
+              />
+            </div>
+            <CardTitle className="text-xl">{t('auth.setNewPassword')}</CardTitle>
+            <CardDescription className="text-base">
+              {t('auth.passwordResetByAdmin')}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ChangePasswordForm currentUser={currentUser} setCurrentUser={setCurrentUser} />
+          </CardContent>
+        </Card>
       </div>
     );
   }

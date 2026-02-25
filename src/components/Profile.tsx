@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { hashPassword } from "@/utils/password";
-import { User, Camera, Phone, Save, X, Download } from "lucide-react";
+import { User, Camera, Phone, Save, X, Download, FileText } from "lucide-react";
 import { usePWAInstall } from "@/components/InstallPWA";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -479,9 +479,9 @@ const Profile = ({ currentUser, setCurrentUser, viewAsUserType = null, onViewAsC
 
             {/* Install App Section */}
             {canInstall && (
-              <div className="space-y-4 pt-4 border-t">
+              <div className="space-y-4 pt-4 border-t border-gray-200 dark:border-gray-700">
                 <h3 className="text-lg font-semibold">Install App</h3>
-                <p className="text-sm text-gray-500">
+                <p className="text-sm text-gray-500 dark:text-gray-400">
                   Install BAMPRO Uren on your device for quick access and offline functionality.
                 </p>
                 <Button
@@ -495,6 +495,29 @@ const Profile = ({ currentUser, setCurrentUser, viewAsUserType = null, onViewAsC
                 </Button>
               </div>
             )}
+
+            {/* User Manual Section */}
+            <div className="space-y-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+              <h3 className="text-lg font-semibold">{t('profile.userManual')}</h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                {t('profile.userManualDescription')}
+              </p>
+              <a
+                href="/Handleiding_Weekly_Only.pdf"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex"
+              >
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full sm:w-auto border-orange-200 dark:border-orange-700 text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-700"
+                >
+                  <FileText className="h-4 w-4 mr-2" />
+                  {t('profile.userManual')}
+                </Button>
+              </a>
+            </div>
 
             {/* Save Button */}
             <div className="flex justify-end pt-4">
