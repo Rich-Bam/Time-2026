@@ -99,6 +99,7 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false, readOnly = fals
   });
   const [resetPassword, setResetPassword] = useState("");
   const [resetUserId, setResetUserId] = useState<string | null>(null);
+  const [resendInviteUserId, setResendInviteUserId] = useState<string | null>(null);
   const [editingUserId, setEditingUserId] = useState<string | number | null>(null);
   const [editingField, setEditingField] = useState<'email' | 'name' | null>(null);
   const [editedEmail, setEditedEmail] = useState<string>("");
@@ -700,11 +701,15 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false, readOnly = fals
       let weekEndStr: string;
       let targetUserIds: string[] | null = null;
 
-      // Determine which users to fetch (include all view types: simple, both, original)
+      // Determine which users to fetch (include all view types: simple, both, original, or NULL)
       let simpleUsersQuery = supabase
         .from('users')
         .select('id, name, email, weekly_view_option')
-        .in('weekly_view_option', ['simple', 'both', 'original']);
+        .or('weekly_view_option.in.(simple,both,original),weekly_view_option.is.null');
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/59c5b14c-b670-4839-8a14-557f33bb9e36',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({runId:'pre-fix',hypothesisId:'B',location:'AdminPanel.tsx:707',message:'fetchSimpleEntryData start',data:{options,hasUserId:!!options.userId},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
 
       if (options.userId) {
         const userIds = Array.isArray(options.userId) ? options.userId : [options.userId];
@@ -715,10 +720,16 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false, readOnly = fals
 
       if (usersError) {
         console.error('Error fetching simple entry users:', usersError);
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/59c5b14c-b670-4839-8a14-557f33bb9e36',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({runId:'pre-fix',hypothesisId:'B',location:'AdminPanel.tsx:721',message:'fetchSimpleEntryData usersError',data:{code:usersError.code,message:usersError.message},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
         return;
       }
 
       if (!simpleUsers || simpleUsers.length === 0) {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/59c5b14c-b670-4839-8a14-557f33bb9e36',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({runId:'pre-fix',hypothesisId:'B',location:'AdminPanel.tsx:726',message:'fetchSimpleEntryData no users',data:{count:0},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
         setCurrentWeekSimpleEntryData([]);
         return;
       }
@@ -762,6 +773,9 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false, readOnly = fals
 
       if (entriesError) {
         console.error('Error fetching timesheet entries:', entriesError);
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/59c5b14c-b670-4839-8a14-557f33bb9e36',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({runId:'pre-fix',hypothesisId:'A',location:'AdminPanel.tsx:760',message:'fetchSimpleEntryData entriesError',data:{code:entriesError.code,message:entriesError.message},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
         return;
       }
 
@@ -878,6 +892,9 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false, readOnly = fals
         });
       });
 
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/59c5b14c-b670-4839-8a14-557f33bb9e36',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({runId:'pre-fix',hypothesisId:'B',location:'AdminPanel.tsx:857',message:'fetchSimpleEntryData results',data:{userCount:simpleUsers.length,entryCount:entries?.length || 0,weekCount:weekData.length},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       setCurrentWeekSimpleEntryData(weekData);
     } catch (error) {
       console.error('Error in fetchSimpleEntryData:', error);
@@ -1116,7 +1133,7 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false, readOnly = fals
       } else if (searchQuery.length > 0) {
         // Search by user name - find matching users
         const matchingUsers = users.filter(u =>
-          ['simple', 'both', 'original'].includes(u.weekly_view_option) &&
+          (['simple', 'both', 'original'].includes(u.weekly_view_option) || u.weekly_view_option == null) &&
           (u.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
            u.email?.toLowerCase().includes(searchQuery.toLowerCase()))
         );
@@ -1150,7 +1167,7 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false, readOnly = fals
         fetchSimpleEntryData({ weekNumber: weekNum, year });
       } else if (searchQuery.length > 0) {
         const matchingUsers = users.filter(u =>
-          ['simple', 'both', 'original'].includes(u.weekly_view_option) &&
+          (['simple', 'both', 'original'].includes(u.weekly_view_option) || u.weekly_view_option == null) &&
           (u.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
            u.email?.toLowerCase().includes(searchQuery.toLowerCase()))
         );
@@ -2282,6 +2299,48 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false, readOnly = fals
       fetchUsers();
     }
   };
+
+  // Resend invite: call invite-user Edge Function for existing user (sends recovery/reset link)
+  const handleResendInvite = async (user: { id: string; email: string; name?: string; isAdmin?: boolean; userType?: string }) => {
+    if (!user?.email) return;
+    setResendInviteUserId(user.id);
+    try {
+      const isAdmin = user.userType === 'admin' || user.userType === 'super_admin' || user.isAdmin;
+      const { data, error } = await supabase.functions.invoke('invite-user', {
+        body: {
+          email: user.email,
+          name: user.name || user.email,
+          isAdmin: !!isAdmin,
+          userType: user.userType || (user.isAdmin ? 'admin' : 'user'),
+        },
+      });
+      if (error) throw error;
+      if (data?.success) {
+        toast({
+          title: "Uitnodiging opnieuw verstuurd",
+          description: `Een nieuwe link is verstuurd naar ${user.email}. De gebruiker ontvangt een e-mail om het wachtwoord in te stellen (reset-pagina).`,
+        });
+      } else {
+        toast({
+          title: "Kon geen link versturen",
+          description: data?.error || "Onbekende fout. Check Edge Function invite-user.",
+          variant: "destructive",
+        });
+      }
+    } catch (err: any) {
+      const msg = err?.message || String(err);
+      toast({
+        title: "Fout bij opnieuw versturen",
+        description: msg.includes("already registered") || msg.includes("already exists")
+          ? "Gebruiker bestaat al; de Edge Function stuurt een reset-link. Check of de e-mail is aangekomen."
+          : msg,
+        variant: "destructive",
+      });
+    } finally {
+      setResendInviteUserId(null);
+    }
+  };
+
   // Change user type (super admin, admin, or user)
   const handleChangeUserType = async (userId: string, userEmail: string, newUserType: string) => {
     // Prevent administratie users from changing user types
@@ -2950,6 +3009,9 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false, readOnly = fals
     
     if (error) {
       console.error('❌ Error inserting timesheet entry:', error);
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/59c5b14c-b670-4839-8a14-557f33bb9e36',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({runId:'pre-fix',hypothesisId:'A',location:'AdminPanel.tsx:2967',message:'timesheet insert error',data:{code:error.code,message:error.message},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
       console.log('✅ Timesheet entry inserted:', insertData);
@@ -4298,14 +4360,24 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false, readOnly = fals
                       </div>
                     </div>
                   ) : (
-                    <div className="flex gap-2">
-                      <Button size="sm" variant="outline" onClick={() => setResetUserId(user.id)} className="flex-1 h-9 text-xs">{t('admin.resetPassword')}</Button>
+                    <div className="flex gap-2 flex-wrap">
+                      <Button size="sm" variant="outline" onClick={() => setResetUserId(user.id)} className="flex-1 h-9 text-xs min-w-0">{t('admin.resetPassword')}</Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="flex-1 h-9 text-xs min-w-0"
+                        onClick={() => handleResendInvite({ id: user.id, email: user.email, name: user.name, isAdmin: user.isAdmin, userType: getUserType(user) })}
+                        disabled={resendInviteUserId === user.id}
+                        title="Stuur uitnodiging / reset-link opnieuw"
+                      >
+                        {resendInviteUserId === user.id ? "..." : "Resend invite"}
+                      </Button>
                       <Button
                         size="sm"
                         variant="destructive"
                         onClick={() => handleDeleteUser(user.id, user.email)}
                         disabled={user.id === currentUser.id || user.email === SUPER_ADMIN_EMAIL}
-                        className="flex-1 h-9 text-xs"
+                        className="flex-1 h-9 text-xs min-w-0"
                       >
                         {t('common.delete')}
                       </Button>
@@ -4563,6 +4635,15 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false, readOnly = fals
                       ) : (
                         <>
                           <Button size="sm" variant="outline" onClick={() => setResetUserId(user.id)}>{t('admin.resetPassword')}</Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleResendInvite({ id: user.id, email: user.email, name: user.name, isAdmin: user.isAdmin, userType: getUserType(user) })}
+                            disabled={resendInviteUserId === user.id}
+                            title="Stuur uitnodiging / reset-link opnieuw"
+                          >
+                            {resendInviteUserId === user.id ? "..." : "Resend invite"}
+                          </Button>
                           <Button
                             size="sm"
                             variant="destructive"
@@ -5722,7 +5803,7 @@ const AdminPanel = ({ currentUser, initialTab, hideTabs = false, readOnly = fals
                   <SelectContent>
                     <SelectItem value="all">{t('admin.allUsers') || "All Users"}</SelectItem>
                     {users
-                      .filter((user) => ['simple', 'both', 'original'].includes(user.weekly_view_option))
+                      .filter((user) => ['simple', 'both', 'original'].includes(user.weekly_view_option) || user.weekly_view_option == null)
                       .map((user) => (
                         <SelectItem key={user.id} value={user.id}>
                           {user.name || user.email}

@@ -28,6 +28,12 @@ CREATE POLICY "Allow anon and service_role to view users"
 ON public.users FOR SELECT
 USING (auth.role() = 'anon' OR auth.role() = 'service_role');
 
+-- Allow authenticated user to update own row (e.g. password/must_change_password on invite-confirm)
+CREATE POLICY "Allow user to update own row"
+ON public.users FOR UPDATE
+USING (auth.uid() = id)
+WITH CHECK (auth.uid() = id);
+
 -- ============================================
 -- 2. TIMESHEET TABLE
 -- ============================================

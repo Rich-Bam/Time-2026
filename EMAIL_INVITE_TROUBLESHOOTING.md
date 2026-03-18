@@ -12,11 +12,11 @@ De uitnodiging moet via **één** mail gaan (onze Resend-mail met de activatieli
 Standaard verloopt een activatielink na **24 uur**. Om gebruikers meer tijd te geven:
 
 1. Ga naar **Supabase Dashboard** → **Authentication** → **Settings** (of **URL Configuration**).
-2. Zoek naar **Magic link / Invite / OTP expiry** (of vergelijkbare instelling).
-3. Zet de waarde op het **maximum** (bijv. 7 dagen / 168 uur als dat kan).
-4. De e-mailtekst in de Edge Function zegt "valid for 7 days"; pas die tekst aan als je een andere verlooptijd kiest (bijv. 24 uur).
+2. Zoek naar **Magic link / Invite / OTP expiry** (vaak in seconden).
+3. Zet de waarde op **604800** (7 dagen in seconden), of het maximum dat het dashboard toelaat.
+4. De e-mailtekst in de Edge Function zegt "valid for 7 days"; pas die tekst aan als je een andere verlooptijd kiest.
 
-"Never expire" wordt door Supabase niet ondersteund; gebruik de maximale waarde die het dashboard toestaat.
+"Never expire" wordt door Supabase niet ondersteund. Zie ook **[INVITE_LINK_EXPIRY.md](INVITE_LINK_EXPIRY.md)** voor redirect-URL en RLS bij activatie.
 
 ---
 

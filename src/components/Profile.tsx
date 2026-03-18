@@ -82,6 +82,13 @@ const Profile = ({ currentUser, setCurrentUser, viewAsUserType = null, onViewAsC
     loadUserData();
   }, [currentUser?.id]);
 
+  useEffect(() => {
+    if (!currentUser) return;
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/59c5b14c-b670-4839-8a14-557f33bb9e36',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({runId:'pre-fix',hypothesisId:'C',location:'Profile.tsx:91',message:'Profile render user context',data:{userType:currentUser?.userType,weeklyViewOption:currentUser?.weekly_view_option,hasUserId:!!currentUser?.id},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+  }, [currentUser]);
+
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -507,6 +514,20 @@ const Profile = ({ currentUser, setCurrentUser, viewAsUserType = null, onViewAsC
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex"
+                onClick={() => {
+                  // #region agent log
+                  fetch('http://127.0.0.1:7242/ingest/59c5b14c-b670-4839-8a14-557f33bb9e36',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({runId:'pre-fix',hypothesisId:'C',location:'Profile.tsx:509',message:'Manual link clicked',data:{href:'/Handleiding_Weekly_Only.pdf',userType:currentUser?.userType},timestamp:Date.now()})}).catch(()=>{});
+                  // #endregion
+                  fetch('/Handleiding_Weekly_Only.pdf',{method:'HEAD'}).then((res)=>{
+                    // #region agent log
+                    fetch('http://127.0.0.1:7242/ingest/59c5b14c-b670-4839-8a14-557f33bb9e36',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({runId:'pre-fix',hypothesisId:'D',location:'Profile.tsx:514',message:'Manual link HEAD response',data:{status:res.status,ok:res.ok},timestamp:Date.now()})}).catch(()=>{});
+                    // #endregion
+                  }).catch((err)=>{
+                    // #region agent log
+                    fetch('http://127.0.0.1:7242/ingest/59c5b14c-b670-4839-8a14-557f33bb9e36',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({runId:'pre-fix',hypothesisId:'D',location:'Profile.tsx:516',message:'Manual link HEAD error',data:{message:String(err)},timestamp:Date.now()})}).catch(()=>{});
+                    // #endregion
+                  });
+                }}
               >
                 <Button
                   type="button"

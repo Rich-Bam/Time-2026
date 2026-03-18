@@ -128,9 +128,9 @@ const InviteConfirm = () => {
       if (verifyError) {
         const msg = (verifyError.message || "").toLowerCase();
         const isExpiredOrUsed =
-          msg.includes("expired") || msg.includes("already used") || msg.includes("invalid");
+          msg.includes("expired") || msg.includes("already used") || msg.includes("invalid") || msg.includes("verlopen");
         setLinkExpired(isExpiredOrUsed);
-        setLinkAlreadyUsed(msg.includes("already used"));
+        setLinkAlreadyUsed(msg.includes("already used") || msg.includes("al gebruikt"));
         if (!isExpiredOrUsed) {
           setMessage(verifyError.message || "Activatielink kon niet worden geverifieerd.");
         }
@@ -141,7 +141,9 @@ const InviteConfirm = () => {
       }
     } catch (err) {
       console.warn("Invite verifyOtp error:", err);
-      setMessage("Er is een fout opgetreden. Probeer het opnieuw of vraag een nieuwe uitnodiging.");
+      setLinkExpired(true);
+      setLinkAlreadyUsed(false);
+      setMessage("");
     } finally {
       setActivating(false);
     }
@@ -259,7 +261,7 @@ const InviteConfirm = () => {
             <div className="space-y-4">
               <div className="text-center text-red-600 p-4 bg-red-50 rounded border border-red-200">
                 {linkAlreadyUsed
-                  ? "De activatielink is al gebruikt. Vraag je beheerder om een nieuwe uitnodiging."
+                  ? "Deze activatielink is al gebruikt. Vraag je beheerder om een nieuwe uitnodiging of reset-link."
                   : "De activatielink is verlopen. Vraag je beheerder om een nieuwe uitnodiging."}
               </div>
               <Button
